@@ -2,12 +2,13 @@
 Database connection management for geo-base API.
 
 Supports both local development (connection pool) and
-serverless environments (simple connections).
+serverless environments (simple connections with SSL).
 """
 
 import os
 from contextlib import contextmanager
 from typing import Generator
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 import psycopg2
 import psycopg2.pool
@@ -20,24 +21,36 @@ _pool: psycopg2.pool.SimpleConnectionPool | None = None
 
 def _is_serverless() -> bool:
     """Check if running in a serverless environment."""
-    # Vercel sets VERCEL=1 in serverless functions
-    # AWS Lambda sets AWS_LAMBDA_FUNCTION_NAME
     return os.environ.get("VERCEL") == "1" or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
 
 
-def _get_connection_params() -> dict:
-    """Get database connection parameters."""
+def _prepare_connection_string(database_url: str) -> str:
+    """
+    Prepare database connection string with SSL settings.
+    
+    For Supabase and production environments, SSL is required.
+    """
     settings = get_settings()
     
-    params = {
-        "dsn": settings.database_url,
-    }
+    # Parse the URL
+    parsed = urlparse(database_url)
     
-    # For Supabase/production, SSL is typically required
-    if settings.environment == "production" or "supabase" in settings.database_url.lower():
-        params["sslmode"] = "require"
+    # Check if SSL params already exist
+    query_params = parse_qs(parsed.query)
     
-    return params
+    # Add sslmode if not present and needed
+    is_production = settings.is_production
+    is_supabase = "supabase" in database_url.lower()
+    
+    if (is_production or is_supabase) and "sslmode" not in query_params:
+        query_params["sslmode"] = ["require"]
+    
+    # Rebuild query string
+    new_query = urlencode(query_params, doseq=True)
+    
+    # Rebuild URL
+    new_parsed = parsed._replace(query=new_query)
+    return urlunparse(new_parsed)
 
 
 def get_pool() -> psycopg2.pool.SimpleConnectionPool:
@@ -48,9 +61,10 @@ def get_pool() -> psycopg2.pool.SimpleConnectionPool:
     """
     global _pool
     if _pool is None:
-        params = _get_connection_params()
+        settings = get_settings()
+        dsn = _prepare_connection_string(settings.database_url)
         _pool = psycopg2.pool.SimpleConnectionPool(
-            dsn=params["dsn"],
+            dsn=dsn,
             minconn=1,
             maxconn=5,
         )
@@ -63,21 +77,19 @@ def get_connection() -> Generator:
 
     In serverless environments, creates a new connection per request.
     In development, uses a connection pool.
-
-    Usage:
-        @app.get("/endpoint")
-        def endpoint(conn=Depends(get_connection)):
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
     """
+    settings = get_settings()
+    
     if _is_serverless():
-        # Serverless: create new connection per request
-        params = _get_connection_params()
-        conn = psycopg2.connect(**params)
+        # Serverless: create new connection per request with SSL
+        dsn = _prepare_connection_string(settings.database_url)
+        conn = None
         try:
+            conn = psycopg2.connect(dsn)
             yield conn
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
     else:
         # Development: use connection pool
         pool = get_pool()
@@ -94,19 +106,18 @@ def get_connection() -> Generator:
 def get_db_connection():
     """
     Context manager for getting a database connection.
-
-    Usage:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
     """
+    settings = get_settings()
+    
     if _is_serverless():
-        params = _get_connection_params()
-        conn = psycopg2.connect(**params)
+        dsn = _prepare_connection_string(settings.database_url)
+        conn = None
         try:
+            conn = psycopg2.connect(dsn)
             yield conn
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
     else:
         pool = get_pool()
         conn = None
@@ -126,25 +137,63 @@ def close_pool():
         _pool = None
 
 
-def check_database_connection() -> bool:
-    """Check if database connection is working."""
+def check_database_connection() -> dict:
+    """
+    Check if database connection is working.
+    
+    Returns dict with status and error details.
+    """
+    settings = get_settings()
+    
     try:
-        with get_db_connection() as conn:
+        dsn = _prepare_connection_string(settings.database_url)
+        
+        if _is_serverless():
+            conn = psycopg2.connect(dsn, connect_timeout=10)
+        else:
+            conn = get_pool().getconn()
+        
+        try:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-                return cur.fetchone()[0] == 1
+                result = cur.fetchone()[0] == 1
+            return {"connected": result, "error": None}
+        finally:
+            if _is_serverless():
+                conn.close()
+            else:
+                get_pool().putconn(conn)
+                
+    except psycopg2.OperationalError as e:
+        error_msg = str(e)
+        # Simplify common error messages
+        if "could not connect to server" in error_msg:
+            return {"connected": False, "error": "Connection refused - check host/port"}
+        elif "password authentication failed" in error_msg:
+            return {"connected": False, "error": "Authentication failed - check password"}
+        elif "SSL" in error_msg:
+            return {"connected": False, "error": f"SSL error: {error_msg}"}
+        elif "timeout" in error_msg.lower():
+            return {"connected": False, "error": "Connection timeout"}
+        else:
+            return {"connected": False, "error": error_msg}
     except Exception as e:
-        print(f"Database connection error: {e}")
-        return False
+        return {"connected": False, "error": str(e)}
 
 
-def check_postgis_extension() -> bool:
-    """Check if PostGIS extension is available."""
+def check_postgis_extension() -> dict:
+    """
+    Check if PostGIS extension is available.
+    
+    Returns dict with status and version.
+    """
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT PostGIS_Version()")
-                return cur.fetchone() is not None
+                version = cur.fetchone()
+                if version:
+                    return {"available": True, "version": version[0]}
+                return {"available": False, "error": "PostGIS not installed"}
     except Exception as e:
-        print(f"PostGIS check error: {e}")
-        return False
+        return {"available": False, "error": str(e)}

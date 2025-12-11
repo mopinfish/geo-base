@@ -85,18 +85,33 @@ def health_check():
 
 @app.get("/api/health/db")
 def health_check_db():
-    """Database health check endpoint."""
-    db_ok = check_database_connection()
-    postgis_ok = check_postgis_extension() if db_ok else False
+    """Database health check endpoint with detailed error info."""
+    db_result = check_database_connection()
+    db_connected = db_result.get("connected", False)
+    
+    postgis_result = check_postgis_extension() if db_connected else {"available": False}
+    postgis_available = postgis_result.get("available", False)
 
-    status = "ok" if db_ok and postgis_ok else "error"
+    status = "ok" if db_connected and postgis_available else "error"
 
-    return {
+    response = {
         "status": status,
-        "database": "connected" if db_ok else "disconnected",
-        "postgis": "available" if postgis_ok else "unavailable",
+        "database": "connected" if db_connected else "disconnected",
+        "postgis": "available" if postgis_available else "unavailable",
         "environment": settings.environment,
     }
+    
+    # Add error details if present
+    if not db_connected and db_result.get("error"):
+        response["db_error"] = db_result["error"]
+    
+    if db_connected and postgis_result.get("version"):
+        response["postgis_version"] = postgis_result["version"]
+    elif not postgis_available and postgis_result.get("error"):
+        response["postgis_error"] = postgis_result["error"]
+    
+    return response
+
 
 
 # ============================================================================
