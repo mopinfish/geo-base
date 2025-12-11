@@ -7,10 +7,16 @@ python-dotenv==1.0.1
 # Database
 psycopg2-binary==2.9.10
 
-# Tile processing
+# Tile processing - Vector
 pymbtiles==0.5.0
 shapely==2.0.6
 geoalchemy2==0.15.2
+
+# Tile processing - Raster (COG)
+# Note: These have native dependencies (GDAL) that may not work on all platforms
+# If Vercel deployment fails, consider using AWS Lambda with Docker image
+rio-tiler>=7.0.0
+rasterio>=1.4.0
 
 # HTTP client (for future use)
 httpx==0.28.1

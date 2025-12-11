@@ -27,6 +27,18 @@ from lib.tiles import (
     get_mbtiles_metadata,
     get_tile_from_mbtiles,
 )
+from lib.raster_tiles import (
+    RASTER_MEDIA_TYPES,
+    is_rasterio_available,
+    get_raster_tile_async,
+    get_raster_preview,
+    get_cog_info,
+    get_cog_statistics,
+    generate_raster_tilejson,
+    get_raster_cache_headers,
+    get_raster_media_type,
+    validate_tile_format,
+)
 
 
 @asynccontextmanager
@@ -82,6 +94,7 @@ def health_check():
         "status": "ok",
         "version": "0.1.0",
         "environment": settings.environment,
+        "rasterio_available": is_rasterio_available(),
     }
 
 
@@ -287,6 +300,412 @@ def get_features_vector_tile(
 
 
 # ============================================================================
+# Tile Endpoints - Raster (COG)
+# ============================================================================
+
+
+@app.get("/api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{tile_format}")
+async def get_raster_tile(
+    tileset_id: str,
+    z: int,
+    x: int,
+    y: int,
+    tile_format: str,
+    indexes: str = Query(None, description="Comma-separated band indexes (e.g., '1,2,3')"),
+    scale_min: float = Query(None, description="Minimum value for rescaling"),
+    scale_max: float = Query(None, description="Maximum value for rescaling"),
+    colormap: str = Query(None, description="Colormap name for single-band visualization"),
+    conn=Depends(get_connection),
+):
+    """
+    Get a raster tile from a Cloud Optimized GeoTIFF (COG).
+    
+    Args:
+        tileset_id: Tileset ID or 'url' for direct COG URL access
+        z: Zoom level
+        x: X tile coordinate
+        y: Y tile coordinate
+        tile_format: Output format (png, jpg, webp)
+        indexes: Comma-separated band indexes (e.g., '1,2,3' for RGB)
+        scale_min: Minimum value for rescaling (default from settings)
+        scale_max: Maximum value for rescaling (default from settings)
+        colormap: Colormap name for single-band visualization
+    """
+    # Check if rio-tiler is available
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster tile service is not available. rio-tiler/rasterio not installed."
+        )
+    
+    # Validate tile format
+    try:
+        normalized_format = validate_tile_format(tile_format)
+        media_type = get_raster_media_type(normalized_format)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url, t.min_zoom, t.max_zoom,
+                       COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
+                       COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max,
+                       COALESCE(t.metadata->>'bands', NULL) as default_bands
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (settings.raster_default_scale_min, settings.raster_default_scale_max, tileset_id),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url, min_zoom, max_zoom, db_scale_min, db_scale_max, default_bands = row
+        
+        # Validate zoom level
+        if min_zoom and z < min_zoom:
+            raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
+        if max_zoom and z > max_zoom:
+            raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Parse band indexes
+    band_indexes = None
+    if indexes:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid band indexes format")
+    elif default_bands:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in default_bands.split(","))
+        except ValueError:
+            pass
+    
+    # Use provided scale values or database defaults
+    final_scale_min = scale_min if scale_min is not None else db_scale_min
+    final_scale_max = scale_max if scale_max is not None else db_scale_max
+    
+    # Generate tile
+    try:
+        tile_data = await get_raster_tile_async(
+            cog_url=cog_url,
+            z=z,
+            x=x,
+            y=y,
+            indexes=band_indexes,
+            scale_min=final_scale_min,
+            scale_max=final_scale_max,
+            img_format=normalized_format,
+            tile_size=settings.raster_tile_size,
+            colormap=colormap,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    if tile_data is None:
+        # Return empty/transparent tile for out-of-bounds requests
+        raise HTTPException(status_code=404, detail="Tile outside COG bounds")
+    
+    headers = get_raster_cache_headers(z, is_static=True)
+    
+    return Response(content=tile_data, media_type=media_type, headers=headers)
+
+
+@app.get("/api/tiles/raster/{tileset_id}/tilejson.json")
+def get_raster_tilejson(
+    tileset_id: str,
+    request: Request,
+    conn=Depends(get_connection),
+):
+    """
+    Get TileJSON for a raster tileset.
+    
+    Args:
+        tileset_id: Tileset ID
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.name, t.description, t.format, t.min_zoom, t.max_zoom,
+                       t.attribution, rs.cog_url
+                FROM tilesets t
+                LEFT JOIN raster_sources rs ON rs.tileset_id = t.id
+                WHERE t.id = %s AND t.type = 'raster'
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        name, description, tile_format, min_zoom, max_zoom, attribution, cog_url = row
+        base_url = get_base_url(request)
+        
+        # Try to get bounds from COG if available
+        bounds = None
+        center = None
+        if cog_url and is_rasterio_available():
+            try:
+                cog_info = get_cog_info(cog_url)
+                bounds = list(cog_info["bounds"])
+                # Calculate center
+                center_lng = (bounds[0] + bounds[2]) / 2
+                center_lat = (bounds[1] + bounds[3]) / 2
+                center = [center_lng, center_lat, (min_zoom or 0 + max_zoom or 18) // 2]
+            except Exception:
+                pass
+        
+        return generate_raster_tilejson(
+            tileset_id=tileset_id,
+            name=name,
+            base_url=base_url,
+            tile_format=tile_format or "png",
+            min_zoom=min_zoom or 0,
+            max_zoom=max_zoom or 22,
+            bounds=bounds,
+            center=center,
+            description=description,
+            attribution=attribution,
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
+
+
+@app.get("/api/tiles/raster/{tileset_id}/preview")
+async def get_raster_tile_preview(
+    tileset_id: str,
+    indexes: str = Query(None, description="Comma-separated band indexes"),
+    scale_min: float = Query(None, description="Minimum value for rescaling"),
+    scale_max: float = Query(None, description="Maximum value for rescaling"),
+    max_size: int = Query(512, description="Maximum dimension of preview image"),
+    format: str = Query("png", description="Output format (png, jpg, webp)"),
+    colormap: str = Query(None, description="Colormap name"),
+    conn=Depends(get_connection),
+):
+    """
+    Get a preview image of a raster tileset.
+    
+    Args:
+        tileset_id: Tileset ID
+        indexes: Comma-separated band indexes
+        scale_min: Minimum value for rescaling
+        scale_max: Maximum value for rescaling
+        max_size: Maximum dimension of preview
+        format: Output format
+        colormap: Colormap name
+    """
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster preview service is not available."
+        )
+    
+    # Validate format
+    try:
+        normalized_format = validate_tile_format(format)
+        media_type = get_raster_media_type(normalized_format)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Limit max_size
+    max_size = min(max_size, settings.raster_max_preview_size)
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url,
+                       COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
+                       COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (settings.raster_default_scale_min, settings.raster_default_scale_max, tileset_id),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url, db_scale_min, db_scale_max = row
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Parse band indexes
+    band_indexes = None
+    if indexes:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid band indexes format")
+    
+    # Use provided scale values or database defaults
+    final_scale_min = scale_min if scale_min is not None else db_scale_min
+    final_scale_max = scale_max if scale_max is not None else db_scale_max
+    
+    # Generate preview
+    try:
+        preview_data = get_raster_preview(
+            cog_url=cog_url,
+            indexes=band_indexes,
+            scale_min=final_scale_min,
+            scale_max=final_scale_max,
+            img_format=normalized_format,
+            max_size=max_size,
+            colormap=colormap,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    headers = {
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+    }
+    
+    return Response(content=preview_data, media_type=media_type, headers=headers)
+
+
+@app.get("/api/tiles/raster/{tileset_id}/info")
+def get_raster_info(
+    tileset_id: str,
+    conn=Depends(get_connection),
+):
+    """
+    Get metadata information about a raster tileset's COG.
+    
+    Args:
+        tileset_id: Tileset ID
+    """
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster info service is not available."
+        )
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url, t.name, t.description
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url, name, description = row
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Get COG info
+    try:
+        cog_info = get_cog_info(cog_url)
+        return {
+            "tileset_id": tileset_id,
+            "name": name,
+            "description": description,
+            "cog_url": cog_url,
+            **cog_info,
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/tiles/raster/{tileset_id}/statistics")
+def get_raster_statistics(
+    tileset_id: str,
+    indexes: str = Query(None, description="Comma-separated band indexes"),
+    conn=Depends(get_connection),
+):
+    """
+    Get statistics for a raster tileset's bands.
+    
+    Args:
+        tileset_id: Tileset ID
+        indexes: Comma-separated band indexes to analyze
+    """
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster statistics service is not available."
+        )
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url
+                FROM raster_sources rs
+                WHERE rs.tileset_id = %s
+                LIMIT 1
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url = row[0]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Parse band indexes
+    band_indexes = None
+    if indexes:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid band indexes format")
+    
+    # Get statistics
+    try:
+        stats = get_cog_statistics(cog_url, indexes=band_indexes)
+        return {
+            "tileset_id": tileset_id,
+            "statistics": stats,
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # TileJSON Endpoints
 # ============================================================================
 
@@ -451,8 +870,8 @@ def get_tileset_tilejson(tileset_id: str, request: Request, conn=Depends(get_con
         if tile_type == "vector":
             tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
         else:
-            # For raster, would need different endpoint
-            tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format}"
+            # For raster, use raster endpoint
+            tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format or 'png'}"
 
         return {
             "tilejson": "3.0.0",
@@ -496,7 +915,7 @@ PREVIEW_HTML = """
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             z-index: 1;
-            max-width: 300px;
+            max-width: 320px;
         }
         .info-panel h3 { margin: 0 0 10px 0; font-size: 18px; }
         .info-panel p { margin: 5px 0; font-size: 14px; color: #666; }
@@ -508,6 +927,9 @@ PREVIEW_HTML = """
         .endpoints h4 { margin: 0 0 8px 0; font-size: 14px; }
         .endpoints a { display: block; font-size: 12px; color: #007bff; margin: 4px 0; text-decoration: none; }
         .endpoints a:hover { text-decoration: underline; }
+        .layer-toggle { margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+        .layer-toggle h4 { margin: 0 0 8px 0; font-size: 14px; }
+        .layer-toggle label { display: block; font-size: 12px; margin: 4px 0; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -515,12 +937,18 @@ PREVIEW_HTML = """
         <h3>🗺️ geo-base Tile Server</h3>
         <p>API: <span id="api-status" class="status loading">checking...</span></p>
         <p>DB: <span id="db-status" class="status loading">checking...</span></p>
+        <p>Rasterio: <span id="rasterio-status" class="status loading">checking...</span></p>
         <div class="endpoints">
             <h4>API Endpoints</h4>
             <a href="/api/health" target="_blank">/api/health</a>
             <a href="/api/health/db" target="_blank">/api/health/db</a>
             <a href="/api/tilesets" target="_blank">/api/tilesets</a>
             <a href="/api/tiles/features/tilejson.json" target="_blank">/api/tiles/features/tilejson.json</a>
+        </div>
+        <div class="layer-toggle">
+            <h4>Layers</h4>
+            <label><input type="checkbox" id="toggle-features" checked> Vector Features</label>
+            <label><input type="checkbox" id="toggle-raster"> Sample Raster (if available)</label>
         </div>
     </div>
     <div id="map"></div>
@@ -532,6 +960,11 @@ PREVIEW_HTML = """
                 const el = document.getElementById('api-status');
                 el.textContent = data.status === 'ok' ? '✓ OK' : '✗ Error';
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
+                
+                // Check rasterio availability
+                const rasterioEl = document.getElementById('rasterio-status');
+                rasterioEl.textContent = data.rasterio_available ? '✓ Available' : '✗ Not installed';
+                rasterioEl.className = 'status ' + (data.rasterio_available ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('api-status');
@@ -598,6 +1031,11 @@ PREVIEW_HTML = """
         });
 
         map.addControl(new maplibregl.NavigationControl());
+
+        // Layer toggles
+        document.getElementById('toggle-features').addEventListener('change', (e) => {
+            map.setLayoutProperty('features-circle', 'visibility', e.target.checked ? 'visible' : 'none');
+        });
 
         // Popup on click
         map.on('click', 'features-circle', (e) => {

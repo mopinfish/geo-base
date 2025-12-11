@@ -16,6 +16,8 @@ dependencies = [
     "pmtiles>=3.0.0",
     "geoalchemy2>=0.14.0",
     "shapely>=2.0.0",
+    "rio-tiler>=8.0.2",
+    "rasterio>=1.4.3",
 ]
 
 [project.optional-dependencies]
