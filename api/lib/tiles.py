@@ -1,19 +1,30 @@
 """
 Tile serving utilities for geo-base API.
+
+Features:
+- MBTiles/PMTiles static tile serving
+- Dynamic MVT generation from PostGIS
+- Attribute filtering
+- Zoom-level based geometry simplification
+- Optimized cache headers
 """
 
+import json
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from pymbtiles import MBtiles
 
-# Tile format constants
+# =============================================================================
+# Constants
+# =============================================================================
+
 VECTOR_TILE_MEDIA_TYPE = "application/vnd.mapbox-vector-tile"
 PNG_MEDIA_TYPE = "image/png"
 JPG_MEDIA_TYPE = "image/jpeg"
 WEBP_MEDIA_TYPE = "image/webp"
 
-# Format to media type mapping
 FORMAT_MEDIA_TYPES = {
     "pbf": VECTOR_TILE_MEDIA_TYPE,
     "mvt": VECTOR_TILE_MEDIA_TYPE,
@@ -23,36 +34,264 @@ FORMAT_MEDIA_TYPES = {
     "webp": WEBP_MEDIA_TYPE,
 }
 
+# =============================================================================
+# Coordinate Conversion
+# =============================================================================
+
 
 def xyz_to_tms(z: int, y: int) -> int:
-    """
-    Convert XYZ tile coordinates to TMS coordinates.
-
-    XYZ: Origin at top-left (used by most web maps)
-    TMS: Origin at bottom-left (used by MBTiles)
-
-    Args:
-        z: Zoom level
-        y: Y coordinate in XYZ scheme
-
-    Returns:
-        Y coordinate in TMS scheme
-    """
+    """Convert XYZ tile coordinates to TMS coordinates."""
     return (2**z) - y - 1
 
 
 def tms_to_xyz(z: int, y: int) -> int:
-    """
-    Convert TMS tile coordinates to XYZ coordinates.
+    """Convert TMS tile coordinates to XYZ coordinates."""
+    return (2**z) - y - 1
 
+
+# =============================================================================
+# Zoom-Level Based Configuration
+# =============================================================================
+
+
+def get_simplification_tolerance(z: int) -> float:
+    """
+    Calculate geometry simplification tolerance based on zoom level.
+    
+    Lower zoom levels (zoomed out) get more aggressive simplification.
+    Higher zoom levels (zoomed in) get minimal or no simplification.
+    
+    The tolerance is in Web Mercator units (meters at equator).
+    
+    Args:
+        z: Zoom level (0-22)
+        
+    Returns:
+        Simplification tolerance in meters
+    """
+    # At zoom 0, one tile covers the whole world (~40,075 km)
+    # At zoom 22, one tile is ~9.5 meters
+    # We want more simplification at low zooms
+    
+    if z >= 16:
+        # High zoom: no simplification needed
+        return 0
+    elif z >= 12:
+        # Medium-high zoom: minimal simplification
+        return 1  # 1 meter
+    elif z >= 8:
+        # Medium zoom: moderate simplification
+        return 10  # 10 meters
+    elif z >= 4:
+        # Low-medium zoom: more simplification
+        return 100  # 100 meters
+    else:
+        # Very low zoom: aggressive simplification
+        return 1000  # 1 km
+
+
+def get_cache_ttl(z: int, is_static: bool = False) -> int:
+    """
+    Calculate cache TTL (Time To Live) based on zoom level and data type.
+    
+    Static tiles can be cached longer.
+    Lower zoom levels (overview tiles) change less frequently.
+    
+    Args:
+        z: Zoom level (0-22)
+        is_static: Whether the tile is from static source (MBTiles, etc.)
+        
+    Returns:
+        Cache TTL in seconds
+    """
+    if is_static:
+        # Static tiles: long cache
+        return 604800  # 7 days
+    
+    # Dynamic tiles: cache varies by zoom
+    if z <= 6:
+        # Overview tiles: cache longer (data changes less impact these)
+        return 86400  # 24 hours
+    elif z <= 12:
+        # Mid-level tiles
+        return 3600  # 1 hour
+    else:
+        # Detail tiles: shorter cache for more frequent updates
+        return 300  # 5 minutes
+
+
+def get_cache_headers(z: int, is_static: bool = False) -> dict:
+    """
+    Generate optimized cache headers based on zoom level.
+    
     Args:
         z: Zoom level
-        y: Y coordinate in TMS scheme
-
+        is_static: Whether the tile is static
+        
     Returns:
-        Y coordinate in XYZ scheme
+        Dict of HTTP headers
     """
-    return (2**z) - y - 1
+    ttl = get_cache_ttl(z, is_static)
+    
+    headers = {
+        "Cache-Control": f"public, max-age={ttl}, s-maxage={ttl}",
+        "Access-Control-Allow-Origin": "*",
+    }
+    
+    # Add stale-while-revalidate for dynamic tiles
+    if not is_static:
+        headers["Cache-Control"] += f", stale-while-revalidate={ttl // 2}"
+    
+    return headers
+
+
+# =============================================================================
+# Attribute Filtering
+# =============================================================================
+
+
+def parse_filter_expression(filter_str: str) -> tuple[str, dict]:
+    """
+    Parse a filter expression string into SQL WHERE clause and parameters.
+    
+    Supported formats:
+    - Simple equality: "type=station"
+    - Multiple values: "type=station,landmark"
+    - Comparison: "population>1000000"
+    - JSONB path: "properties.category=restaurant"
+    
+    Args:
+        filter_str: Filter expression string
+        
+    Returns:
+        Tuple of (SQL WHERE clause, parameters dict)
+    """
+    if not filter_str:
+        return "TRUE", {}
+    
+    conditions = []
+    params = {}
+    param_counter = 0
+    
+    # Split by comma for OR conditions at top level, semicolon for AND
+    # Example: "type=station;name_en=Tokyo" -> type=station AND name_en=Tokyo
+    
+    for expr in filter_str.split(";"):
+        expr = expr.strip()
+        if not expr:
+            continue
+        
+        # Parse comparison operators
+        match = re.match(r"^([\w.]+)\s*(=|!=|>|>=|<|<=|~)\s*(.+)$", expr)
+        if not match:
+            continue
+        
+        field, operator, value = match.groups()
+        param_name = f"filter_{param_counter}"
+        param_counter += 1
+        
+        # Check if it's a JSONB property access
+        if "." in field:
+            parts = field.split(".", 1)
+            if parts[0] == "properties":
+                # JSONB access: properties.key
+                json_key = parts[1]
+                
+                if operator == "=":
+                    # Handle multiple values (OR)
+                    if "," in value:
+                        values = [v.strip() for v in value.split(",")]
+                        value_params = []
+                        for i, v in enumerate(values):
+                            p_name = f"{param_name}_{i}"
+                            params[p_name] = v
+                            value_params.append(f"%({p_name})s")
+                        conditions.append(
+                            f"(properties->>'{json_key}') IN ({', '.join(value_params)})"
+                        )
+                    else:
+                        params[param_name] = value
+                        conditions.append(f"(properties->>'{json_key}') = %({param_name})s")
+                elif operator == "!=":
+                    params[param_name] = value
+                    conditions.append(f"(properties->>'{json_key}') != %({param_name})s")
+                elif operator == "~":
+                    # Pattern matching (LIKE)
+                    params[param_name] = f"%{value}%"
+                    conditions.append(f"(properties->>'{json_key}') ILIKE %({param_name})s")
+                else:
+                    # Numeric comparison for JSONB
+                    params[param_name] = value
+                    conditions.append(
+                        f"(properties->>'{json_key}')::numeric {operator} %({param_name})s"
+                    )
+        else:
+            # Regular column access
+            if operator == "=":
+                if "," in value:
+                    values = [v.strip() for v in value.split(",")]
+                    value_params = []
+                    for i, v in enumerate(values):
+                        p_name = f"{param_name}_{i}"
+                        params[p_name] = v
+                        value_params.append(f"%({p_name})s")
+                    conditions.append(f"{field} IN ({', '.join(value_params)})")
+                else:
+                    params[param_name] = value
+                    conditions.append(f"{field} = %({param_name})s")
+            elif operator == "!=":
+                params[param_name] = value
+                conditions.append(f"{field} != %({param_name})s")
+            elif operator == "~":
+                params[param_name] = f"%{value}%"
+                conditions.append(f"{field} ILIKE %({param_name})s")
+            else:
+                params[param_name] = value
+                conditions.append(f"{field} {operator} %({param_name})s")
+    
+    if not conditions:
+        return "TRUE", {}
+    
+    return " AND ".join(conditions), params
+
+
+def build_bbox_filter(
+    bbox: Optional[str],
+    geometry_column: str = "geom",
+    srid: int = 4326,
+) -> tuple[str, dict]:
+    """
+    Build a bounding box filter for spatial queries.
+    
+    Args:
+        bbox: Bounding box string "minx,miny,maxx,maxy"
+        geometry_column: Name of the geometry column
+        srid: SRID of the bounding box coordinates
+        
+    Returns:
+        Tuple of (SQL WHERE clause, parameters dict)
+    """
+    if not bbox:
+        return "TRUE", {}
+    
+    try:
+        coords = [float(c.strip()) for c in bbox.split(",")]
+        if len(coords) != 4:
+            raise ValueError("BBOX must have 4 coordinates")
+        
+        minx, miny, maxx, maxy = coords
+        
+        return (
+            f"{geometry_column} && ST_MakeEnvelope(%(minx)s, %(miny)s, %(maxx)s, %(maxy)s, {srid})",
+            {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
+        )
+    except Exception:
+        return "TRUE", {}
+
+
+# =============================================================================
+# MBTiles Functions
+# =============================================================================
 
 
 def get_tile_from_mbtiles(
@@ -62,19 +301,7 @@ def get_tile_from_mbtiles(
     y: int,
     use_tms: bool = True,
 ) -> bytes | None:
-    """
-    Get a tile from an MBTiles file.
-
-    Args:
-        mbtiles_path: Path to the MBTiles file
-        z: Zoom level
-        x: X coordinate
-        y: Y coordinate (in XYZ scheme)
-        use_tms: If True, convert XYZ to TMS coordinates
-
-    Returns:
-        Tile data as bytes, or None if tile doesn't exist
-    """
+    """Get a tile from an MBTiles file."""
     if use_tms:
         y = xyz_to_tms(z, y)
 
@@ -85,19 +312,16 @@ def get_tile_from_mbtiles(
 
 
 def get_mbtiles_metadata(mbtiles_path: str | Path) -> dict[str, Any]:
-    """
-    Get metadata from an MBTiles file.
-
-    Args:
-        mbtiles_path: Path to the MBTiles file
-
-    Returns:
-        Dictionary containing metadata
-    """
+    """Get metadata from an MBTiles file."""
     with MBtiles(str(mbtiles_path)) as mbtiles:
         metadata = dict(mbtiles.meta)
 
     return metadata
+
+
+# =============================================================================
+# Dynamic MVT Generation
+# =============================================================================
 
 
 def generate_mvt_from_postgis(
@@ -110,10 +334,18 @@ def generate_mvt_from_postgis(
     layer_name: str | None = None,
     columns: list[str] | None = None,
     srid: int = 4326,
+    simplify: bool = True,
+    where_clause: str = "TRUE",
+    params: dict | None = None,
 ) -> bytes:
     """
     Generate a Mapbox Vector Tile from PostGIS data.
-
+    
+    Features:
+    - Automatic geometry simplification based on zoom level
+    - Custom WHERE clause for filtering
+    - Configurable columns to include
+    
     Args:
         conn: Database connection
         table_name: Name of the table to query
@@ -124,44 +356,175 @@ def generate_mvt_from_postgis(
         layer_name: Name of the layer in the MVT (defaults to table_name)
         columns: List of columns to include in properties
         srid: SRID of the source geometry
-
+        simplify: Whether to apply zoom-based simplification
+        where_clause: Additional WHERE clause for filtering
+        params: Parameters for the WHERE clause
+        
     Returns:
         MVT data as bytes
     """
     if layer_name is None:
         layer_name = table_name
+    
+    if params is None:
+        params = {}
+    
+    # Always include these params
+    params.update({"z": z, "x": x, "y": y, "layer_name": layer_name})
 
     # Build column selection
     if columns:
-        column_select = ", ".join(columns)
-        column_select = f", {column_select}"
+        column_select = ", " + ", ".join(columns)
     else:
         column_select = ""
+
+    # Get simplification tolerance
+    tolerance = get_simplification_tolerance(z) if simplify else 0
+    
+    # Build geometry transformation
+    # First transform to Web Mercator (3857), then optionally simplify
+    if tolerance > 0:
+        geom_transform = f"""
+            ST_SimplifyPreserveTopology(
+                ST_Transform({geometry_column}, 3857),
+                {tolerance}
+            )
+        """
+    else:
+        geom_transform = f"ST_Transform({geometry_column}, 3857)"
 
     # Build the query
     query = f"""
         WITH mvtgeom AS (
             SELECT
                 ST_AsMVTGeom(
-                    ST_Transform({geometry_column}, 3857),
-                    ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
+                    {geom_transform},
+                    ST_TileEnvelope(%(z)s, %(x)s, %(y)s),
+                    4096,
+                    256,
+                    true
                 ) AS geom
                 {column_select}
             FROM {table_name}
             WHERE ST_Transform({geometry_column}, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
+              AND ({where_clause})
         )
-        SELECT ST_AsMVT(mvtgeom.*, %(layer_name)s)
-        FROM mvtgeom;
+        SELECT ST_AsMVT(mvtgeom.*, %(layer_name)s, 4096, 'geom')
+        FROM mvtgeom
+        WHERE geom IS NOT NULL;
     """
 
     with conn.cursor() as cur:
-        cur.execute(query, {"z": z, "x": x, "y": y, "layer_name": layer_name})
+        cur.execute(query, params)
         result = cur.fetchone()
 
     if result and result[0]:
         return result[0].tobytes()
 
     return b""
+
+
+def generate_features_mvt(
+    conn,
+    z: int,
+    x: int,
+    y: int,
+    tileset_id: str | None = None,
+    layer_name: str | None = None,
+    filter_expr: str | None = None,
+    simplify: bool = True,
+) -> bytes:
+    """
+    Generate MVT from the features table with filtering support.
+    
+    Args:
+        conn: Database connection
+        z: Zoom level
+        x: X coordinate  
+        y: Y coordinate
+        tileset_id: Optional tileset ID filter
+        layer_name: Optional layer name filter (also used as MVT layer name)
+        filter_expr: Optional attribute filter expression
+        simplify: Whether to apply zoom-based simplification
+        
+    Returns:
+        MVT data as bytes
+    """
+    # Build WHERE conditions
+    conditions = []
+    params = {"z": z, "x": x, "y": y}
+    
+    if tileset_id:
+        conditions.append("tileset_id = %(tileset_id)s")
+        params["tileset_id"] = tileset_id
+    
+    if layer_name:
+        conditions.append("layer_name = %(layer)s")
+        params["layer"] = layer_name
+    
+    # Parse attribute filter
+    if filter_expr:
+        filter_clause, filter_params = parse_filter_expression(filter_expr)
+        if filter_clause != "TRUE":
+            conditions.append(filter_clause)
+            params.update(filter_params)
+    
+    where_clause = " AND ".join(conditions) if conditions else "TRUE"
+    
+    # MVT layer name
+    mvt_layer = layer_name if layer_name else "features"
+    params["layer_name"] = mvt_layer
+    
+    # Get simplification tolerance
+    tolerance = get_simplification_tolerance(z) if simplify else 0
+    
+    # Build geometry transformation
+    if tolerance > 0:
+        geom_transform = f"""
+            ST_SimplifyPreserveTopology(
+                ST_Transform(geom, 3857),
+                {tolerance}
+            )
+        """
+    else:
+        geom_transform = "ST_Transform(geom, 3857)"
+    
+    # Build query
+    query = f"""
+        WITH mvtgeom AS (
+            SELECT
+                ST_AsMVTGeom(
+                    {geom_transform},
+                    ST_TileEnvelope(%(z)s, %(x)s, %(y)s),
+                    4096,
+                    256,
+                    true
+                ) AS geom,
+                id::text as feature_id,
+                layer_name,
+                properties
+            FROM features
+            WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
+              AND ({where_clause})
+        )
+        SELECT ST_AsMVT(mvtgeom.*, %(layer_name)s, 4096, 'geom')
+        FROM mvtgeom
+        WHERE geom IS NOT NULL;
+    """
+    
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        result = cur.fetchone()
+    
+    if result and result[0]:
+        return result[0].tobytes()
+    
+    return b""
+
+
+# =============================================================================
+# TileJSON Generation
+# =============================================================================
 
 
 def generate_tilejson(
@@ -177,25 +540,7 @@ def generate_tilejson(
     attribution: str | None = None,
     vector_layers: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """
-    Generate a TileJSON specification.
-
-    Args:
-        tileset_id: Unique identifier for the tileset
-        name: Human-readable name
-        base_url: Base URL for tile requests
-        tile_format: Tile format (pbf, png, jpg, etc.)
-        min_zoom: Minimum zoom level
-        max_zoom: Maximum zoom level
-        bounds: Bounding box [west, south, east, north]
-        center: Center point [lon, lat, zoom]
-        description: Description of the tileset
-        attribution: Attribution string
-        vector_layers: Vector layer definitions (for vector tiles)
-
-    Returns:
-        TileJSON dictionary
-    """
+    """Generate a TileJSON specification."""
     if bounds is None:
         bounds = [-180, -85.051129, 180, 85.051129]
 
