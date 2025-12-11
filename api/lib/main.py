@@ -2,13 +2,13 @@
 FastAPI Tile Server for geo-base.
 """
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from lib.config import get_settings
 from lib.database import (
@@ -55,6 +55,19 @@ app.add_middleware(
 )
 
 
+def get_base_url(request: Request) -> str:
+    """Get base URL from request headers."""
+    # Check for forwarded headers (used by proxies/Vercel)
+    forwarded_proto = request.headers.get("x-forwarded-proto", "http")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    
+    if forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}"
+    
+    # Fallback to request URL
+    return str(request.base_url).rstrip("/")
+
+
 # ============================================================================
 # Health Check Endpoints
 # ============================================================================
@@ -63,7 +76,11 @@ app.add_middleware(
 @app.get("/api/health")
 def health_check():
     """Basic health check endpoint."""
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "version": "0.1.0",
+        "environment": settings.environment,
+    }
 
 
 @app.get("/api/health/db")
@@ -78,11 +95,12 @@ def health_check_db():
         "status": status,
         "database": "connected" if db_ok else "disconnected",
         "postgis": "available" if postgis_ok else "unavailable",
+        "environment": settings.environment,
     }
 
 
 # ============================================================================
-# Tile Endpoints - Static (MBTiles)
+# Tile Endpoints - Static (MBTiles) - For Local Development
 # ============================================================================
 
 
@@ -96,6 +114,9 @@ def get_mbtiles_tile(
 ):
     """
     Get a tile from an MBTiles file.
+    
+    Note: This endpoint is primarily for local development.
+    In production (Vercel), use database-backed tiles instead.
 
     Args:
         tileset_name: Name of the MBTiles file (without extension)
@@ -268,15 +289,14 @@ def get_features_vector_tile(
 
 
 @app.get("/api/tiles/dynamic/{layer_name}/tilejson.json")
-def get_dynamic_tilejson(layer_name: str):
+def get_dynamic_tilejson(layer_name: str, request: Request):
     """
     Get TileJSON for a dynamic layer.
 
     Args:
         layer_name: Name of the database table/layer
     """
-    # Get base URL from settings or request
-    base_url = "http://localhost:3000"  # TODO: Get from request
+    base_url = get_base_url(request)
 
     tilejson = generate_tilejson(
         tileset_id=f"dynamic/{layer_name}",
@@ -289,91 +309,36 @@ def get_dynamic_tilejson(layer_name: str):
     return tilejson
 
 
-# ============================================================================
-# Preview Page
-# ============================================================================
+@app.get("/api/tiles/features/tilejson.json")
+def get_features_tilejson(
+    request: Request,
+    tileset_id: str = Query(None, description="Filter by tileset ID"),
+    layer: str = Query(None, description="Filter by layer name"),
+):
+    """
+    Get TileJSON for the features layer.
+    """
+    base_url = get_base_url(request)
+    
+    # Build tile URL with query params
+    tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf"
+    query_params = []
+    if tileset_id:
+        query_params.append(f"tileset_id={tileset_id}")
+    if layer:
+        query_params.append(f"layer={layer}")
+    if query_params:
+        tile_url += "?" + "&".join(query_params)
 
-
-PREVIEW_HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>geo-base Tile Preview</title>
-    <script src="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.css" />
-    <style>
-        body { margin: 0; padding: 0; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-        .info-panel {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: white;
-            padding: 10px 15px;
-            border-radius: 4px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-            z-index: 1;
-            font-family: sans-serif;
-            font-size: 14px;
-        }
-        .info-panel h3 { margin: 0 0 10px 0; }
-    </style>
-</head>
-<body>
-    <div class="info-panel">
-        <h3>🗺️ geo-base Tile Server</h3>
-        <p>Status: <span id="status">Loading...</span></p>
-    </div>
-    <div id="map"></div>
-    <script>
-        // Check API health
-        fetch('/api/health')
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById('status').textContent = data.status === 'ok' ? '✅ Running' : '❌ Error';
-            })
-            .catch(() => {
-                document.getElementById('status').textContent = '❌ Error';
-            });
-
-        // Initialize map with GSI tiles as base
-        const map = new maplibregl.Map({
-            hash: true,
-            container: 'map',
-            style: {
-                version: 8,
-                sources: {
-                    osm: {
-                        type: 'raster',
-                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-                        tileSize: 256,
-                        attribution: '&copy; OpenStreetMap contributors',
-                    },
-                },
-                layers: [
-                    {
-                        id: 'osm',
-                        type: 'raster',
-                        source: 'osm',
-                    },
-                ],
-            },
-            center: [139.7, 35.7],
-            zoom: 10,
-        });
-
-        map.addControl(new maplibregl.NavigationControl());
-    </script>
-</body>
-</html>
-"""
-
-
-@app.get("/", response_class=HTMLResponse)
-def preview_page():
-    """Tile preview page with MapLibre GL JS."""
-    return PREVIEW_HTML
+    return {
+        "tilejson": "3.0.0",
+        "name": "features",
+        "tiles": [tile_url],
+        "minzoom": 0,
+        "maxzoom": 22,
+        "bounds": [-180, -85.051129, 180, 85.051129],
+        "center": [139.7, 35.7, 10],
+    }
 
 
 # ============================================================================
@@ -399,8 +364,10 @@ def list_tilesets(conn=Depends(get_connection)):
 
         tilesets = [dict(zip(columns, row)) for row in rows]
 
-        # Convert datetime to string
+        # Convert datetime and UUID to string
         for tileset in tilesets:
+            if tileset.get("id"):
+                tileset["id"] = str(tileset["id"])
             if tileset.get("created_at"):
                 tileset["created_at"] = tileset["created_at"].isoformat()
             if tileset.get("updated_at"):
@@ -434,7 +401,9 @@ def get_tileset(tileset_id: str, conn=Depends(get_connection)):
 
         tileset = dict(zip(columns, row))
 
-        # Convert datetime to string
+        # Convert datetime and UUID to string
+        if tileset.get("id"):
+            tileset["id"] = str(tileset["id"])
         if tileset.get("created_at"):
             tileset["created_at"] = tileset["created_at"].isoformat()
         if tileset.get("updated_at"):
@@ -445,3 +414,211 @@ def get_tileset(tileset_id: str, conn=Depends(get_connection)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting tileset: {str(e)}")
+
+
+@app.get("/api/tilesets/{tileset_id}/tilejson.json")
+def get_tileset_tilejson(tileset_id: str, request: Request, conn=Depends(get_connection)):
+    """Get TileJSON for a specific tileset."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT name, description, type, format, min_zoom, max_zoom, attribution
+                FROM tilesets
+                WHERE id = %s
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
+
+        name, description, tile_type, tile_format, min_zoom, max_zoom, attribution = row
+        base_url = get_base_url(request)
+
+        # For vector tilesets, use features endpoint
+        if tile_type == "vector":
+            tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
+        else:
+            # For raster, would need different endpoint
+            tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format}"
+
+        return {
+            "tilejson": "3.0.0",
+            "name": name,
+            "description": description,
+            "tiles": [tile_url],
+            "minzoom": min_zoom or 0,
+            "maxzoom": max_zoom or 22,
+            "attribution": attribution,
+            "bounds": [-180, -85.051129, 180, 85.051129],
+            "center": [139.7, 35.7, 10],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
+
+
+# ============================================================================
+# Preview Page
+# ============================================================================
+
+
+PREVIEW_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>geo-base Tile Preview</title>
+    <script src="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.css" />
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1;
+            max-width: 300px;
+        }
+        .info-panel h3 { margin: 0 0 10px 0; font-size: 18px; }
+        .info-panel p { margin: 5px 0; font-size: 14px; color: #666; }
+        .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .status.ok { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.loading { background: #fff3cd; color: #856404; }
+        .endpoints { margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+        .endpoints h4 { margin: 0 0 8px 0; font-size: 14px; }
+        .endpoints a { display: block; font-size: 12px; color: #007bff; margin: 4px 0; text-decoration: none; }
+        .endpoints a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="info-panel">
+        <h3>🗺️ geo-base Tile Server</h3>
+        <p>API: <span id="api-status" class="status loading">checking...</span></p>
+        <p>DB: <span id="db-status" class="status loading">checking...</span></p>
+        <div class="endpoints">
+            <h4>API Endpoints</h4>
+            <a href="/api/health" target="_blank">/api/health</a>
+            <a href="/api/health/db" target="_blank">/api/health/db</a>
+            <a href="/api/tilesets" target="_blank">/api/tilesets</a>
+            <a href="/api/tiles/features/tilejson.json" target="_blank">/api/tiles/features/tilejson.json</a>
+        </div>
+    </div>
+    <div id="map"></div>
+    <script>
+        // Check API health
+        fetch('/api/health')
+            .then(res => res.json())
+            .then(data => {
+                const el = document.getElementById('api-status');
+                el.textContent = data.status === 'ok' ? '✓ OK' : '✗ Error';
+                el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
+            })
+            .catch(() => {
+                const el = document.getElementById('api-status');
+                el.textContent = '✗ Error';
+                el.className = 'status error';
+            });
+
+        // Check DB health
+        fetch('/api/health/db')
+            .then(res => res.json())
+            .then(data => {
+                const el = document.getElementById('db-status');
+                el.textContent = data.status === 'ok' ? '✓ Connected' : '✗ ' + data.database;
+                el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
+            })
+            .catch(() => {
+                const el = document.getElementById('db-status');
+                el.textContent = '✗ Error';
+                el.className = 'status error';
+            });
+
+        // Initialize map
+        const map = new maplibregl.Map({
+            hash: true,
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+                    },
+                    features: {
+                        type: 'vector',
+                        tiles: [window.location.origin + '/api/tiles/features/{z}/{x}/{y}.pbf'],
+                        minzoom: 0,
+                        maxzoom: 22,
+                    },
+                },
+                layers: [
+                    {
+                        id: 'osm',
+                        type: 'raster',
+                        source: 'osm',
+                    },
+                    {
+                        id: 'features-circle',
+                        type: 'circle',
+                        source: 'features',
+                        'source-layer': 'features',
+                        paint: {
+                            'circle-radius': 8,
+                            'circle-color': '#e74c3c',
+                            'circle-stroke-width': 2,
+                            'circle-stroke-color': '#ffffff',
+                        },
+                    },
+                ],
+            },
+            center: [139.7, 35.68],
+            zoom: 11,
+        });
+
+        map.addControl(new maplibregl.NavigationControl());
+
+        // Popup on click
+        map.on('click', 'features-circle', (e) => {
+            const props = e.features[0].properties;
+            let content = '<strong>' + (props.name || 'Feature') + '</strong>';
+            if (props.properties) {
+                try {
+                    const p = JSON.parse(props.properties);
+                    if (p.name_en) content += '<br>' + p.name_en;
+                    if (p.type) content += '<br>Type: ' + p.type;
+                } catch(e) {}
+            }
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(content)
+                .addTo(map);
+        });
+
+        map.on('mouseenter', 'features-circle', () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', 'features-circle', () => {
+            map.getCanvas().style.cursor = '';
+        });
+    </script>
+</body>
+</html>
+"""
+
+
+@app.get("/", response_class=HTMLResponse)
+def preview_page():
+    """Tile preview page with MapLibre GL JS."""
+    return PREVIEW_HTML

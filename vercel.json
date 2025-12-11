@@ -1,20 +1,28 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd app && npm run build",
-  "outputDirectory": "app/.next",
-  "framework": "nextjs",
-  "functions": {
-    "api/**/*.py": {
-      "runtime": "@vercel/python@3.11",
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/:path*"
+      "src": "api/index.py",
+      "use": "@vercel/python"
     }
   ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
   "headers": [
     {
       "source": "/api/tiles/(.*)",
