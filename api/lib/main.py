@@ -20,8 +20,10 @@ from lib.database import (
 from lib.tiles import (
     FORMAT_MEDIA_TYPES,
     VECTOR_TILE_MEDIA_TYPE,
+    generate_features_mvt,
     generate_mvt_from_postgis,
     generate_tilejson,
+    get_cache_headers,
     get_mbtiles_metadata,
     get_tile_from_mbtiles,
 )
@@ -157,11 +159,8 @@ def get_mbtiles_tile(
     if tile_data is None:
         raise HTTPException(status_code=404, detail="Tile not found")
 
-    # Prepare headers
-    headers = {
-        "Cache-Control": f"public, max-age={settings.default_tile_cache_ttl}",
-        "Access-Control-Allow-Origin": "*",
-    }
+    # Get optimized cache headers (static tiles = longer cache)
+    headers = get_cache_headers(z, is_static=True)
 
     # Add content-encoding for gzipped vector tiles
     if tile_format.lower() in ("pbf", "mvt"):
@@ -198,16 +197,22 @@ def get_dynamic_vector_tile(
     z: int,
     x: int,
     y: int,
+    simplify: bool = Query(True, description="Apply zoom-based simplification"),
     conn=Depends(get_connection),
 ):
     """
-    Generate a vector tile dynamically from PostGIS.
+    Generate a vector tile dynamically from PostGIS table.
+    
+    Features:
+    - Automatic zoom-based geometry simplification
+    - Optimized caching based on zoom level
 
     Args:
         layer_name: Name of the database table/layer
-        z: Zoom level
+        z: Zoom level (0-22)
         x: X tile coordinate
         y: Y tile coordinate
+        simplify: Whether to apply zoom-based geometry simplification (default: true)
     """
     try:
         tile_data = generate_mvt_from_postgis(
@@ -217,14 +222,13 @@ def get_dynamic_vector_tile(
             x=x,
             y=y,
             layer_name=layer_name,
+            simplify=simplify,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating tile: {str(e)}")
 
-    headers = {
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-    }
+    # Get optimized cache headers based on zoom level
+    headers = get_cache_headers(z, is_static=False)
 
     return Response(content=tile_data, media_type=VECTOR_TILE_MEDIA_TYPE, headers=headers)
 
@@ -236,64 +240,48 @@ def get_features_vector_tile(
     y: int,
     tileset_id: str = Query(None, description="Filter by tileset ID"),
     layer: str = Query(None, description="Filter by layer name"),
+    filter: str = Query(None, description="Attribute filter (e.g., 'properties.type=station')"),
+    simplify: bool = Query(True, description="Apply zoom-based simplification"),
     conn=Depends(get_connection),
 ):
     """
     Generate a vector tile from the features table.
+    
+    Features:
+    - Filter by tileset_id and layer name
+    - Attribute filtering with expressions
+    - Automatic zoom-based geometry simplification
+    - Optimized caching based on zoom level
 
     Args:
-        z: Zoom level
+        z: Zoom level (0-22)
         x: X tile coordinate
         y: Y tile coordinate
         tileset_id: Optional tileset ID filter
         layer: Optional layer name filter
+        filter: Attribute filter expression
+            - Simple: "properties.type=station"
+            - Multiple values: "properties.type=station,landmark"
+            - Pattern match: "properties.name~Tokyo"
+            - Multiple conditions: "properties.type=station;properties.name~Tokyo"
+        simplify: Whether to apply zoom-based geometry simplification (default: true)
     """
-    # Build WHERE clause
-    where_conditions = []
-    params = {"z": z, "x": x, "y": y, "layer_name": "features"}
-
-    if tileset_id:
-        where_conditions.append("tileset_id = %(tileset_id)s")
-        params["tileset_id"] = tileset_id
-
-    if layer:
-        where_conditions.append("layer_name = %(layer)s")
-        params["layer"] = layer
-
-    where_clause = " AND ".join(where_conditions) if where_conditions else "TRUE"
-
-    # Build query
-    query = f"""
-        WITH mvtgeom AS (
-            SELECT
-                ST_AsMVTGeom(
-                    ST_Transform(geom, 3857),
-                    ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
-                ) AS geom,
-                id,
-                layer_name,
-                properties
-            FROM features
-            WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
-              AND {where_clause}
-        )
-        SELECT ST_AsMVT(mvtgeom.*, %(layer_name)s)
-        FROM mvtgeom;
-    """
-
     try:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            result = cur.fetchone()
-
-        tile_data = result[0].tobytes() if result and result[0] else b""
+        tile_data = generate_features_mvt(
+            conn=conn,
+            z=z,
+            x=x,
+            y=y,
+            tileset_id=tileset_id,
+            layer_name=layer,
+            filter_expr=filter,
+            simplify=simplify,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating tile: {str(e)}")
 
-    headers = {
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-    }
+    # Get optimized cache headers based on zoom level
+    headers = get_cache_headers(z, is_static=False)
 
     return Response(content=tile_data, media_type=VECTOR_TILE_MEDIA_TYPE, headers=headers)
 
@@ -329,9 +317,12 @@ def get_features_tilejson(
     request: Request,
     tileset_id: str = Query(None, description="Filter by tileset ID"),
     layer: str = Query(None, description="Filter by layer name"),
+    filter: str = Query(None, description="Attribute filter expression"),
 ):
     """
     Get TileJSON for the features layer.
+    
+    Query parameters are passed through to the tile URLs.
     """
     base_url = get_base_url(request)
     
@@ -342,6 +333,10 @@ def get_features_tilejson(
         query_params.append(f"tileset_id={tileset_id}")
     if layer:
         query_params.append(f"layer={layer}")
+    if filter:
+        # URL encode the filter parameter
+        from urllib.parse import quote
+        query_params.append(f"filter={quote(filter)}")
     if query_params:
         tile_url += "?" + "&".join(query_params)
 
