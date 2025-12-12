@@ -53,3 +53,6 @@ ignore = []
 [tool.black]
 line-length = 100
 target-version = ["py311"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
