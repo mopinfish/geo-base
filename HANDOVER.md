@@ -1,6 +1,7 @@
 # geo-base プロジェクト 引き継ぎドキュメント
 
 **作成日**: 2025-12-12  
+**最終更新**: 2025-12-12  
 **プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
 **リポジトリ**: https://github.com/mopinfish/geo-base  
 **本番URL**: https://geo-base-puce.vercel.app/
@@ -25,6 +26,7 @@
                     ┌────────────▼────────────┐
                     │     Tile Server API     │
                     │   (FastAPI on Vercel)   │
+                    │   ※将来: Fly.io移行予定  │
                     └────────────┬────────────┘
                                  │
                     ┌────────────▼────────────┐
@@ -60,6 +62,13 @@
 - Pooler接続（ポート6543）+ SSL
 - 本番環境での動作確認
 
+### Step 1.5: ラスタタイル対応（COG/GeoTIFF）⚠️ 部分完了
+- rio-tilerによるCOGタイル生成モジュール実装
+- ラスタタイルエンドポイント追加
+- raster_sourcesテーブル追加
+- **制限事項**: Vercel環境ではrio-tiler（GDAL依存）が動作しないため、ラスタタイル機能は利用不可
+- **今後の方針**: Fly.ioへの移行時に有効化予定
+
 ---
 
 ## 3. 現在のファイル構成
@@ -72,7 +81,8 @@ geo-base/
 │   │   ├── config.py            # 設定管理（pydantic-settings）
 │   │   ├── database.py          # DB接続（サーバーレス対応）
 │   │   ├── main.py              # FastAPIアプリ・エンドポイント
-│   │   └── tiles.py             # タイル生成ユーティリティ
+│   │   ├── tiles.py             # ベクタータイル生成ユーティリティ
+│   │   └── raster_tiles.py      # ラスタータイル生成ユーティリティ【新規】
 │   ├── data/                    # MBTilesファイル格納（ローカル用）
 │   ├── index.py                 # Vercelエントリーポイント
 │   ├── pyproject.toml
@@ -91,7 +101,8 @@ geo-base/
 ├── docker/
 │   ├── docker-compose.yml       # ローカルPostGIS
 │   └── postgis-init/
-│       └── 01_init.sql          # スキーマ定義
+│       ├── 01_init.sql          # 基本スキーマ定義
+│       └── 02_raster_schema.sql # ラスターソーステーブル【新規】
 ├── packages/                     # 共有パッケージ（未実装）
 │   └── shared/
 │       └── types/
@@ -108,15 +119,16 @@ geo-base/
 
 ## 4. 技術スタック
 
-| レイヤー | 技術 | バージョン |
-|---------|------|-----------|
-| API Framework | FastAPI | 0.115.x |
-| Database | PostgreSQL + PostGIS | 16 + 3.4 |
-| Database Hosting | Supabase | - |
-| API Hosting | Vercel Serverless | Python 3.12 |
-| Package Manager | uv | latest |
-| Vector Tiles | PostGIS ST_AsMVT | - |
-| Tile Format | MVT (pbf) | - |
+| レイヤー | 技術 | バージョン | 備考 |
+|---------|------|-----------|------|
+| API Framework | FastAPI | 0.115.x | |
+| Database | PostgreSQL + PostGIS | 16 + 3.4 | |
+| Database Hosting | Supabase | - | |
+| API Hosting | Vercel Serverless | Python 3.12 | 将来Fly.io移行予定 |
+| Package Manager | uv | latest | |
+| Vector Tiles | PostGIS ST_AsMVT | - | |
+| Raster Tiles | rio-tiler | 7.0+ | ⚠️ Vercelでは動作不可 |
+| Tile Format | MVT (pbf), PNG | - | |
 
 ### 主要ライブラリ
 
@@ -130,6 +142,8 @@ pymbtiles==0.5.0
 shapely==2.0.6
 geoalchemy2==0.15.2
 httpx==0.28.1
+rio-tiler>=7.0.0      # ⚠️ Vercelでは動作不可
+rasterio>=1.4.0       # ⚠️ Vercelでは動作不可
 ```
 
 ---
@@ -200,9 +214,33 @@ CREATE TABLE features (
 CREATE INDEX idx_features_geom ON features USING GIST (geom);
 ```
 
+### raster_sources テーブル【新規】
+```sql
+CREATE TABLE raster_sources (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tileset_id UUID NOT NULL REFERENCES tilesets(id) ON DELETE CASCADE,
+    cog_url TEXT NOT NULL,                    -- COGファイルのURL
+    storage_provider VARCHAR(50) DEFAULT 'http',  -- 'supabase', 's3', 'http'
+    band_count INTEGER,
+    band_descriptions JSONB DEFAULT '[]',
+    statistics JSONB DEFAULT '{}',
+    native_crs VARCHAR(50),
+    native_resolution FLOAT,
+    recommended_min_zoom INTEGER,
+    recommended_max_zoom INTEGER,
+    acquisition_date TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (tileset_id)
+);
+```
+
 ---
 
 ## 7. 実装済みAPIエンドポイント
+
+### ベクタータイル（Vercelで動作）
 
 | メソッド | パス | 説明 |
 |---------|------|------|
@@ -216,6 +254,16 @@ CREATE INDEX idx_features_geom ON features USING GIST (geom);
 | GET | `/api/tiles/features/tilejson.json` | フィーチャーのTileJSON |
 | GET | `/api/tiles/dynamic/{layer}/{z}/{x}/{y}.pbf` | 動的MVTタイル |
 | GET | `/api/tiles/mbtiles/{name}/{z}/{x}/{y}.{fmt}` | MBTilesタイル（ローカル用） |
+
+### ラスタータイル（⚠️ Vercelでは動作不可、Fly.io移行後に有効化）
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{format}` | ラスタタイル取得 |
+| GET | `/api/tiles/raster/{tileset_id}/tilejson.json` | TileJSON |
+| GET | `/api/tiles/raster/{tileset_id}/preview` | プレビュー画像 |
+| GET | `/api/tiles/raster/{tileset_id}/info` | COGメタデータ |
+| GET | `/api/tiles/raster/{tileset_id}/statistics` | バンド統計情報 |
 
 ### フィルタリング機能
 
@@ -256,35 +304,30 @@ properties.population>1000000
 
 ### フェーズ1 追加機能（優先度: 高）
 
-#### 8.1 ラスタタイル対応（COG/GeoTIFF）
+#### 8.1 ラスタタイル対応（COG/GeoTIFF）⚠️ 部分完了
 
-**目的**: Cloud Optimized GeoTIFF (COG) からラスタタイルを動的に切り出す
+**実装状況**: コード実装済み、Vercelでは動作不可
 
-**実装方針**:
-1. `rio-tiler` ライブラリを使用
-2. COGファイルはVercel BlobまたはSupabase Storageに格納
-3. 新規エンドポイント: `/api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{format}`
+**制限事項**:
+- rio-tiler/rasterioはGDAL（ネイティブライブラリ）に依存
+- Vercel Serverless環境ではネイティブ依存ライブラリが動作しない
 
-**参考コード** (`geolocation-tech-source.txt` より):
-```python
-from rio_tiler.io import COGReader
+**今後の方針**:
+- API全体をFly.io（Docker）に移行時にラスタタイル機能を有効化
+- MCPサーバーと同じインフラ基盤で統一
 
-def get_raster_tile(cog_url: str, z: int, x: int, y: int):
-    with COGReader(cog_url) as cog:
-        img = cog.tile(x, y, z)
-        return img.render(img_format="PNG")
+**サンプルCOGデータ**:
 ```
-
-**注意点**:
-- `rasterio`, `rio-tiler` はネイティブ依存があるため、Vercelでの動作確認が必要
-- 動作しない場合はAWS Lambda + Docker Imageでの代替を検討
+# Sentinel-2 True Color Image (AWS Public Dataset)
+https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/54/T/WN/2023/11/S2B_54TWN_20231118_1_L2A/TCI.tif
+```
 
 #### 8.2 PMTiles対応
 
 **目的**: PMTiles形式のタイルアーカイブに対応
 
 **実装方針**:
-1. `pmtiles` Pythonライブラリを使用
+1. `pmtiles` Pythonライブラリを使用（ネイティブ依存なし、Vercelでも動作可能）
 2. PMTilesファイルはHTTPレンジリクエストでアクセス
 3. 新規エンドポイント: `/api/tiles/pmtiles/{tileset_name}/{z}/{x}/{y}.{format}`
 
@@ -389,12 +432,41 @@ fly deploy
 
 ---
 
+### 将来の移行計画: Vercel → Fly.io
+
+**目的**: ラスタタイル機能の有効化、MCPサーバーとの統一基盤
+
+**移行内容**:
+- API（FastAPI）をDockerコンテナ化
+- Fly.ioへデプロイ
+- rio-tiler/rasterioの有効化
+- MCPサーバーと同じインフラで運用
+
+**Dockerfile案**:
+```dockerfile
+FROM python:3.12-slim
+
+# GDAL依存関係インストール
+RUN apt-get update && apt-get install -y \
+    libgdal-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+CMD ["uvicorn", "lib.main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+---
+
 ## 9. 参照資料
 
 ### プロジェクト内ドキュメント
 - `/mnt/project/geolocation-tech-source.txt` - タイルサーバー実装のサンプルコード
 - `/mnt/project/PROJECT_ROADMAP.md` - プロジェクトロードマップ
-- `/mnt/project/geo-base.txt` - 要件定義
+- `/mnt/project/geo-base.txt` - 最新ソースコード
 
 ### 外部ドキュメント
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
@@ -403,8 +475,10 @@ fly deploy
 - [Mapbox Vector Tile Specification](https://github.com/mapbox/vector-tile-spec)
 - [PMTiles Specification](https://github.com/protomaps/PMTiles)
 - [Cloud Optimized GeoTIFF](https://www.cogeo.org/)
+- [rio-tiler Documentation](https://cogeotiff.github.io/rio-tiler/)
 - [FastMCP Documentation](https://github.com/jlowin/fastmcp)
 - [Supabase Documentation](https://supabase.com/docs)
+- [Fly.io Documentation](https://fly.io/docs/)
 
 ---
 
@@ -412,9 +486,10 @@ fly deploy
 
 ### Vercelデプロイ時の注意
 
-1. **Python依存関係**: ネイティブ依存のあるライブラリ（rasterio等）は動作しない可能性がある
+1. **Python依存関係**: ネイティブ依存のあるライブラリ（rasterio等）は動作しない
 2. **接続タイムアウト**: Serverless Functionは最大30秒（Proプランで60秒）
 3. **コールドスタート**: 初回リクエストは遅延する可能性がある
+4. **モジュールパス**: `index.py`で`sys.path`の調整が必要
 
 ### Supabase接続の注意
 
@@ -431,6 +506,20 @@ uv run uvicorn lib.main:app --reload --port 3000
 
 # テストデータ投入
 cd .. && bash scripts/seed.sh
+
+# データベースマイグレーション（ラスター対応）
+psql -h localhost -U postgres -d geo_base -f docker/postgis-init/02_raster_schema.sql
+```
+
+### ラスタタイル開発（ローカル環境のみ）
+
+```bash
+# rio-tiler/rasterioインストール（ローカル環境）
+cd api
+uv add rio-tiler rasterio
+
+# ヘルスチェックでrasterio_available: trueを確認
+curl http://localhost:3000/api/health
 ```
 
 ---
@@ -440,6 +529,15 @@ cd .. && bash scripts/seed.sh
 - **GitHub**: https://github.com/mopinfish/geo-base
 - **本番環境**: https://geo-base-puce.vercel.app/
 - **Supabaseプロジェクト**: `zxpfupcxwfzfjvpfadww`
+
+---
+
+## 12. 変更履歴
+
+| 日付 | 変更内容 |
+|------|---------|
+| 2025-12-12 | 初版作成（Step 1.1〜1.4完了） |
+| 2025-12-12 | ラスタタイル対応（Step 1.5）追加、Fly.io移行方針追記 |
 
 ---
 
