@@ -13,7 +13,8 @@ shapely==2.0.6
 geoalchemy2==0.15.2
 
 # Tile processing - PMTiles (HTTP Range Request based, works on Vercel)
-aiopmtiles>=0.3.0
+# aiopmtiles is not on PyPI, install from GitHub
+aiopmtiles @ git+https://github.com/developmentseed/aiopmtiles.git
 
 # Tile processing - Raster (COG)
 # Note: These have native dependencies (GDAL) that may not work on all platforms
