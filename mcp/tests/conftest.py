@@ -13,6 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("TILE_SERVER_URL", "https://geo-base-puce.vercel.app")
 os.environ.setdefault("ENVIRONMENT", "test")
 
+# Exclude live_test.py from pytest collection (it's a standalone script)
+collect_ignore = ["live_test.py"]
+
 
 def pytest_configure(config):
     """Configure pytest."""
