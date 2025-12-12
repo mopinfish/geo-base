@@ -3,7 +3,11 @@ geo-base MCP Server
 
 MCP Server for geo-base tile server.
 Provides tools to access geographic data through Claude Desktop.
+
+Supports both stdio (local) and HTTP/SSE (remote) transports.
 """
+
+import os
 
 from fastmcp import FastMCP
 
@@ -238,5 +242,26 @@ async def tool_get_server_info() -> dict:
 # ============================================================
 
 if __name__ == "__main__":
-    # Run the MCP server using stdio transport (default for Claude Desktop)
-    mcp.run()
+    # Get transport mode from environment variable
+    # Options: "stdio" (default, for local Claude Desktop)
+    #          "sse" (for remote HTTP connections via Fly.io)
+    #          "streamable-http" (alternative HTTP transport)
+    transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    
+    # Get host and port for HTTP transports
+    host = os.environ.get("MCP_HOST", "0.0.0.0")
+    port = int(os.environ.get("MCP_PORT", "8080"))
+    
+    if transport == "stdio":
+        # Run with stdio transport (default for Claude Desktop local)
+        mcp.run()
+    elif transport == "sse":
+        # Run with SSE transport (for remote connections)
+        mcp.run(transport="sse", host=host, port=port)
+    elif transport == "streamable-http":
+        # Run with Streamable HTTP transport
+        mcp.run(transport="streamable-http", host=host, port=port)
+    else:
+        print(f"Unknown transport: {transport}")
+        print("Valid options: stdio, sse, streamable-http")
+        exit(1)

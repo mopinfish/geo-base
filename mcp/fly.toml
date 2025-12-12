@@ -12,9 +12,9 @@ primary_region = "nrt"  # Tokyo region
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [http_service.concurrency]
     type = "requests"
@@ -27,6 +27,9 @@ primary_region = "nrt"  # Tokyo region
   TILE_SERVER_URL = "https://geo-base-puce.vercel.app"
   ENVIRONMENT = "production"
   SERVER_NAME = "geo-base"
+  MCP_TRANSPORT = "sse"
+  MCP_HOST = "0.0.0.0"
+  MCP_PORT = "8080"
 
 # Machine configuration
 [[vm]]
