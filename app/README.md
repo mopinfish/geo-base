@@ -10,20 +10,80 @@ geo-base タイルサーバーの管理画面です。
 - **UIコンポーネント**: shadcn/ui (手動セットアップ)
 - **アイコン**: Lucide React
 
+## ポート割り当て
+
+| コンポーネント | ポート | 説明 |
+|--------------|--------|------|
+| Admin UI (Next.js) | 3000 | フロントエンド |
+| API (FastAPI) | 8000 | バックエンドAPI |
+| MCP Server | 8001 | Claude Desktop連携（SSEモード） |
+
 ## 開発環境のセットアップ
 
+### 1. 依存関係のインストール
+
 ```bash
-# 依存関係のインストール
+cd app
 npm install
+```
 
-# 開発サーバーの起動
+### 2. 環境変数の設定
+
+`.env.local` を作成（`.env.example` を参考に）:
+
+```env
+# ローカル開発時
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_MCP_URL=http://localhost:8001
+```
+
+### 3. ローカル開発サーバーの起動
+
+**全コンポーネントを起動する場合（3つのターミナルを使用）:**
+
+```fish
+# ターミナル1: API起動 (ポート8000)
+cd /path/to/geo-base/api
+uv run uvicorn lib.main:app --reload --port 8000
+
+# ターミナル2: MCP起動 (ポート8001、必要な場合)
+cd /path/to/geo-base/mcp
+TILE_SERVER_URL=http://localhost:8000 uv run python server.py
+
+# ターミナル3: Admin UI起動 (ポート3000)
+cd /path/to/geo-base/app
 npm run dev
+```
 
+**Admin UIのみ起動する場合（本番APIを使用）:**
+
+`.env.local` を本番API向けに設定:
+```env
+NEXT_PUBLIC_API_URL=https://geo-base-puce.vercel.app
+NEXT_PUBLIC_MCP_URL=https://geo-base-mcp.fly.dev
+```
+
+```bash
+npm run dev
+```
+
+### 4. 動作確認
+
+- Admin UI: http://localhost:3000
+- API (ローカル): http://localhost:8000/api/health
+- API (本番): https://geo-base-puce.vercel.app/api/health
+
+## ビルドとデプロイ
+
+```bash
 # ビルド
 npm run build
 
 # 本番サーバーの起動
 npm start
+
+# リント
+npm run lint
 ```
 
 ## ディレクトリ構成
@@ -50,23 +110,10 @@ app/
 │   └── types/                  # 型定義
 ├── public/                     # 静的ファイル
 ├── .env.example                # 環境変数サンプル
-├── .env.local                  # ローカル環境変数
+├── .env.local                  # ローカル環境変数（gitignore）
 ├── package.json
 ├── tailwind.config.ts
 └── tsconfig.json
-```
-
-## 環境変数
-
-`.env.local` を作成し、以下の環境変数を設定してください：
-
-```env
-# API設定
-NEXT_PUBLIC_API_URL=https://geo-base-puce.vercel.app
-
-# Supabase設定（Step 3.2で使用）
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ## 機能
@@ -103,8 +150,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
 ## 接続先API
 
-- **本番API**: https://geo-base-puce.vercel.app
-- **MCPサーバー**: https://geo-base-mcp.fly.dev
+| 環境 | API URL | MCP URL |
+|-----|---------|---------|
+| ローカル | http://localhost:8000 | http://localhost:8001 |
+| 本番 | https://geo-base-puce.vercel.app | https://geo-base-mcp.fly.dev |
 
 ## ライセンス
 

@@ -45,17 +45,31 @@ export default function FeaturesPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [featuresData, tilesetsData] = await Promise.all([
+      const [featuresResult, tilesetsResult] = await Promise.allSettled([
         api.listFeatures({
           limit,
           tileset_id: selectedTileset !== "all" ? selectedTileset : undefined,
         }),
         api.listTilesets(),
       ]);
-      setFeatures(featuresData);
-      setTilesets(tilesetsData);
+      
+      // フィーチャー結果の処理（配列であることを確認）
+      if (featuresResult.status === "fulfilled" && Array.isArray(featuresResult.value)) {
+        setFeatures(featuresResult.value);
+      } else {
+        setFeatures([]);
+      }
+      
+      // タイルセット結果の処理（配列であることを確認）
+      if (tilesetsResult.status === "fulfilled" && Array.isArray(tilesetsResult.value)) {
+        setTilesets(tilesetsResult.value);
+      } else {
+        setTilesets([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "データの取得に失敗しました");
+      setFeatures([]);
+      setTilesets([]);
     } finally {
       setIsLoading(false);
     }
@@ -65,8 +79,9 @@ export default function FeaturesPage() {
     fetchData();
   }, [selectedTileset, limit]);
 
-  // フィルタリング
-  const filteredFeatures = features.filter((feature) => {
+  // 安全にフィルタリング（配列でない場合に備える）
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const filteredFeatures = safeFeatures.filter((feature) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     const propsString = JSON.stringify(feature.properties).toLowerCase();
@@ -75,6 +90,9 @@ export default function FeaturesPage() {
       propsString.includes(query)
     );
   });
+  
+  // 安全なタイルセット配列
+  const safeTilesets = Array.isArray(tilesets) ? tilesets : [];
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("ja-JP", {
@@ -89,7 +107,7 @@ export default function FeaturesPage() {
   };
 
   const getTilesetName = (tilesetId: string): string => {
-    const tileset = tilesets.find((t) => t.id === tilesetId);
+    const tileset = safeTilesets.find((t) => t.id === tilesetId);
     return tileset?.name || tilesetId;
   };
 
@@ -135,7 +153,7 @@ export default function FeaturesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">すべてのタイルセット</SelectItem>
-                  {tilesets.map((tileset) => (
+                  {safeTilesets.map((tileset) => (
                     <SelectItem key={tileset.id} value={tileset.id}>
                       {tileset.name}
                     </SelectItem>

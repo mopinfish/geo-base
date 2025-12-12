@@ -27,14 +27,25 @@ export default function DashboardPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [healthData, tilesetsData] = await Promise.all([
+      const [healthData, tilesetsData] = await Promise.allSettled([
         api.getHealthDb(),
         api.listTilesets(),
       ]);
-      setHealth(healthData);
-      setTilesets(tilesetsData);
+      
+      // ヘルスチェック結果の処理
+      if (healthData.status === "fulfilled") {
+        setHealth(healthData.value);
+      }
+      
+      // タイルセット結果の処理（配列であることを確認）
+      if (tilesetsData.status === "fulfilled" && Array.isArray(tilesetsData.value)) {
+        setTilesets(tilesetsData.value);
+      } else {
+        setTilesets([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "データの取得に失敗しました");
+      setTilesets([]);
     } finally {
       setIsLoading(false);
     }
@@ -44,8 +55,10 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
-  const vectorTilesets = tilesets.filter((t) => t.type === "vector");
-  const rasterTilesets = tilesets.filter((t) => t.type === "raster");
+  // 安全にフィルタリング（tilesetsが配列でない場合に備える）
+  const safeFilterTilesets = Array.isArray(tilesets) ? tilesets : [];
+  const vectorTilesets = safeFilterTilesets.filter((t) => t.type === "vector");
+  const rasterTilesets = safeFilterTilesets.filter((t) => t.type === "raster");
 
   return (
     <AdminLayout>
@@ -118,7 +131,7 @@ export default function DashboardPage() {
               <Layers className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{tilesets.length}</div>
+              <div className="text-2xl font-bold">{safeFilterTilesets.length}</div>
               <p className="text-xs text-muted-foreground">
                 ベクタ: {vectorTilesets.length} / ラスタ: {rasterTilesets.length}
               </p>
@@ -133,10 +146,10 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {tilesets.filter((t) => t.is_public).length}
+                {safeFilterTilesets.filter((t) => t.is_public).length}
               </div>
               <p className="text-xs text-muted-foreground">
-                非公開: {tilesets.filter((t) => !t.is_public).length}
+                非公開: {safeFilterTilesets.filter((t) => !t.is_public).length}
               </p>
             </CardContent>
           </Card>
@@ -182,13 +195,13 @@ export default function DashboardPage() {
               <CardDescription>最新の5件を表示</CardDescription>
             </CardHeader>
             <CardContent>
-              {tilesets.length === 0 ? (
+              {safeFilterTilesets.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   タイルセットがありません
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {tilesets.slice(0, 5).map((tileset) => (
+                  {safeFilterTilesets.slice(0, 5).map((tileset) => (
                     <Link
                       key={tileset.id}
                       href={`/tilesets/${tileset.id}`}

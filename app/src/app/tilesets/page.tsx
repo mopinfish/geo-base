@@ -46,10 +46,14 @@ export default function TilesetsPage() {
     setError(null);
     try {
       const data = await api.listTilesets();
-      setTilesets(data);
-      setFilteredTilesets(data);
+      // 配列であることを確認
+      const tilesetsArray = Array.isArray(data) ? data : [];
+      setTilesets(tilesetsArray);
+      setFilteredTilesets(tilesetsArray);
     } catch (err) {
       setError(err instanceof Error ? err.message : "タイルセットの取得に失敗しました");
+      setTilesets([]);
+      setFilteredTilesets([]);
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +65,9 @@ export default function TilesetsPage() {
 
   // フィルタリング
   useEffect(() => {
-    let filtered = tilesets;
+    // 安全にフィルタリング
+    const safeTilesets = Array.isArray(tilesets) ? tilesets : [];
+    let filtered = safeTilesets;
 
     // 検索クエリでフィルタ
     if (searchQuery) {
