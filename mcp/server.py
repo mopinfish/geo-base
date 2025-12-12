@@ -21,6 +21,10 @@ from tools.features import (
     search_features,
     get_feature,
 )
+from tools.geocoding import (
+    geocode,
+    reverse_geocode,
+)
 
 # Initialize settings
 settings = get_settings()
@@ -235,6 +239,84 @@ async def tool_get_server_info() -> dict:
         "mcp_server_version": settings.server_version,
         "environment": settings.environment,
     }
+
+
+# ============================================================
+# Geocoding Tools
+# ============================================================
+
+@mcp.tool()
+async def tool_geocode(
+    query: str,
+    limit: int = 5,
+    country_codes: str | None = None,
+    language: str = "ja",
+) -> dict:
+    """
+    Convert address or place name to geographic coordinates (geocoding).
+
+    Uses OpenStreetMap Nominatim API for geocoding.
+
+    Args:
+        query: Address or place name to search
+               Examples: "東京駅", "渋谷区神南1-1-1", "Tokyo Tower"
+        limit: Maximum number of results (1-50, default: 5)
+        country_codes: Limit search to specific countries (comma-separated ISO 3166-1 codes)
+                      Examples: "jp" for Japan, "jp,us" for Japan and US
+        language: Preferred language for results (default: "ja" for Japanese)
+
+    Returns:
+        Dictionary containing:
+        - results: List of matching locations with coordinates, address details
+        - count: Number of results found
+        - query: Original search query
+    """
+    return await geocode(
+        query=query,
+        limit=limit,
+        country_codes=country_codes,
+        language=language,
+    )
+
+
+@mcp.tool()
+async def tool_reverse_geocode(
+    latitude: float,
+    longitude: float,
+    zoom: int = 18,
+    language: str = "ja",
+) -> dict:
+    """
+    Convert geographic coordinates to address (reverse geocoding).
+
+    Uses OpenStreetMap Nominatim API for reverse geocoding.
+
+    Args:
+        latitude: Latitude in decimal degrees (WGS84)
+                 Example: 35.6812 for Tokyo Station
+        longitude: Longitude in decimal degrees (WGS84)
+                  Example: 139.7671 for Tokyo Station
+        zoom: Level of detail for the address (0-18, default: 18)
+              0 = country level
+              10 = city level
+              14 = suburb level
+              16 = street level
+              18 = building level (most detailed)
+        language: Preferred language for results (default: "ja" for Japanese)
+
+    Returns:
+        Dictionary containing:
+        - display_name: Full formatted address string
+        - address: Structured address components (country, city, road, etc.)
+        - coordinates: Input coordinates
+        - bounds: Bounding box of the location
+    """
+    return await reverse_geocode(
+        latitude=latitude,
+        longitude=longitude,
+        zoom=zoom,
+        language=language,
+    )
 
 
 # ============================================================
