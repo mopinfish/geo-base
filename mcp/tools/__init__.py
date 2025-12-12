@@ -16,6 +16,10 @@ from .features import (
     get_feature,
     get_features_in_tile,
 )
+from .geocoding import (
+    geocode,
+    reverse_geocode,
+)
 
 __all__ = [
     # Tilesets
@@ -26,4 +30,7 @@ __all__ = [
     "search_features",
     "get_feature",
     "get_features_in_tile",
+    # Geocoding
+    "geocode",
+    "reverse_geocode",
 ]

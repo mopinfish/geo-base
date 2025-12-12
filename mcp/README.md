@@ -13,6 +13,10 @@ MCP (Model Context Protocol) Server for geo-base tile server. This enables Claud
 - **search_features**: Search geographic features with bbox, layer, and filter criteria
 - **get_feature**: Get detailed information about a specific feature
 
+### Geocoding Tools
+- **geocode**: Convert address or place name to coordinates (geocoding)
+- **reverse_geocode**: Convert coordinates to address (reverse geocoding)
+
 ### Utility Tools
 - **get_tile_url**: Generate URLs for specific map tiles
 - **health_check**: Check the health status of the tile server
@@ -103,6 +107,16 @@ Find all features in Tokyo area (bbox: 139.5,35.5,140.0,36.0)
 ### Get Tileset Information
 ```
 Get details about tileset {tileset_id}
+```
+
+### Geocoding
+```
+Find the coordinates for "東京駅" (Tokyo Station)
+```
+
+### Reverse Geocoding
+```
+What is the address at coordinates 35.6812, 139.7671?
 ```
 
 ### Health Check
@@ -270,6 +284,30 @@ Gets detailed information about a specific feature.
 - `feature_id`: UUID of the feature
 
 **Returns:** GeoJSON feature with full geometry and properties.
+
+### Geocoding Tools
+
+#### `geocode(query, limit?, country_codes?, language?)`
+Converts address or place name to geographic coordinates.
+
+**Parameters:**
+- `query`: Address or place name to search (e.g., "東京駅", "Tokyo Tower")
+- `limit` (optional): Maximum results (1-50, default: 5)
+- `country_codes` (optional): ISO 3166-1 country codes (e.g., "jp", "jp,us")
+- `language` (optional): Result language (default: "ja")
+
+**Returns:** List of matching locations with coordinates, address details, and bounds.
+
+#### `reverse_geocode(latitude, longitude, zoom?, language?)`
+Converts geographic coordinates to address.
+
+**Parameters:**
+- `latitude`: Latitude in decimal degrees (WGS84)
+- `longitude`: Longitude in decimal degrees (WGS84)
+- `zoom` (optional): Detail level 0-18 (default: 18, building level)
+- `language` (optional): Result language (default: "ja")
+
+**Returns:** Address components, display name, and bounds for the location.
 
 ## License
 
