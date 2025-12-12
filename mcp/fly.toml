@@ -27,6 +27,9 @@ primary_region = "nrt"  # Tokyo region
   TILE_SERVER_URL = "https://geo-base-puce.vercel.app"
   ENVIRONMENT = "production"
   SERVER_NAME = "geo-base"
+  MCP_TRANSPORT = "sse"
+  MCP_HOST = "0.0.0.0"
+  MCP_PORT = "8080"
 
 # Machine configuration
 [[vm]]

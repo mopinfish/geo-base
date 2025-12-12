@@ -114,22 +114,88 @@ Check if the tile server is healthy
 
 For remote deployment using Fly.io:
 
+### Prerequisites
+
+1. [Fly.io account](https://fly.io/signup)
+2. [Fly CLI](https://fly.io/docs/flyctl/install/) installed
+
+### First-time Setup
+
 ```fish
-# Install Fly CLI
+# Install Fly CLI (if not installed)
 curl -L https://fly.io/install.sh | sh
 
 # Login to Fly.io
 fly auth login
 
-# Launch the app (first time)
+# Navigate to mcp directory
 cd mcp
-fly launch
 
-# Set secrets
+# Launch the app (first time only)
+fly launch --no-deploy
+
+# Set secrets (optional, for authenticated API access)
 fly secrets set API_TOKEN=your-jwt-token
 
 # Deploy
 fly deploy
+```
+
+### Updating Deployment
+
+```fish
+cd mcp
+fly deploy
+```
+
+### Connecting Claude Desktop to Remote MCP Server
+
+After deploying to Fly.io, update your Claude Desktop configuration to use the remote server:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "geo-base-remote": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy",
+        "https://geo-base-mcp.fly.dev/sse",
+        "--transport=sse"
+      ]
+    }
+  }
+}
+```
+
+> **Note**: You need `mcp-proxy` to connect to remote SSE endpoints. Install it with:
+> ```fish
+> uv tool install mcp-proxy
+> ```
+
+### Transport Modes
+
+The MCP server supports multiple transport modes:
+
+| Mode | Environment Variable | Use Case |
+|------|---------------------|----------|
+| `stdio` | `MCP_TRANSPORT=stdio` | Local Claude Desktop (default) |
+| `sse` | `MCP_TRANSPORT=sse` | Remote connections via Fly.io |
+| `streamable-http` | `MCP_TRANSPORT=streamable-http` | Alternative HTTP transport |
+
+### Monitoring
+
+```fish
+# View logs
+fly logs
+
+# Check app status
+fly status
+
+# Open dashboard
+fly dashboard
 ```
 
 ## Development
