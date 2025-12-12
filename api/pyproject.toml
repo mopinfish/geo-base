@@ -13,11 +13,13 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "pymbtiles>=0.5.0",
-    "pmtiles>=3.0.0",
     "geoalchemy2>=0.14.0",
     "shapely>=2.0.0",
-    "rio-tiler>=8.0.2",
-    "rasterio>=1.4.3",
+    "rio-tiler>=7.0.0",
+    "rasterio>=1.4.0",
+    "aiopmtiles @ git+https://github.com/developmentseed/aiopmtiles.git",
+    "PyJWT>=2.8.0",
+    "cryptography>=41.0.0",
 ]
 
 [project.optional-dependencies]
