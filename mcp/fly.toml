@@ -1,0 +1,35 @@
+# geo-base MCP Server - Fly.io Configuration
+# See https://fly.io/docs/reference/configuration/
+
+app = "geo-base-mcp"
+primary_region = "nrt"  # Tokyo region
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Note: MCP servers typically use stdio transport for Claude Desktop.
+# HTTP service configuration is included for potential future HTTP/SSE transport.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+# Environment variables
+# Set these via `fly secrets set KEY=VALUE`
+[env]
+  TILE_SERVER_URL = "https://geo-base-puce.vercel.app"
+  ENVIRONMENT = "production"
+  SERVER_NAME = "geo-base"
+
+# Machine configuration
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
