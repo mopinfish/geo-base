@@ -4,7 +4,8 @@
 **最終更新**: 2025-12-12  
 **プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
 **リポジトリ**: https://github.com/mopinfish/geo-base  
-**本番URL**: https://geo-base-puce.vercel.app/
+**本番URL**: https://geo-base-puce.vercel.app/  
+**APIバージョン**: 0.3.0
 
 ---
 
@@ -29,10 +30,12 @@
                     │   ※将来: Fly.io移行予定  │
                     └────────────┬────────────┘
                                  │
-                    ┌────────────▼────────────┐
-                    │   PostgreSQL + PostGIS  │
-                    │      (Supabase)         │
-                    └─────────────────────────┘
+          ┌──────────────────────┼──────────────────────┐
+          │                      │                      │
+┌─────────▼─────────┐  ┌────────▼────────┐  ┌─────────▼─────────┐
+│ PostgreSQL+PostGIS│  │ Supabase Storage │  │   External COG    │
+│    (Supabase)     │  │   (PMTiles)      │  │   (S3, HTTP)      │
+└───────────────────┘  └──────────────────┘  └───────────────────┘
 ```
 
 ---
@@ -69,6 +72,22 @@
 - **制限事項**: Vercel環境ではrio-tiler（GDAL依存）が動作しないため、ラスタタイル機能は利用不可
 - **今後の方針**: Fly.ioへの移行時に有効化予定
 
+### Step 1.6: PMTiles対応 ✅
+- aiopmtilesライブラリによるHTTP Range Request対応
+- PMTilesタイル配信エンドポイント追加
+- pmtiles_sourcesテーブル追加
+- TileJSON/メタデータエンドポイント
+- **Vercelで動作確認済み**（ネイティブ依存なし）
+
+### Step 1.7: 認証機能（Supabase Auth）✅
+- JWT検証モジュール（lib/auth.py）
+- 全タイルエンドポイントにアクセス制御追加
+- `is_public=false` のタイルセットは認証必須
+- `user_id` に基づくオーナー確認
+- `/api/auth/me`, `/api/auth/status` エンドポイント
+- RLSポリシー用SQL（04_rls_policies.sql）
+- **ローカル・Vercel両環境で動作確認済み**
+
 ---
 
 ## 3. 現在のファイル構成
@@ -78,14 +97,17 @@ geo-base/
 ├── api/                          # FastAPI タイルサーバー
 │   ├── lib/
 │   │   ├── __init__.py
+│   │   ├── auth.py              # 認証・JWT検証【Step 1.7】
 │   │   ├── config.py            # 設定管理（pydantic-settings）
 │   │   ├── database.py          # DB接続（サーバーレス対応）
 │   │   ├── main.py              # FastAPIアプリ・エンドポイント
-│   │   ├── tiles.py             # ベクタータイル生成ユーティリティ
-│   │   └── raster_tiles.py      # ラスタータイル生成ユーティリティ【新規】
+│   │   ├── pmtiles.py           # PMTilesユーティリティ【Step 1.6】
+│   │   ├── raster_tiles.py      # ラスタータイル生成ユーティリティ
+│   │   └── tiles.py             # ベクタータイル生成ユーティリティ
 │   ├── data/                    # MBTilesファイル格納（ローカル用）
 │   ├── index.py                 # Vercelエントリーポイント
 │   ├── pyproject.toml
+│   ├── uv.lock                  # 依存関係ロックファイル
 │   ├── requirements.txt         # Vercel用依存関係
 │   ├── runtime.txt              # Pythonバージョン指定
 │   ├── .env.example
@@ -102,7 +124,9 @@ geo-base/
 │   ├── docker-compose.yml       # ローカルPostGIS
 │   └── postgis-init/
 │       ├── 01_init.sql          # 基本スキーマ定義
-│       └── 02_raster_schema.sql # ラスターソーステーブル【新規】
+│       ├── 02_raster_schema.sql # ラスターソーステーブル
+│       ├── 03_pmtiles_schema.sql # PMTilesソーステーブル【Step 1.6】
+│       └── 04_rls_policies.sql  # RLSポリシー【Step 1.7】
 ├── packages/                     # 共有パッケージ（未実装）
 │   └── shared/
 │       └── types/
@@ -111,6 +135,7 @@ geo-base/
 │   └── seed.sh                  # テストデータ投入
 ├── vercel.json                  # Vercel設定
 ├── DEPLOY.md                    # デプロイ手順書
+├── HANDOVER.md                  # 引き継ぎドキュメント
 ├── README.md
 └── .gitignore
 ```
@@ -123,27 +148,32 @@ geo-base/
 |---------|------|-----------|------|
 | API Framework | FastAPI | 0.115.x | |
 | Database | PostgreSQL + PostGIS | 16 + 3.4 | |
-| Database Hosting | Supabase | - | |
+| Database Hosting | Supabase | - | Auth, Storage含む |
 | API Hosting | Vercel Serverless | Python 3.12 | 将来Fly.io移行予定 |
 | Package Manager | uv | latest | |
 | Vector Tiles | PostGIS ST_AsMVT | - | |
+| PMTiles | aiopmtiles | 0.1.0 | ✅ Vercelで動作 |
 | Raster Tiles | rio-tiler | 7.0+ | ⚠️ Vercelでは動作不可 |
-| Tile Format | MVT (pbf), PNG | - | |
+| Authentication | Supabase Auth + PyJWT | - | ✅ JWT検証実装済み |
+| Tile Format | MVT (pbf), PNG, WebP | - | |
 
 ### 主要ライブラリ
 
 ```
-# api/requirements.txt より
-fastapi==0.115.6
-pydantic==2.10.3
-pydantic-settings==2.6.1
-psycopg2-binary==2.9.10
-pymbtiles==0.5.0
-shapely==2.0.6
-geoalchemy2==0.15.2
-httpx==0.28.1
-rio-tiler>=7.0.0      # ⚠️ Vercelでは動作不可
-rasterio>=1.4.0       # ⚠️ Vercelでは動作不可
+# api/pyproject.toml より
+fastapi>=0.109.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+psycopg2-binary>=2.9.9
+pymbtiles>=0.5.0
+shapely>=2.0.0
+geoalchemy2>=0.14.0
+httpx>=0.26.0
+aiopmtiles @ git+https://github.com/developmentseed/aiopmtiles.git  # PMTiles対応
+PyJWT>=2.8.0                 # JWT検証
+cryptography>=41.0.0         # JWT署名検証
+rio-tiler>=7.0.0             # ⚠️ Vercelでは動作不可
+rasterio>=1.4.0              # ⚠️ Vercelでは動作不可
 ```
 
 ---
@@ -152,24 +182,27 @@ rasterio>=1.4.0       # ⚠️ Vercelでは動作不可
 
 ### ローカル開発
 
-```bash
+```fish
 # PostGIS起動
 cd docker && docker compose up -d
 
 # API起動
 cd api
-cp .env.example .env  # DATABASE_URLをローカル用に設定
+cp .env.example .env  # DATABASE_URL, SUPABASE_JWT_SECRETを設定
 uv sync
 uv run uvicorn lib.main:app --reload --port 3000
 ```
 
-### 本番環境（Vercel）
+### 環境変数
 
-環境変数:
-| 変数名 | 値 |
-|--------|-----|
-| `DATABASE_URL` | `postgresql://postgres.xxx:[PASSWORD]@aws-0-xxx.pooler.supabase.com:6543/postgres` |
-| `ENVIRONMENT` | `production` |
+| 変数名 | ローカル | 本番（Vercel） | 説明 |
+|--------|---------|---------------|------|
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/geo_base` | `postgresql://postgres.xxx:[PASSWORD]@aws-0-xxx.pooler.supabase.com:6543/postgres` | DB接続文字列 |
+| `ENVIRONMENT` | `development` | `production` | 環境識別 |
+| `SUPABASE_JWT_SECRET` | (Supabaseから取得) | (Supabaseから取得) | JWT検証用シークレット |
+
+**SUPABASE_JWT_SECRETの取得方法**:
+Supabase Dashboard > Settings > API > JWT Secret
 
 **重要**: Supabaseへの接続は**Pooler（ポート6543）**を使用すること。直接接続（ポート5432）はサーバーレス環境では接続枯渇の問題が発生する。
 
@@ -183,15 +216,15 @@ CREATE TABLE tilesets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    type VARCHAR(50) NOT NULL CHECK (type IN ('raster', 'vector')),
+    type VARCHAR(50) NOT NULL CHECK (type IN ('raster', 'vector', 'pmtiles')),
     format VARCHAR(50) NOT NULL,
     min_zoom INTEGER DEFAULT 0,
     max_zoom INTEGER DEFAULT 22,
     bounds GEOMETRY(POLYGON, 4326),
     center GEOMETRY(POINT, 4326),
     attribution TEXT,
-    is_public BOOLEAN DEFAULT false,
-    user_id UUID,
+    is_public BOOLEAN DEFAULT true,
+    user_id UUID,                    -- Supabase Auth user ID
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -214,13 +247,13 @@ CREATE TABLE features (
 CREATE INDEX idx_features_geom ON features USING GIST (geom);
 ```
 
-### raster_sources テーブル【新規】
+### raster_sources テーブル
 ```sql
 CREATE TABLE raster_sources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tileset_id UUID NOT NULL REFERENCES tilesets(id) ON DELETE CASCADE,
-    cog_url TEXT NOT NULL,                    -- COGファイルのURL
-    storage_provider VARCHAR(50) DEFAULT 'http',  -- 'supabase', 's3', 'http'
+    cog_url TEXT NOT NULL,
+    storage_provider VARCHAR(50) DEFAULT 'http',
     band_count INTEGER,
     band_descriptions JSONB DEFAULT '[]',
     statistics JSONB DEFAULT '{}',
@@ -236,77 +269,100 @@ CREATE TABLE raster_sources (
 );
 ```
 
+### pmtiles_sources テーブル【Step 1.6】
+```sql
+CREATE TABLE pmtiles_sources (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tileset_id UUID NOT NULL REFERENCES tilesets(id) ON DELETE CASCADE,
+    pmtiles_url TEXT NOT NULL,
+    storage_provider VARCHAR(50) DEFAULT 'supabase',
+    tile_type VARCHAR(20),           -- 'mvt', 'png', 'jpg', 'webp', 'avif'
+    tile_compression VARCHAR(20),    -- 'gzip', 'brotli', 'zstd', 'none'
+    min_zoom INTEGER,
+    max_zoom INTEGER,
+    bounds JSONB,
+    center JSONB,
+    layers JSONB DEFAULT '[]',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (tileset_id)
+);
+```
+
 ---
 
 ## 7. 実装済みAPIエンドポイント
 
+### 認証エンドポイント【Step 1.7】
+
+| メソッド | パス | 認証 | 説明 |
+|---------|------|------|------|
+| GET | `/api/auth/me` | 必須 | 認証ユーザー情報取得 |
+| GET | `/api/auth/status` | 不要 | 認証状態確認 |
+
+### ヘルスチェック
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/health` | ヘルスチェック（rasterio, pmtiles, auth状態含む） |
+| GET | `/api/health/db` | DB接続チェック |
+
+### タイルセット管理
+
+| メソッド | パス | 認証 | 説明 |
+|---------|------|------|------|
+| GET | `/api/tilesets` | 不要※ | タイルセット一覧（公開のみ） |
+| GET | `/api/tilesets?include_private=true` | 必要 | タイルセット一覧（自分の非公開含む） |
+| GET | `/api/tilesets/{id}` | 条件付き | タイルセット詳細 |
+| GET | `/api/tilesets/{id}/tilejson.json` | 条件付き | タイルセットのTileJSON |
+
+※ `is_public=false` のタイルセットは認証必須
+
 ### ベクタータイル（Vercelで動作）
 
-| メソッド | パス | 説明 |
-|---------|------|------|
-| GET | `/` | プレビューページ（MapLibre GL JS） |
-| GET | `/api/health` | ヘルスチェック |
-| GET | `/api/health/db` | DB接続チェック |
-| GET | `/api/tilesets` | タイルセット一覧 |
-| GET | `/api/tilesets/{id}` | タイルセット詳細 |
-| GET | `/api/tilesets/{id}/tilejson.json` | タイルセットのTileJSON |
-| GET | `/api/tiles/features/{z}/{x}/{y}.pbf` | フィーチャーMVTタイル |
-| GET | `/api/tiles/features/tilejson.json` | フィーチャーのTileJSON |
-| GET | `/api/tiles/dynamic/{layer}/{z}/{x}/{y}.pbf` | 動的MVTタイル |
-| GET | `/api/tiles/mbtiles/{name}/{z}/{x}/{y}.{fmt}` | MBTilesタイル（ローカル用） |
+| メソッド | パス | 認証 | 説明 |
+|---------|------|------|------|
+| GET | `/` | 不要 | プレビューページ（MapLibre GL JS） |
+| GET | `/api/tiles/features/{z}/{x}/{y}.pbf` | 条件付き | フィーチャーMVTタイル |
+| GET | `/api/tiles/features/tilejson.json` | 不要 | フィーチャーのTileJSON |
+| GET | `/api/tiles/dynamic/{layer}/{z}/{x}/{y}.pbf` | 不要 | 動的MVTタイル |
+| GET | `/api/tiles/mbtiles/{name}/{z}/{x}/{y}.{fmt}` | 不要 | MBTilesタイル（ローカル用） |
 
-### ラスタータイル（⚠️ Vercelでは動作不可、Fly.io移行後に有効化）
+### PMTilesタイル【Step 1.6】（Vercelで動作）
 
-| メソッド | パス | 説明 |
-|---------|------|------|
-| GET | `/api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{format}` | ラスタタイル取得 |
-| GET | `/api/tiles/raster/{tileset_id}/tilejson.json` | TileJSON |
-| GET | `/api/tiles/raster/{tileset_id}/preview` | プレビュー画像 |
-| GET | `/api/tiles/raster/{tileset_id}/info` | COGメタデータ |
-| GET | `/api/tiles/raster/{tileset_id}/statistics` | バンド統計情報 |
+| メソッド | パス | 認証 | 説明 |
+|---------|------|------|------|
+| GET | `/api/tiles/pmtiles/{tileset_id}/{z}/{x}/{y}.{format}` | 条件付き | PMTilesタイル取得 |
+| GET | `/api/tiles/pmtiles/{tileset_id}/tilejson.json` | 条件付き | TileJSON |
+| GET | `/api/tiles/pmtiles/{tileset_id}/metadata` | 条件付き | PMTilesメタデータ |
 
-### フィルタリング機能
+### ラスタータイル（⚠️ Vercelでは動作不可）
 
-`/api/tiles/features/{z}/{x}/{y}.pbf` は以下のクエリパラメータをサポート:
+| メソッド | パス | 認証 | 説明 |
+|---------|------|------|------|
+| GET | `/api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{format}` | 条件付き | ラスタタイル取得 |
+| GET | `/api/tiles/raster/{tileset_id}/tilejson.json` | 条件付き | TileJSON |
+| GET | `/api/tiles/raster/{tileset_id}/preview` | 条件付き | プレビュー画像 |
+| GET | `/api/tiles/raster/{tileset_id}/info` | 条件付き | COGメタデータ |
+| GET | `/api/tiles/raster/{tileset_id}/statistics` | 条件付き | バンド統計情報 |
 
-| パラメータ | 説明 | 例 |
-|-----------|------|-----|
-| `tileset_id` | タイルセットIDでフィルタ | `tileset_id=uuid` |
-| `layer` | レイヤー名でフィルタ | `layer=landmarks` |
-| `filter` | 属性フィルタ式 | `filter=properties.type=station` |
-| `simplify` | 簡略化の有効/無効 | `simplify=false` |
+### 認証・アクセス制御仕様【Step 1.7】
 
-#### フィルタ式の構文
-
-```
-# 単純等価
-properties.type=station
-
-# 複数値（OR）
-properties.type=station,landmark
-
-# パターンマッチ
-properties.name~Tokyo
-
-# 複数条件（AND）
-properties.type=station;properties.name~Tokyo
-
-# 否定
-properties.type!=temple
-
-# 数値比較
-properties.population>1000000
-```
+| タイルセット | 認証なし | 認証あり（オーナー） | 認証あり（他人） |
+|-------------|---------|-------------------|----------------|
+| `is_public=true` | ✅ 200 OK | ✅ 200 OK | ✅ 200 OK |
+| `is_public=false` | ❌ 401 Unauthorized | ✅ 200 OK | ❌ 403 Forbidden |
 
 ---
 
 ## 8. 今後の課題と実装方針
 
-### フェーズ1 追加機能（優先度: 高）
+### フェーズ1 残タスク
 
-#### 8.1 ラスタタイル対応（COG/GeoTIFF）⚠️ 部分完了
+#### 8.1 ラスタタイル有効化（Fly.io移行時）
 
-**実装状況**: コード実装済み、Vercelでは動作不可
+**現状**: コード実装済み、Vercelでは動作不可
 
 **制限事項**:
 - rio-tiler/rasterioはGDAL（ネイティブライブラリ）に依存
@@ -316,49 +372,9 @@ properties.population>1000000
 - API全体をFly.io（Docker）に移行時にラスタタイル機能を有効化
 - MCPサーバーと同じインフラ基盤で統一
 
-**サンプルCOGデータ**:
-```
-# Sentinel-2 True Color Image (AWS Public Dataset)
-https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/54/T/WN/2023/11/S2B_54TWN_20231118_1_L2A/TCI.tif
-```
-
-#### 8.2 PMTiles対応
-
-**目的**: PMTiles形式のタイルアーカイブに対応
-
-**実装方針**:
-1. `pmtiles` Pythonライブラリを使用（ネイティブ依存なし、Vercelでも動作可能）
-2. PMTilesファイルはHTTPレンジリクエストでアクセス
-3. 新規エンドポイント: `/api/tiles/pmtiles/{tileset_name}/{z}/{x}/{y}.{format}`
-
-**参考コード**:
-```python
-from pmtiles.reader import Reader, MmapSource, HttpSource
-
-def get_pmtiles_tile(pmtiles_url: str, z: int, x: int, y: int):
-    with Reader(HttpSource(pmtiles_url)) as reader:
-        tile_data = reader.get(z, x, y)
-        return tile_data
-```
-
-#### 8.3 認証機能（Supabase Auth）
-
-**目的**: タイルセットへのアクセス制御
-
-**実装方針**:
-1. Supabase Auth JWTトークン検証
-2. `is_public=false` のタイルセットは認証必須
-3. Row Level Security (RLS) の活用
-
-**実装ステップ**:
-1. Supabase Auth設定
-2. JWT検証ミドルウェア追加
-3. `user_id` に基づくアクセス制御
-4. RLSポリシー設定
-
 ---
 
-### フェーズ2: MCPサーバー機能（優先度: 中）
+### フェーズ2: MCPサーバー機能（優先度: 高）
 
 **目的**: Claude DesktopからGeoデータを検索・取得できるようにする
 
@@ -391,16 +407,9 @@ mcp/
 └── Dockerfile            # Fly.io用
 ```
 
-**Fly.io デプロイ**:
-```bash
-fly launch --name geo-base-mcp
-fly secrets set DATABASE_URL=...
-fly deploy
-```
-
 ---
 
-### フェーズ3: 管理画面（Next.js）（優先度: 低）
+### フェーズ3: 管理画面（Next.js）（優先度: 中）
 
 **目的**: タイルセットとフィーチャーの管理UI
 
@@ -461,7 +470,46 @@ CMD ["uvicorn", "lib.main:app", "--host", "0.0.0.0", "--port", "8080"]
 
 ---
 
-## 9. 参照資料
+## 9. テスト方法
+
+### 認証機能テスト（fish形式）
+
+```fish
+# 環境変数設定
+set -x API_BASE "http://localhost:3000"  # またはVercel URL
+set -x JWT_TOKEN "your-jwt-token"
+
+# 認証状態確認（認証なし）
+curl "$API_BASE/api/auth/status"
+
+# 認証状態確認（認証あり）
+curl -H "Authorization: Bearer $JWT_TOKEN" "$API_BASE/api/auth/status"
+
+# 認証ユーザー情報取得（認証必須）
+curl -H "Authorization: Bearer $JWT_TOKEN" "$API_BASE/api/auth/me"
+
+# 公開タイルセット（認証不要）
+curl "$API_BASE/api/tilesets/PUBLIC_TILESET_ID"
+
+# 非公開タイルセット（認証必要）
+curl -H "Authorization: Bearer $JWT_TOKEN" "$API_BASE/api/tilesets/PRIVATE_TILESET_ID"
+```
+
+### JWTトークン取得方法
+
+```fish
+set -x SUPABASE_URL "https://your-project.supabase.co"
+set -x SUPABASE_ANON_KEY "your-anon-key"
+
+curl -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "your-password"}'
+```
+
+---
+
+## 10. 参照資料
 
 ### プロジェクト内ドキュメント
 - `/mnt/project/geolocation-tech-source.txt` - タイルサーバー実装のサンプルコード
@@ -474,57 +522,57 @@ CMD ["uvicorn", "lib.main:app", "--host", "0.0.0.0", "--port", "8080"]
 - [TileJSON Specification](https://github.com/mapbox/tilejson-spec)
 - [Mapbox Vector Tile Specification](https://github.com/mapbox/vector-tile-spec)
 - [PMTiles Specification](https://github.com/protomaps/PMTiles)
+- [aiopmtiles](https://github.com/developmentseed/aiopmtiles)
 - [Cloud Optimized GeoTIFF](https://www.cogeo.org/)
 - [rio-tiler Documentation](https://cogeotiff.github.io/rio-tiler/)
 - [FastMCP Documentation](https://github.com/jlowin/fastmcp)
 - [Supabase Documentation](https://supabase.com/docs)
+- [Supabase Auth](https://supabase.com/docs/guides/auth)
 - [Fly.io Documentation](https://fly.io/docs/)
 
 ---
 
-## 10. 注意事項・Tips
+## 11. 注意事項・Tips
 
 ### Vercelデプロイ時の注意
 
 1. **Python依存関係**: ネイティブ依存のあるライブラリ（rasterio等）は動作しない
-2. **接続タイムアウト**: Serverless Functionは最大30秒（Proプランで60秒）
-3. **コールドスタート**: 初回リクエストは遅延する可能性がある
-4. **モジュールパス**: `index.py`で`sys.path`の調整が必要
+2. **GitHubからのパッケージ**: `pyproject.toml`に`[tool.hatch.metadata] allow-direct-references = true`が必要
+3. **接続タイムアウト**: Serverless Functionは最大30秒（Proプランで60秒）
+4. **コールドスタート**: 初回リクエストは遅延する可能性がある
+5. **モジュールパス**: `index.py`で`sys.path`の調整が必要
+6. **Deployment Protection**: プレビューブランチではVercel認証が有効になる場合がある
 
 ### Supabase接続の注意
 
 1. **Pooler必須**: サーバーレス環境では必ずPooler接続（ポート6543）を使用
 2. **SSL必須**: `?sslmode=require` が自動付与される
 3. **PostGIS拡張**: 手動で `CREATE EXTENSION postgis;` が必要
+4. **JWT Secret**: Settings > API から取得
 
-### ローカル開発Tips
+### ローカル開発Tips（fish形式）
 
-```bash
-# APIディレクトリで実行すること
+```fish
+# APIディレクトリで実行
 cd api
 uv run uvicorn lib.main:app --reload --port 3000
 
+# PostgreSQLに接続
+docker compose -f docker/docker-compose.yml exec -T postgis psql -U postgres -d geo_base
+
 # テストデータ投入
-cd .. && bash scripts/seed.sh
-
-# データベースマイグレーション（ラスター対応）
-psql -h localhost -U postgres -d geo_base -f docker/postgis-init/02_raster_schema.sql
-```
-
-### ラスタタイル開発（ローカル環境のみ）
-
-```bash
-# rio-tiler/rasterioインストール（ローカル環境）
-cd api
-uv add rio-tiler rasterio
-
-# ヘルスチェックでrasterio_available: trueを確認
-curl http://localhost:3000/api/health
+docker compose -f docker/docker-compose.yml exec -T postgis psql -U postgres -d geo_base -c "
+INSERT INTO tilesets (id, name, type, format, is_public, user_id)
+VALUES 
+    ('a0000000-0000-0000-0000-000000000001', 'Public Test', 'vector', 'pbf', true, NULL),
+    ('a0000000-0000-0000-0000-000000000002', 'Private Test', 'vector', 'pbf', false, 'YOUR_USER_ID')
+ON CONFLICT (id) DO NOTHING;
+"
 ```
 
 ---
 
-## 11. 連絡先・引き継ぎ情報
+## 12. 連絡先・引き継ぎ情報
 
 - **GitHub**: https://github.com/mopinfish/geo-base
 - **本番環境**: https://geo-base-puce.vercel.app/
@@ -532,13 +580,14 @@ curl http://localhost:3000/api/health
 
 ---
 
-## 12. 変更履歴
+## 13. 変更履歴
 
-| 日付 | 変更内容 |
-|------|---------|
-| 2025-12-12 | 初版作成（Step 1.1〜1.4完了） |
-| 2025-12-12 | ラスタタイル対応（Step 1.5）追加、Fly.io移行方針追記 |
+| 日付 | バージョン | 変更内容 |
+|------|-----------|---------|
+| 2025-12-12 | 0.1.0 | 初版作成（Step 1.1〜1.4完了） |
+| 2025-12-12 | 0.2.0 | ラスタタイル対応（Step 1.5）、PMTiles対応（Step 1.6）追加 |
+| 2025-12-12 | 0.3.0 | 認証機能（Step 1.7）追加、アクセス制御実装 |
 
 ---
 
-*このドキュメントは2025-12-12時点の情報です。*
+*このドキュメントは2025-12-12時点の情報です。APIバージョン: 0.3.0*

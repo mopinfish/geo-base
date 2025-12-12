@@ -103,3 +103,7 @@ temp/
 # Database dumps
 *.sql.gz
 *.dump
+
+# dumprepo
+dumprepo.json
+geo-base.txt
