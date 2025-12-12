@@ -5,6 +5,7 @@ FastAPI Tile Server for geo-base.
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +49,14 @@ from lib.pmtiles import (
     get_pmtiles_cache_headers,
     generate_pmtiles_tilejson,
 )
+from lib.auth import (
+    User,
+    get_current_user,
+    require_auth,
+    check_tileset_access,
+    get_tileset_with_access_check,
+    is_auth_configured,
+)
 
 
 @asynccontextmanager
@@ -63,7 +72,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="geo-base Tile Server",
     description="地理空間タイル配信API",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -101,10 +110,11 @@ def health_check():
     """Basic health check endpoint."""
     return {
         "status": "ok",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "environment": settings.environment,
         "rasterio_available": is_rasterio_available(),
         "pmtiles_available": is_pmtiles_available(),
+        "auth_configured": is_auth_configured(),
     }
 
 
@@ -137,6 +147,38 @@ def health_check_db():
     
     return response
 
+
+# ============================================================================
+# Auth Test Endpoints
+# ============================================================================
+
+
+@app.get("/api/auth/me")
+def get_current_user_info(user: User = Depends(require_auth)):
+    """
+    Get current authenticated user information.
+    
+    Requires authentication.
+    """
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+    }
+
+
+@app.get("/api/auth/status")
+def get_auth_status(user: Optional[User] = Depends(get_current_user)):
+    """
+    Get authentication status.
+    
+    Returns authentication status without requiring authentication.
+    """
+    return {
+        "authenticated": user is not None,
+        "user_id": user.id if user else None,
+        "email": user.email if user else None,
+    }
 
 
 # ============================================================================
@@ -266,6 +308,7 @@ def get_features_vector_tile(
     filter: str = Query(None, description="Attribute filter (e.g., 'properties.type=station')"),
     simplify: bool = Query(True, description="Apply zoom-based simplification"),
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Generate a vector tile from the features table.
@@ -275,6 +318,7 @@ def get_features_vector_tile(
     - Attribute filtering with expressions
     - Automatic zoom-based geometry simplification
     - Optimized caching based on zoom level
+    - Access control for private tilesets
 
     Args:
         z: Zoom level (0-22)
@@ -283,12 +327,33 @@ def get_features_vector_tile(
         tileset_id: Optional tileset ID filter
         layer: Optional layer name filter
         filter: Attribute filter expression
-            - Simple: "properties.type=station"
-            - Multiple values: "properties.type=station,landmark"
-            - Pattern match: "properties.name~Tokyo"
-            - Multiple conditions: "properties.type=station;properties.name~Tokyo"
         simplify: Whether to apply zoom-based geometry simplification (default: true)
     """
+    # If tileset_id is specified, check access
+    if tileset_id:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT is_public, user_id FROM tilesets WHERE id = %s",
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if row:
+            is_public, owner_user_id = row
+            owner_user_id = str(owner_user_id) if owner_user_id else None
+            
+            if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+                if not user:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Authentication required to access this tileset",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                raise HTTPException(
+                    status_code=403,
+                    detail="You do not have permission to access this tileset"
+                )
+    
     try:
         tile_data = generate_features_mvt(
             conn=conn,
@@ -322,12 +387,17 @@ async def get_pmtiles_tile_endpoint(
     y: int,
     tile_format: str,
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get a tile from a PMTiles file via HTTP Range Request.
     
     PMTiles files are hosted on external storage (Supabase Storage, S3, etc.)
     and accessed via HTTP Range Requests for efficient tile retrieval.
+    
+    Access control:
+    - Public tilesets: No authentication required
+    - Private tilesets: Only the owner can access
 
     Args:
         tileset_id: Tileset ID
@@ -343,13 +413,14 @@ async def get_pmtiles_tile_endpoint(
             detail="PMTiles service is not available. aiopmtiles not installed."
         )
     
-    # Get PMTiles source from database
+    # Get PMTiles source from database with access check
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT ps.pmtiles_url, ps.tile_type, ps.tile_compression,
-                       ps.min_zoom, ps.max_zoom
+                       ps.min_zoom, ps.max_zoom,
+                       t.is_public, t.user_id
                 FROM pmtiles_sources ps
                 JOIN tilesets t ON ps.tileset_id = t.id
                 WHERE t.id = %s
@@ -362,7 +433,21 @@ async def get_pmtiles_tile_endpoint(
         if not row:
             raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
         
-        pmtiles_url, tile_type, compression, min_zoom, max_zoom = row
+        pmtiles_url, tile_type, compression, min_zoom, max_zoom, is_public, owner_user_id = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
         
         # Validate zoom level
         if min_zoom is not None and z < min_zoom:
@@ -403,6 +488,7 @@ async def get_pmtiles_tilejson(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get TileJSON for a PMTiles tileset.
@@ -420,7 +506,7 @@ async def get_pmtiles_tilejson(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT t.name, t.description, t.attribution,
+                SELECT t.name, t.description, t.attribution, t.is_public, t.user_id,
                        ps.pmtiles_url, ps.tile_type, ps.min_zoom, ps.max_zoom,
                        ps.bounds, ps.center, ps.layers
                 FROM tilesets t
@@ -434,7 +520,23 @@ async def get_pmtiles_tilejson(
         if not row:
             raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
         
-        name, description, attribution, pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers = row
+        (name, description, attribution, is_public, owner_user_id,
+         pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers) = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
+        
         base_url = get_base_url(request)
         
         return generate_pmtiles_tilejson(
@@ -461,6 +563,7 @@ async def get_pmtiles_tilejson(
 async def get_pmtiles_metadata_endpoint(
     tileset_id: str,
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get metadata from a PMTiles file.
@@ -480,7 +583,7 @@ async def get_pmtiles_metadata_endpoint(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT ps.pmtiles_url, t.name, t.description
+                SELECT ps.pmtiles_url, t.name, t.description, t.is_public, t.user_id
                 FROM pmtiles_sources ps
                 JOIN tilesets t ON ps.tileset_id = t.id
                 WHERE t.id = %s
@@ -493,7 +596,21 @@ async def get_pmtiles_metadata_endpoint(
         if not row:
             raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
         
-        pmtiles_url, name, description = row
+        pmtiles_url, name, description, is_public, owner_user_id = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
         
     except HTTPException:
         raise
@@ -531,9 +648,14 @@ async def get_raster_tile(
     scale_max: float = Query(None, description="Maximum value for rescaling"),
     colormap: str = Query(None, description="Colormap name for single-band visualization"),
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get a raster tile from a Cloud Optimized GeoTIFF (COG).
+    
+    Access control:
+    - Public tilesets: No authentication required
+    - Private tilesets: Only the owner can access
     
     Args:
         tileset_id: Tileset ID or 'url' for direct COG URL access
@@ -560,12 +682,12 @@ async def get_raster_tile(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    # Get COG URL from database
+    # Get COG URL from database with access check
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT rs.cog_url, t.min_zoom, t.max_zoom,
+                SELECT rs.cog_url, t.min_zoom, t.max_zoom, t.is_public, t.user_id,
                        COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
                        COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max,
                        COALESCE(t.metadata->>'bands', NULL) as default_bands
@@ -581,7 +703,22 @@ async def get_raster_tile(
         if not row:
             raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
         
-        cog_url, min_zoom, max_zoom, db_scale_min, db_scale_max, default_bands = row
+        (cog_url, min_zoom, max_zoom, is_public, owner_user_id,
+         db_scale_min, db_scale_max, default_bands) = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
         
         # Validate zoom level
         if min_zoom and z < min_zoom:
@@ -642,6 +779,7 @@ def get_raster_tilejson(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get TileJSON for a raster tileset.
@@ -654,7 +792,7 @@ def get_raster_tilejson(
             cur.execute(
                 """
                 SELECT t.name, t.description, t.format, t.min_zoom, t.max_zoom,
-                       t.attribution, rs.cog_url
+                       t.attribution, t.is_public, t.user_id, rs.cog_url
                 FROM tilesets t
                 LEFT JOIN raster_sources rs ON rs.tileset_id = t.id
                 WHERE t.id = %s AND t.type = 'raster'
@@ -666,7 +804,23 @@ def get_raster_tilejson(
         if not row:
             raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
         
-        name, description, tile_format, min_zoom, max_zoom, attribution, cog_url = row
+        (name, description, tile_format, min_zoom, max_zoom,
+         attribution, is_public, owner_user_id, cog_url) = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
+        
         base_url = get_base_url(request)
         
         # Try to get bounds from COG if available
@@ -712,6 +866,7 @@ async def get_raster_tile_preview(
     format: str = Query("png", description="Output format (png, jpg, webp)"),
     colormap: str = Query(None, description="Colormap name"),
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get a preview image of a raster tileset.
@@ -741,12 +896,12 @@ async def get_raster_tile_preview(
     # Limit max_size
     max_size = min(max_size, settings.raster_max_preview_size)
     
-    # Get COG URL from database
+    # Get COG URL from database with access check
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT rs.cog_url,
+                SELECT rs.cog_url, t.is_public, t.user_id,
                        COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
                        COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max
                 FROM raster_sources rs
@@ -761,7 +916,21 @@ async def get_raster_tile_preview(
         if not row:
             raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
         
-        cog_url, db_scale_min, db_scale_max = row
+        cog_url, is_public, owner_user_id, db_scale_min, db_scale_max = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
         
     except HTTPException:
         raise
@@ -806,6 +975,7 @@ async def get_raster_tile_preview(
 def get_raster_info(
     tileset_id: str,
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get metadata information about a raster tileset's COG.
@@ -819,12 +989,12 @@ def get_raster_info(
             detail="Raster info service is not available."
         )
     
-    # Get COG URL from database
+    # Get COG URL from database with access check
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT rs.cog_url, t.name, t.description
+                SELECT rs.cog_url, t.name, t.description, t.is_public, t.user_id
                 FROM raster_sources rs
                 JOIN tilesets t ON rs.tileset_id = t.id
                 WHERE t.id = %s
@@ -837,7 +1007,21 @@ def get_raster_info(
         if not row:
             raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
         
-        cog_url, name, description = row
+        cog_url, name, description, is_public, owner_user_id = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
         
     except HTTPException:
         raise
@@ -863,6 +1047,7 @@ def get_raster_statistics(
     tileset_id: str,
     indexes: str = Query(None, description="Comma-separated band indexes"),
     conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get statistics for a raster tileset's bands.
@@ -877,14 +1062,15 @@ def get_raster_statistics(
             detail="Raster statistics service is not available."
         )
     
-    # Get COG URL from database
+    # Get COG URL from database with access check
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT rs.cog_url
+                SELECT rs.cog_url, t.is_public, t.user_id
                 FROM raster_sources rs
-                WHERE rs.tileset_id = %s
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE t.id = %s
                 LIMIT 1
                 """,
                 (tileset_id,),
@@ -894,7 +1080,21 @@ def get_raster_statistics(
         if not row:
             raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
         
-        cog_url = row[0]
+        cog_url, is_public, owner_user_id = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
         
     except HTTPException:
         raise
@@ -991,18 +1191,42 @@ def get_features_tilejson(
 
 
 @app.get("/api/tilesets")
-def list_tilesets(conn=Depends(get_connection)):
-    """List all tilesets."""
+def list_tilesets(
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+    include_private: bool = Query(False, description="Include private tilesets (requires auth)"),
+):
+    """
+    List all accessible tilesets.
+    
+    By default, only public tilesets are returned.
+    With authentication and include_private=true, also returns user's private tilesets.
+    """
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, name, description, type, format, min_zoom, max_zoom,
-                       is_public, created_at, updated_at
-                FROM tilesets
-                ORDER BY created_at DESC
-                """
-            )
+            if include_private and user:
+                # Return public tilesets + user's private tilesets
+                cur.execute(
+                    """
+                    SELECT id, name, description, type, format, min_zoom, max_zoom,
+                           is_public, user_id, created_at, updated_at
+                    FROM tilesets
+                    WHERE is_public = true OR user_id = %s
+                    ORDER BY created_at DESC
+                    """,
+                    (user.id,),
+                )
+            else:
+                # Return only public tilesets
+                cur.execute(
+                    """
+                    SELECT id, name, description, type, format, min_zoom, max_zoom,
+                           is_public, user_id, created_at, updated_at
+                    FROM tilesets
+                    WHERE is_public = true
+                    ORDER BY created_at DESC
+                    """
+                )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
 
@@ -1012,6 +1236,8 @@ def list_tilesets(conn=Depends(get_connection)):
         for tileset in tilesets:
             if tileset.get("id"):
                 tileset["id"] = str(tileset["id"])
+            if tileset.get("user_id"):
+                tileset["user_id"] = str(tileset["user_id"])
             if tileset.get("created_at"):
                 tileset["created_at"] = tileset["created_at"].isoformat()
             if tileset.get("updated_at"):
@@ -1023,15 +1249,19 @@ def list_tilesets(conn=Depends(get_connection)):
 
 
 @app.get("/api/tilesets/{tileset_id}")
-def get_tileset(tileset_id: str, conn=Depends(get_connection)):
-    """Get a specific tileset by ID."""
+def get_tileset(
+    tileset_id: str,
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+):
+    """Get a specific tileset by ID with access control."""
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT id, name, description, type, format, min_zoom, max_zoom,
                        ST_AsGeoJSON(bounds) as bounds, ST_AsGeoJSON(center) as center,
-                       attribution, is_public, metadata, created_at, updated_at
+                       attribution, is_public, user_id, metadata, created_at, updated_at
                 FROM tilesets
                 WHERE id = %s
                 """,
@@ -1044,10 +1274,27 @@ def get_tileset(tileset_id: str, conn=Depends(get_connection)):
             raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
 
         tileset = dict(zip(columns, row))
+        is_public = tileset.get("is_public", True)
+        owner_user_id = str(tileset.get("user_id")) if tileset.get("user_id") else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
 
         # Convert datetime and UUID to string
         if tileset.get("id"):
             tileset["id"] = str(tileset["id"])
+        if tileset.get("user_id"):
+            tileset["user_id"] = str(tileset["user_id"])
         if tileset.get("created_at"):
             tileset["created_at"] = tileset["created_at"].isoformat()
         if tileset.get("updated_at"):
@@ -1061,13 +1308,19 @@ def get_tileset(tileset_id: str, conn=Depends(get_connection)):
 
 
 @app.get("/api/tilesets/{tileset_id}/tilejson.json")
-def get_tileset_tilejson(tileset_id: str, request: Request, conn=Depends(get_connection)):
-    """Get TileJSON for a specific tileset."""
+def get_tileset_tilejson(
+    tileset_id: str,
+    request: Request,
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+):
+    """Get TileJSON for a specific tileset with access control."""
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT name, description, type, format, min_zoom, max_zoom, attribution
+                SELECT name, description, type, format, min_zoom, max_zoom,
+                       attribution, is_public, user_id
                 FROM tilesets
                 WHERE id = %s
                 """,
@@ -1078,7 +1331,23 @@ def get_tileset_tilejson(tileset_id: str, request: Request, conn=Depends(get_con
         if not row:
             raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
 
-        name, description, tile_type, tile_format, min_zoom, max_zoom, attribution = row
+        (name, description, tile_type, tile_format,
+         min_zoom, max_zoom, attribution, is_public, owner_user_id) = row
+        owner_user_id = str(owner_user_id) if owner_user_id else None
+        
+        # Check access
+        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this tileset",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this tileset"
+            )
+        
         base_url = get_base_url(request)
 
         # Determine tile URL based on type
@@ -1168,18 +1437,18 @@ PREVIEW_HTML = """
         <p>API: <span id="api-status" class="status loading">checking...</span></p>
         <p>DB: <span id="db-status" class="status loading">checking...</span></p>
         <p>PMTiles: <span id="pmtiles-status" class="status loading">checking...</span></p>
-        <p>Rasterio: <span id="rasterio-status" class="status loading">checking...</span></p>
+        <p>Auth: <span id="auth-status" class="status loading">checking...</span></p>
         <div class="endpoints">
             <h4>API Endpoints</h4>
             <a href="/api/health" target="_blank">/api/health</a>
             <a href="/api/health/db" target="_blank">/api/health/db</a>
             <a href="/api/tilesets" target="_blank">/api/tilesets</a>
             <a href="/api/tiles/features/tilejson.json" target="_blank">/api/tiles/features/tilejson.json</a>
+            <a href="/api/auth/status" target="_blank">/api/auth/status</a>
         </div>
         <div class="layer-toggle">
             <h4>Layers</h4>
             <label><input type="checkbox" id="toggle-features" checked> Vector Features</label>
-            <label><input type="checkbox" id="toggle-raster"> Sample Raster (if available)</label>
         </div>
     </div>
     <div id="map"></div>
@@ -1192,15 +1461,15 @@ PREVIEW_HTML = """
                 el.textContent = data.status === 'ok' ? '✔ OK' : '✗ Error';
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
                 
-                // Check rasterio availability
-                const rasterioEl = document.getElementById('rasterio-status');
-                rasterioEl.textContent = data.rasterio_available ? '✔ Available' : '✗ Not installed';
-                rasterioEl.className = 'status ' + (data.rasterio_available ? 'ok' : 'error');
-                
                 // Check PMTiles availability
                 const pmtilesEl = document.getElementById('pmtiles-status');
                 pmtilesEl.textContent = data.pmtiles_available ? '✔ Available' : '✗ Not installed';
                 pmtilesEl.className = 'status ' + (data.pmtiles_available ? 'ok' : 'error');
+                
+                // Check Auth configuration
+                const authEl = document.getElementById('auth-status');
+                authEl.textContent = data.auth_configured ? '✔ Configured' : '✗ Not configured';
+                authEl.className = 'status ' + (data.auth_configured ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('api-status');
