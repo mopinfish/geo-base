@@ -23,17 +23,12 @@ RUN pip install --no-cache-dir uv
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files first (for better caching)
-# README.md is needed because pyproject.toml references it
-COPY pyproject.toml ./
-COPY uv.lock ./
-COPY README.md ./
-
-# Install dependencies
-RUN uv sync --frozen --no-dev
-
-# Copy application code
+# Copy ALL application files first
+# (uv sync needs source files to install the local package)
 COPY . .
+
+# Install dependencies into .venv
+RUN uv sync --frozen --no-dev
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -42,9 +37,9 @@ USER appuser
 # Expose port for HTTP transport
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# Health check - use /sse endpoint since FastMCP doesn't have /health by default
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/sse -o /dev/null -s -w '%{http_code}' | grep -q '200' || exit 1
 
-# Run MCP server with SSE transport for remote connections
-CMD ["uv", "run", "python", "server.py"]
+# Run MCP server directly using the installed venv
+CMD ["/app/.venv/bin/python", "server.py"]
