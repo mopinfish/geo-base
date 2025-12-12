@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="geo-base Tile Server",
-    description="地理空間タイル配信API",
+    description="åœ°ç†ç©ºé–“ã‚¿ã‚¤ãƒ«é…ä¿¡API",
     version="0.3.0",
     lifespan=lifespan,
 )
@@ -1389,6 +1389,311 @@ def get_tileset_tilejson(
         raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
 
 
+
+# ============================================================================
+# Features API Endpoints
+# ============================================================================
+
+
+@app.get("/api/features")
+def search_features(
+    request: Request,
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+    bbox: Optional[str] = Query(None, description="Bounding box: minx,miny,maxx,maxy"),
+    layer: Optional[str] = Query(None, description="Layer name filter"),
+    tileset_id: Optional[str] = Query(None, description="Tileset ID filter"),
+    filter: Optional[str] = Query(None, description="Attribute filter (key=value)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of features"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+):
+    """
+    Search and list features with optional filters.
+    
+    Supports:
+    - Bounding box spatial filter
+    - Layer name filter
+    - Tileset ID filter
+    - Attribute filter (simple key=value)
+    - Pagination (limit/offset)
+    """
+    try:
+        with conn.cursor() as cur:
+            # Build query dynamically
+            conditions = []
+            params = []
+            
+            # Tileset access control
+            if tileset_id:
+                # Check tileset access
+                cur.execute(
+                    "SELECT is_public, user_id FROM tilesets WHERE id = %s",
+                    (tileset_id,)
+                )
+                tileset_row = cur.fetchone()
+                if tileset_row:
+                    is_public, owner_user_id = tileset_row
+                    owner_user_id = str(owner_user_id) if owner_user_id else None
+                    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+                        if not user:
+                            raise HTTPException(
+                                status_code=401,
+                                detail="Authentication required to access features from this tileset",
+                                headers={"WWW-Authenticate": "Bearer"},
+                            )
+                        raise HTTPException(
+                            status_code=403,
+                            detail="You do not have permission to access features from this tileset"
+                        )
+                conditions.append("f.tileset_id = %s")
+                params.append(tileset_id)
+            else:
+                # Only show features from public tilesets or user's tilesets
+                if user:
+                    conditions.append("(t.is_public = true OR t.user_id = %s)")
+                    params.append(user.id)
+                else:
+                    conditions.append("t.is_public = true")
+            
+            # Bounding box filter
+            if bbox:
+                try:
+                    minx, miny, maxx, maxy = map(float, bbox.split(","))
+                    conditions.append(
+                        "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
+                    )
+                    params.extend([minx, miny, maxx, maxy])
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Invalid bbox format. Use: minx,miny,maxx,maxy"
+                    )
+            
+            # Layer filter
+            if layer:
+                conditions.append("f.layer_name = %s")
+                params.append(layer)
+            
+            # Attribute filter (simple key=value)
+            if filter:
+                if "=" in filter:
+                    key, value = filter.split("=", 1)
+                    conditions.append("f.properties->>%s = %s")
+                    params.extend([key.strip(), value.strip()])
+            
+            # Build WHERE clause
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+            
+            # Count query
+            count_sql = f"""
+                SELECT COUNT(*)
+                FROM features f
+                LEFT JOIN tilesets t ON f.tileset_id = t.id
+                WHERE {where_clause}
+            """
+            cur.execute(count_sql, params)
+            total_count = cur.fetchone()[0]
+            
+            # Main query
+            sql = f"""
+                SELECT 
+                    f.id,
+                    f.tileset_id,
+                    f.layer_name,
+                    f.properties,
+                    ST_AsGeoJSON(f.geom)::json as geometry,
+                    f.created_at,
+                    f.updated_at
+                FROM features f
+                LEFT JOIN tilesets t ON f.tileset_id = t.id
+                WHERE {where_clause}
+                ORDER BY f.created_at DESC
+                LIMIT %s OFFSET %s
+            """
+            params.extend([limit, offset])
+            cur.execute(sql, params)
+            
+            columns = [desc[0] for desc in cur.description]
+            rows = cur.fetchall()
+        
+        # Format features as GeoJSON
+        features = []
+        for row in rows:
+            feature_dict = dict(zip(columns, row))
+            feature = {
+                "type": "Feature",
+                "id": str(feature_dict["id"]),
+                "geometry": feature_dict["geometry"],
+                "properties": {
+                    **(feature_dict["properties"] or {}),
+                    "layer_name": feature_dict["layer_name"],
+                    "tileset_id": str(feature_dict["tileset_id"]) if feature_dict["tileset_id"] else None,
+                    "created_at": feature_dict["created_at"].isoformat() if feature_dict["created_at"] else None,
+                    "updated_at": feature_dict["updated_at"].isoformat() if feature_dict["updated_at"] else None,
+                }
+            }
+            features.append(feature)
+        
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+            "count": len(features),
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "query": {
+                "bbox": bbox,
+                "layer": layer,
+                "tileset_id": tileset_id,
+                "filter": filter,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching features: {str(e)}")
+
+
+@app.get("/api/features/layers")
+def list_feature_layers(
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+    tileset_id: Optional[str] = Query(None, description="Filter by tileset ID"),
+):
+    """
+    List available feature layers.
+    
+    Returns distinct layer names with feature counts.
+    """
+    try:
+        with conn.cursor() as cur:
+            conditions = []
+            params = []
+            
+            if tileset_id:
+                conditions.append("f.tileset_id = %s")
+                params.append(tileset_id)
+            
+            # Access control
+            if user:
+                conditions.append("(t.is_public = true OR t.user_id = %s)")
+                params.append(user.id)
+            else:
+                conditions.append("t.is_public = true")
+            
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+            
+            sql = f"""
+                SELECT 
+                    f.layer_name,
+                    COUNT(*) as feature_count,
+                    f.tileset_id,
+                    t.name as tileset_name
+                FROM features f
+                LEFT JOIN tilesets t ON f.tileset_id = t.id
+                WHERE {where_clause}
+                GROUP BY f.layer_name, f.tileset_id, t.name
+                ORDER BY f.layer_name
+            """
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+        
+        layers = [
+            {
+                "layer_name": row[0],
+                "feature_count": row[1],
+                "tileset_id": str(row[2]) if row[2] else None,
+                "tileset_name": row[3],
+            }
+            for row in rows
+        ]
+        
+        return {
+            "layers": layers,
+            "count": len(layers),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing layers: {str(e)}")
+
+
+@app.get("/api/features/{feature_id}")
+def get_feature(
+    feature_id: str,
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+):
+    """
+    Get a specific feature by ID.
+    
+    Returns the feature as a GeoJSON Feature object.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Get feature with tileset info for access control
+            cur.execute(
+                """
+                SELECT 
+                    f.id,
+                    f.tileset_id,
+                    f.layer_name,
+                    f.properties,
+                    ST_AsGeoJSON(f.geom)::json as geometry,
+                    f.created_at,
+                    f.updated_at,
+                    t.is_public,
+                    t.user_id as tileset_user_id
+                FROM features f
+                LEFT JOIN tilesets t ON f.tileset_id = t.id
+                WHERE f.id = %s
+                """,
+                (feature_id,)
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Feature not found: {feature_id}")
+        
+        columns = ["id", "tileset_id", "layer_name", "properties", "geometry", 
+                   "created_at", "updated_at", "is_public", "tileset_user_id"]
+        feature_dict = dict(zip(columns, row))
+        
+        # Check access via tileset
+        is_public = feature_dict.get("is_public", True)
+        owner_user_id = str(feature_dict["tileset_user_id"]) if feature_dict["tileset_user_id"] else None
+        tileset_id = str(feature_dict["tileset_id"]) if feature_dict["tileset_id"] else None
+        
+        if tileset_id and not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to access this feature",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to access this feature"
+            )
+        
+        # Format as GeoJSON Feature
+        return {
+            "type": "Feature",
+            "id": str(feature_dict["id"]),
+            "geometry": feature_dict["geometry"],
+            "properties": {
+                **(feature_dict["properties"] or {}),
+                "layer_name": feature_dict["layer_name"],
+                "tileset_id": str(feature_dict["tileset_id"]) if feature_dict["tileset_id"] else None,
+                "created_at": feature_dict["created_at"].isoformat() if feature_dict["created_at"] else None,
+                "updated_at": feature_dict["updated_at"].isoformat() if feature_dict["updated_at"] else None,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting feature: {str(e)}")
+
+
+
 # ============================================================================
 # Preview Page
 # ============================================================================
@@ -1433,7 +1738,7 @@ PREVIEW_HTML = """
 </head>
 <body>
     <div class="info-panel">
-        <h3>🗺️ geo-base Tile Server</h3>
+        <h3>ðŸ—ºï¸ geo-base Tile Server</h3>
         <p>API: <span id="api-status" class="status loading">checking...</span></p>
         <p>DB: <span id="db-status" class="status loading">checking...</span></p>
         <p>PMTiles: <span id="pmtiles-status" class="status loading">checking...</span></p>
@@ -1458,22 +1763,22 @@ PREVIEW_HTML = """
             .then(res => res.json())
             .then(data => {
                 const el = document.getElementById('api-status');
-                el.textContent = data.status === 'ok' ? '✔ OK' : '✗ Error';
+                el.textContent = data.status === 'ok' ? 'âœ” OK' : 'âœ— Error';
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
                 
                 // Check PMTiles availability
                 const pmtilesEl = document.getElementById('pmtiles-status');
-                pmtilesEl.textContent = data.pmtiles_available ? '✔ Available' : '✗ Not installed';
+                pmtilesEl.textContent = data.pmtiles_available ? 'âœ” Available' : 'âœ— Not installed';
                 pmtilesEl.className = 'status ' + (data.pmtiles_available ? 'ok' : 'error');
                 
                 // Check Auth configuration
                 const authEl = document.getElementById('auth-status');
-                authEl.textContent = data.auth_configured ? '✔ Configured' : '✗ Not configured';
+                authEl.textContent = data.auth_configured ? 'âœ” Configured' : 'âœ— Not configured';
                 authEl.className = 'status ' + (data.auth_configured ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('api-status');
-                el.textContent = '✗ Error';
+                el.textContent = 'âœ— Error';
                 el.className = 'status error';
             });
 
@@ -1482,12 +1787,12 @@ PREVIEW_HTML = """
             .then(res => res.json())
             .then(data => {
                 const el = document.getElementById('db-status');
-                el.textContent = data.status === 'ok' ? '✔ Connected' : '✗ ' + data.database;
+                el.textContent = data.status === 'ok' ? 'âœ” Connected' : 'âœ— ' + data.database;
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('db-status');
-                el.textContent = '✗ Error';
+                el.textContent = 'âœ— Error';
                 el.className = 'status error';
             });
 
@@ -1575,3 +1880,5 @@ PREVIEW_HTML = """
 def preview_page():
     """Tile preview page with MapLibre GL JS."""
     return PREVIEW_HTML
+
+
