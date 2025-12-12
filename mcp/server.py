@@ -25,6 +25,14 @@ from tools.geocoding import (
     geocode,
     reverse_geocode,
 )
+from tools.crud import (
+    create_tileset,
+    update_tileset,
+    delete_tileset,
+    create_feature,
+    update_feature,
+    delete_feature,
+)
 
 # Initialize settings
 settings = get_settings()
@@ -317,6 +325,206 @@ async def tool_reverse_geocode(
         zoom=zoom,
         language=language,
     )
+
+
+# ============================================================
+# CRUD Tools
+# ============================================================
+
+
+@mcp.tool()
+async def tool_create_tileset(
+    name: str,
+    type: str,
+    format: str,
+    description: str | None = None,
+    min_zoom: int = 0,
+    max_zoom: int = 22,
+    bounds: list[float] | None = None,
+    center: list[float] | None = None,
+    attribution: str | None = None,
+    is_public: bool = False,
+    metadata: dict | None = None,
+) -> dict:
+    """
+    Create a new tileset.
+
+    Requires authentication (API_TOKEN environment variable).
+
+    Args:
+        name: Tileset name (required)
+        type: Tileset type - 'vector', 'raster', or 'pmtiles'
+        format: Tile format - 'pbf', 'png', 'jpg', 'webp', or 'geojson'
+        description: Optional description of the tileset
+        min_zoom: Minimum zoom level (0-22, default: 0)
+        max_zoom: Maximum zoom level (0-22, default: 22)
+        bounds: Bounding box as [west, south, east, north] in WGS84
+        center: Center point as [longitude, latitude] or [lon, lat, zoom]
+        attribution: Attribution text for the tileset
+        is_public: Whether the tileset is publicly accessible (default: False)
+        metadata: Additional metadata as key-value pairs
+
+    Returns:
+        Created tileset object with id, name, type, format, etc.
+    """
+    return await create_tileset(
+        name=name,
+        type=type,
+        format=format,
+        description=description,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
+        bounds=bounds,
+        center=center,
+        attribution=attribution,
+        is_public=is_public,
+        metadata=metadata,
+    )
+
+
+@mcp.tool()
+async def tool_update_tileset(
+    tileset_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    min_zoom: int | None = None,
+    max_zoom: int | None = None,
+    bounds: list[float] | None = None,
+    center: list[float] | None = None,
+    attribution: str | None = None,
+    is_public: bool | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    """
+    Update an existing tileset.
+
+    Requires authentication and ownership of the tileset.
+
+    Args:
+        tileset_id: UUID of the tileset to update
+        name: New tileset name
+        description: New description
+        min_zoom: New minimum zoom level (0-22)
+        max_zoom: New maximum zoom level (0-22)
+        bounds: New bounding box as [west, south, east, north]
+        center: New center point as [longitude, latitude]
+        attribution: New attribution text
+        is_public: New public/private visibility setting
+        metadata: New metadata (replaces existing metadata)
+
+    Returns:
+        Updated tileset object
+    """
+    return await update_tileset(
+        tileset_id=tileset_id,
+        name=name,
+        description=description,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
+        bounds=bounds,
+        center=center,
+        attribution=attribution,
+        is_public=is_public,
+        metadata=metadata,
+    )
+
+
+@mcp.tool()
+async def tool_delete_tileset(tileset_id: str) -> dict:
+    """
+    Delete a tileset and all its associated features.
+
+    WARNING: This action is irreversible. All features belonging to
+    this tileset will also be deleted.
+
+    Requires authentication and ownership of the tileset.
+
+    Args:
+        tileset_id: UUID of the tileset to delete
+
+    Returns:
+        Success message or error details
+    """
+    return await delete_tileset(tileset_id=tileset_id)
+
+
+@mcp.tool()
+async def tool_create_feature(
+    tileset_id: str,
+    geometry: dict,
+    properties: dict | None = None,
+    layer_name: str = "default",
+) -> dict:
+    """
+    Create a new geographic feature in a tileset.
+
+    Requires authentication and ownership of the parent tileset.
+
+    Args:
+        tileset_id: UUID of the parent tileset
+        geometry: GeoJSON geometry object. Examples:
+                  - Point: {"type": "Point", "coordinates": [139.7671, 35.6812]}
+                  - LineString: {"type": "LineString", "coordinates": [[lon1, lat1], [lon2, lat2]]}
+                  - Polygon: {"type": "Polygon", "coordinates": [[[lon1, lat1], [lon2, lat2], ...]]}
+        properties: Feature properties as key-value pairs (e.g., {"name": "Tokyo Station", "type": "station"})
+        layer_name: Layer name for organizing features (default: "default")
+
+    Returns:
+        Created feature as GeoJSON Feature object with id, geometry, and properties
+    """
+    return await create_feature(
+        tileset_id=tileset_id,
+        geometry=geometry,
+        properties=properties,
+        layer_name=layer_name,
+    )
+
+
+@mcp.tool()
+async def tool_update_feature(
+    feature_id: str,
+    geometry: dict | None = None,
+    properties: dict | None = None,
+    layer_name: str | None = None,
+) -> dict:
+    """
+    Update an existing feature.
+
+    Requires authentication and ownership of the parent tileset.
+
+    Args:
+        feature_id: UUID of the feature to update
+        geometry: New GeoJSON geometry object
+        properties: New properties (replaces all existing properties)
+        layer_name: New layer name
+
+    Returns:
+        Updated feature as GeoJSON Feature object
+    """
+    return await update_feature(
+        feature_id=feature_id,
+        geometry=geometry,
+        properties=properties,
+        layer_name=layer_name,
+    )
+
+
+@mcp.tool()
+async def tool_delete_feature(feature_id: str) -> dict:
+    """
+    Delete a feature.
+
+    WARNING: This action is irreversible.
+
+    Requires authentication and ownership of the parent tileset.
+
+    Args:
+        feature_id: UUID of the feature to delete
+
+    Returns:
+        Success message or error details
+    """
+    return await delete_feature(feature_id=feature_id)
 
 
 # ============================================================

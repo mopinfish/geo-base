@@ -17,6 +17,14 @@ MCP (Model Context Protocol) Server for geo-base tile server. This enables Claud
 - **geocode**: Convert address or place name to coordinates (geocoding)
 - **reverse_geocode**: Convert coordinates to address (reverse geocoding)
 
+### CRUD Tools (Requires Authentication)
+- **create_tileset**: Create a new tileset
+- **update_tileset**: Update an existing tileset
+- **delete_tileset**: Delete a tileset and all its features
+- **create_feature**: Create a new feature in a tileset
+- **update_feature**: Update an existing feature
+- **delete_feature**: Delete a feature
+
 ### Utility Tools
 - **get_tile_url**: Generate URLs for specific map tiles
 - **health_check**: Check the health status of the tile server
@@ -117,6 +125,16 @@ Find the coordinates for "東京駅" (Tokyo Station)
 ### Reverse Geocoding
 ```
 What is the address at coordinates 35.6812, 139.7671?
+```
+
+### Create Tileset (Requires Auth)
+```
+Create a new vector tileset named "Tokyo Stations" with description "Train stations in Tokyo"
+```
+
+### Create Feature (Requires Auth)
+```
+Add a point feature for Tokyo Station at coordinates [139.7671, 35.6812] to tileset {tileset_id}
 ```
 
 ### Health Check
@@ -308,6 +326,73 @@ Converts geographic coordinates to address.
 - `language` (optional): Result language (default: "ja")
 
 **Returns:** Address components, display name, and bounds for the location.
+
+### CRUD Tools
+
+> **Note:** All CRUD tools require authentication. Set the `API_TOKEN` environment variable with a valid JWT token.
+
+#### `create_tileset(name, type, format, description?, ...)`
+Creates a new tileset.
+
+**Parameters:**
+- `name`: Tileset name (required)
+- `type`: Tileset type ('vector', 'raster', 'pmtiles')
+- `format`: Tile format ('pbf', 'png', 'jpg', 'webp', 'geojson')
+- `description` (optional): Tileset description
+- `min_zoom` (optional): Minimum zoom level (0-22, default: 0)
+- `max_zoom` (optional): Maximum zoom level (0-22, default: 22)
+- `bounds` (optional): Bounding box [west, south, east, north]
+- `center` (optional): Center point [longitude, latitude]
+- `attribution` (optional): Attribution text
+- `is_public` (optional): Public visibility (default: false)
+- `metadata` (optional): Additional metadata object
+
+**Returns:** Created tileset object with id, name, type, format, etc.
+
+#### `update_tileset(tileset_id, name?, description?, ...)`
+Updates an existing tileset.
+
+**Parameters:**
+- `tileset_id`: UUID of the tileset to update
+- All other parameters are optional and only updated if provided
+
+**Returns:** Updated tileset object.
+
+#### `delete_tileset(tileset_id)`
+Deletes a tileset and all its features.
+
+**Parameters:**
+- `tileset_id`: UUID of the tileset to delete
+
+**Returns:** Success message or error.
+
+#### `create_feature(tileset_id, geometry, properties?, layer_name?)`
+Creates a new feature in a tileset.
+
+**Parameters:**
+- `tileset_id`: UUID of the parent tileset
+- `geometry`: GeoJSON geometry object (Point, LineString, Polygon, etc.)
+- `properties` (optional): Feature properties as key-value pairs
+- `layer_name` (optional): Layer name (default: "default")
+
+**Returns:** Created feature as GeoJSON Feature object.
+
+#### `update_feature(feature_id, geometry?, properties?, layer_name?)`
+Updates an existing feature.
+
+**Parameters:**
+- `feature_id`: UUID of the feature to update
+- All other parameters are optional and only updated if provided
+
+**Returns:** Updated feature as GeoJSON Feature object.
+
+#### `delete_feature(feature_id)`
+Deletes a feature.
+
+**Parameters:**
+- `feature_id`: UUID of the feature to delete
+
+**Returns:** Success message or error.
 
 ## License
 
