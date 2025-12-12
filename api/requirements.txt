@@ -12,14 +12,21 @@ pymbtiles==0.5.0
 shapely==2.0.6
 geoalchemy2==0.15.2
 
+# Tile processing - PMTiles (HTTP Range Request based, works on Vercel)
+aiopmtiles>=0.3.0
+
 # Tile processing - Raster (COG)
 # Note: These have native dependencies (GDAL) that may not work on all platforms
-# If Vercel deployment fails, consider using AWS Lambda with Docker image
+# If Vercel deployment fails, consider using Fly.io with Docker image
 rio-tiler>=7.0.0
 rasterio>=1.4.0
 
-# HTTP client (for future use)
+# HTTP client
 httpx==0.28.1
+
+# Authentication - Supabase JWT verification
+PyJWT>=2.8.0
+cryptography>=41.0.0
 
 # Required by dependencies
 starlette==0.41.3

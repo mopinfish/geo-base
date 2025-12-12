@@ -29,9 +29,12 @@ class Settings(BaseSettings):
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     supabase_service_role_key: Optional[str] = None
+    
+    # Supabase Auth settings
+    supabase_jwt_secret: Optional[str] = None  # JWT secret for verification
 
     # Supabase Storage settings
-    supabase_storage_bucket: str = "geo-tiles"  # Default bucket name for COG files
+    supabase_storage_bucket: str = "geo-tiles"  # Default bucket name for COG/PMTiles files
     supabase_storage_public_url: Optional[str] = None  # Public URL for storage
 
     # Vercel Blob (optional, for production)
@@ -49,6 +52,9 @@ class Settings(BaseSettings):
     raster_default_format: str = "png"
     raster_max_preview_size: int = 1024
     raster_tile_size: int = 256
+    
+    # PMTiles settings
+    pmtiles_default_cache_ttl: int = 86400  # 24 hours
 
     @property
     def is_vercel(self) -> bool:
@@ -68,6 +74,14 @@ class Settings(BaseSettings):
         if self.supabase_url:
             # Default Supabase Storage URL pattern
             return f"{self.supabase_url}/storage/v1/object/public/{self.supabase_storage_bucket}"
+        return None
+    
+    @property
+    def jwt_secret(self) -> Optional[str]:
+        """Get JWT secret for token verification."""
+        # Supabase JWT secret takes precedence
+        if self.supabase_jwt_secret:
+            return self.supabase_jwt_secret
         return None
 
 

@@ -39,6 +39,15 @@ from lib.raster_tiles import (
     get_raster_media_type,
     validate_tile_format,
 )
+from lib.pmtiles import (
+    is_pmtiles_available,
+    get_pmtiles_tile,
+    get_pmtiles_metadata,
+    get_pmtiles_media_type,
+    get_pmtiles_content_encoding,
+    get_pmtiles_cache_headers,
+    generate_pmtiles_tilejson,
+)
 
 
 @asynccontextmanager
@@ -54,7 +63,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="geo-base Tile Server",
     description="地理空間タイル配信API",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -92,9 +101,10 @@ def health_check():
     """Basic health check endpoint."""
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "environment": settings.environment,
         "rasterio_available": is_rasterio_available(),
+        "pmtiles_available": is_pmtiles_available(),
     }
 
 
@@ -297,6 +307,211 @@ def get_features_vector_tile(
     headers = get_cache_headers(z, is_static=False)
 
     return Response(content=tile_data, media_type=VECTOR_TILE_MEDIA_TYPE, headers=headers)
+
+
+# ============================================================================
+# Tile Endpoints - PMTiles
+# ============================================================================
+
+
+@app.get("/api/tiles/pmtiles/{tileset_id}/{z}/{x}/{y}.{tile_format}")
+async def get_pmtiles_tile_endpoint(
+    tileset_id: str,
+    z: int,
+    x: int,
+    y: int,
+    tile_format: str,
+    conn=Depends(get_connection),
+):
+    """
+    Get a tile from a PMTiles file via HTTP Range Request.
+    
+    PMTiles files are hosted on external storage (Supabase Storage, S3, etc.)
+    and accessed via HTTP Range Requests for efficient tile retrieval.
+
+    Args:
+        tileset_id: Tileset ID
+        z: Zoom level
+        x: X tile coordinate
+        y: Y tile coordinate
+        tile_format: Tile format (pbf, png, jpg, webp)
+    """
+    # Check if PMTiles is available
+    if not is_pmtiles_available():
+        raise HTTPException(
+            status_code=501,
+            detail="PMTiles service is not available. aiopmtiles not installed."
+        )
+    
+    # Get PMTiles source from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ps.pmtiles_url, ps.tile_type, ps.tile_compression,
+                       ps.min_zoom, ps.max_zoom
+                FROM pmtiles_sources ps
+                JOIN tilesets t ON ps.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
+        
+        pmtiles_url, tile_type, compression, min_zoom, max_zoom = row
+        
+        # Validate zoom level
+        if min_zoom is not None and z < min_zoom:
+            raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
+        if max_zoom is not None and z > max_zoom:
+            raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Get tile from PMTiles
+    try:
+        tile_data = await get_pmtiles_tile(pmtiles_url, z, x, y)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    if tile_data is None:
+        raise HTTPException(status_code=404, detail="Tile not found")
+    
+    # Determine media type
+    media_type = get_pmtiles_media_type(tile_type or "mvt")
+    
+    # Build response headers
+    headers = get_pmtiles_cache_headers(z, is_static=True)
+    
+    # Add content-encoding if compressed
+    content_encoding = get_pmtiles_content_encoding(compression or "gzip")
+    if content_encoding:
+        headers["Content-Encoding"] = content_encoding
+    
+    return Response(content=tile_data, media_type=media_type, headers=headers)
+
+
+@app.get("/api/tiles/pmtiles/{tileset_id}/tilejson.json")
+async def get_pmtiles_tilejson(
+    tileset_id: str,
+    request: Request,
+    conn=Depends(get_connection),
+):
+    """
+    Get TileJSON for a PMTiles tileset.
+    
+    Args:
+        tileset_id: Tileset ID
+    """
+    if not is_pmtiles_available():
+        raise HTTPException(
+            status_code=501,
+            detail="PMTiles service is not available."
+        )
+    
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.name, t.description, t.attribution,
+                       ps.pmtiles_url, ps.tile_type, ps.min_zoom, ps.max_zoom,
+                       ps.bounds, ps.center, ps.layers
+                FROM tilesets t
+                JOIN pmtiles_sources ps ON ps.tileset_id = t.id
+                WHERE t.id = %s
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
+        
+        name, description, attribution, pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers = row
+        base_url = get_base_url(request)
+        
+        return generate_pmtiles_tilejson(
+            tileset_id=tileset_id,
+            name=name,
+            base_url=base_url,
+            tile_type=tile_type or "mvt",
+            min_zoom=min_zoom or 0,
+            max_zoom=max_zoom or 22,
+            bounds=bounds,
+            center=center,
+            description=description,
+            attribution=attribution,
+            layers=layers,
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
+
+
+@app.get("/api/tiles/pmtiles/{tileset_id}/metadata")
+async def get_pmtiles_metadata_endpoint(
+    tileset_id: str,
+    conn=Depends(get_connection),
+):
+    """
+    Get metadata from a PMTiles file.
+    
+    This endpoint reads metadata directly from the PMTiles file header.
+    
+    Args:
+        tileset_id: Tileset ID
+    """
+    if not is_pmtiles_available():
+        raise HTTPException(
+            status_code=501,
+            detail="PMTiles service is not available."
+        )
+    
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ps.pmtiles_url, t.name, t.description
+                FROM pmtiles_sources ps
+                JOIN tilesets t ON ps.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
+        
+        pmtiles_url, name, description = row
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Get metadata from PMTiles file
+    try:
+        metadata = await get_pmtiles_metadata(pmtiles_url)
+        return {
+            "tileset_id": tileset_id,
+            "name": name,
+            "description": description,
+            "pmtiles_url": pmtiles_url,
+            **metadata,
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
@@ -866,12 +1081,27 @@ def get_tileset_tilejson(tileset_id: str, request: Request, conn=Depends(get_con
         name, description, tile_type, tile_format, min_zoom, max_zoom, attribution = row
         base_url = get_base_url(request)
 
-        # For vector tilesets, use features endpoint
+        # Determine tile URL based on type
         if tile_type == "vector":
             tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
-        else:
-            # For raster, use raster endpoint
+        elif tile_type == "raster":
             tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format or 'png'}"
+        elif tile_type == "pmtiles":
+            # Check PMTiles source
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tile_type FROM pmtiles_sources WHERE tileset_id = %s",
+                    (tileset_id,),
+                )
+                pmtiles_row = cur.fetchone()
+            
+            if pmtiles_row:
+                ext = "pbf" if pmtiles_row[0] == "mvt" else (pmtiles_row[0] or "pbf")
+                tile_url = f"{base_url}/api/tiles/pmtiles/{tileset_id}/{{z}}/{{x}}/{{y}}.{ext}"
+            else:
+                tile_url = f"{base_url}/api/tiles/pmtiles/{tileset_id}/{{z}}/{{x}}/{{y}}.pbf"
+        else:
+            tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
 
         return {
             "tilejson": "3.0.0",
@@ -937,6 +1167,7 @@ PREVIEW_HTML = """
         <h3>🗺️ geo-base Tile Server</h3>
         <p>API: <span id="api-status" class="status loading">checking...</span></p>
         <p>DB: <span id="db-status" class="status loading">checking...</span></p>
+        <p>PMTiles: <span id="pmtiles-status" class="status loading">checking...</span></p>
         <p>Rasterio: <span id="rasterio-status" class="status loading">checking...</span></p>
         <div class="endpoints">
             <h4>API Endpoints</h4>
@@ -958,13 +1189,18 @@ PREVIEW_HTML = """
             .then(res => res.json())
             .then(data => {
                 const el = document.getElementById('api-status');
-                el.textContent = data.status === 'ok' ? '✓ OK' : '✗ Error';
+                el.textContent = data.status === 'ok' ? '✔ OK' : '✗ Error';
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
                 
                 // Check rasterio availability
                 const rasterioEl = document.getElementById('rasterio-status');
-                rasterioEl.textContent = data.rasterio_available ? '✓ Available' : '✗ Not installed';
+                rasterioEl.textContent = data.rasterio_available ? '✔ Available' : '✗ Not installed';
                 rasterioEl.className = 'status ' + (data.rasterio_available ? 'ok' : 'error');
+                
+                // Check PMTiles availability
+                const pmtilesEl = document.getElementById('pmtiles-status');
+                pmtilesEl.textContent = data.pmtiles_available ? '✔ Available' : '✗ Not installed';
+                pmtilesEl.className = 'status ' + (data.pmtiles_available ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('api-status');
@@ -977,7 +1213,7 @@ PREVIEW_HTML = """
             .then(res => res.json())
             .then(data => {
                 const el = document.getElementById('db-status');
-                el.textContent = data.status === 'ok' ? '✓ Connected' : '✗ ' + data.database;
+                el.textContent = data.status === 'ok' ? '✔ Connected' : '✗ ' + data.database;
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
             })
             .catch(() => {

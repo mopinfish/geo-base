@@ -1,6 +1,7 @@
 //////////////// Project Structure ////////////////
 
 DEPLOY.md
+HANDOVER.md
 LICENSE
 README.md
 api/README.md
@@ -9,6 +10,7 @@ api/lib/__init__.py
 api/lib/config.py
 api/lib/database.py
 api/lib/main.py
+api/lib/raster_tiles.py
 api/lib/tiles.py
 api/pyproject.toml
 api/requirements.txt
@@ -16,6 +18,7 @@ api/runtime.txt
 api/uv.lock
 docker/docker-compose.yml
 docker/postgis-init/01_init.sql
+docker/postgis-init/02_raster_schema.sql
 mcp/README.md
 mcp/pyproject.toml
 mcp/tools/__init__.py
@@ -203,6 +206,554 @@ git push origin main
 - [FastAPI on Vercel](https://vercel.com/guides/using-fastapi-with-vercel)
 
 
+//////////////// FILE: HANDOVER.md ////////////////
+
+# geo-base プロジェクト 引き継ぎドキュメント
+
+**作成日**: 2025-12-12  
+**最終更新**: 2025-12-12  
+**プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
+**リポジトリ**: https://github.com/mopinfish/geo-base  
+**本番URL**: https://geo-base-puce.vercel.app/
+
+---
+
+## 1. プロジェクト概要
+
+### 目的
+地理空間データ（ラスタ/ベクタタイル）を配信するタイルサーバーシステムの構築。MCPサーバーを通じてClaudeとの連携も可能にする。
+
+### アーキテクチャ
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Admin UI      │     │   MCP Server    │     │   外部クライアント  │
+│   (Next.js)     │     │   (FastMCP)     │     │   (MapLibre等)   │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │     Tile Server API     │
+                    │   (FastAPI on Vercel)   │
+                    │   ※将来: Fly.io移行予定  │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │   PostgreSQL + PostGIS  │
+                    │      (Supabase)         │
+                    └─────────────────────────┘
+```
+
+---
+
+## 2. 完了した作業（フェーズ1）
+
+### Step 1.1: プロジェクト初期設定 ✅
+- Monorepo構造の作成
+- 各サブプロジェクトの設定ファイル（pyproject.toml等）
+- Docker Compose（ローカルPostGIS）
+- データベーススキーマ設計
+
+### Step 1.2: FastAPIタイルサーバー構築 ✅
+- ヘルスチェックエンドポイント
+- MBTilesからの静的タイル配信
+- PostGISからの動的MVT生成
+- TileJSON生成
+- MapLibre GL JSプレビューページ
+
+### Step 1.3: 動的タイル生成機能の充実 ✅
+- 属性フィルタリング対応（`filter`パラメータ）
+- ズームレベルに応じたジオメトリ簡略化
+- キャッシュヘッダーの最適化
+
+### Step 1.4: Vercelデプロイ ✅
+- Supabase PostgreSQL + PostGIS接続
+- Pooler接続（ポート6543）+ SSL
+- 本番環境での動作確認
+
+### Step 1.5: ラスタタイル対応（COG/GeoTIFF）⚠️ 部分完了
+- rio-tilerによるCOGタイル生成モジュール実装
+- ラスタタイルエンドポイント追加
+- raster_sourcesテーブル追加
+- **制限事項**: Vercel環境ではrio-tiler（GDAL依存）が動作しないため、ラスタタイル機能は利用不可
+- **今後の方針**: Fly.ioへの移行時に有効化予定
+
+---
+
+## 3. 現在のファイル構成
+
+```
+geo-base/
+├── api/                          # FastAPI タイルサーバー
+│   ├── lib/
+│   │   ├── __init__.py
+│   │   ├── config.py            # 設定管理（pydantic-settings）
+│   │   ├── database.py          # DB接続（サーバーレス対応）
+│   │   ├── main.py              # FastAPIアプリ・エンドポイント
+│   │   ├── tiles.py             # ベクタータイル生成ユーティリティ
+│   │   └── raster_tiles.py      # ラスタータイル生成ユーティリティ【新規】
+│   ├── data/                    # MBTilesファイル格納（ローカル用）
+│   ├── index.py                 # Vercelエントリーポイント
+│   ├── pyproject.toml
+│   ├── requirements.txt         # Vercel用依存関係
+│   ├── runtime.txt              # Pythonバージョン指定
+│   ├── .env.example
+│   └── .python-version
+├── mcp/                          # MCPサーバー（未実装）
+│   ├── tools/
+│   │   └── __init__.py
+│   ├── pyproject.toml
+│   ├── .env.example
+│   └── .python-version
+├── app/                          # Next.js管理画面（未実装）
+│   └── src/
+├── docker/
+│   ├── docker-compose.yml       # ローカルPostGIS
+│   └── postgis-init/
+│       ├── 01_init.sql          # 基本スキーマ定義
+│       └── 02_raster_schema.sql # ラスターソーステーブル【新規】
+├── packages/                     # 共有パッケージ（未実装）
+│   └── shared/
+│       └── types/
+├── scripts/
+│   ├── setup.sh                 # 環境セットアップ
+│   └── seed.sh                  # テストデータ投入
+├── vercel.json                  # Vercel設定
+├── DEPLOY.md                    # デプロイ手順書
+├── README.md
+└── .gitignore
+```
+
+---
+
+## 4. 技術スタック
+
+| レイヤー | 技術 | バージョン | 備考 |
+|---------|------|-----------|------|
+| API Framework | FastAPI | 0.115.x | |
+| Database | PostgreSQL + PostGIS | 16 + 3.4 | |
+| Database Hosting | Supabase | - | |
+| API Hosting | Vercel Serverless | Python 3.12 | 将来Fly.io移行予定 |
+| Package Manager | uv | latest | |
+| Vector Tiles | PostGIS ST_AsMVT | - | |
+| Raster Tiles | rio-tiler | 7.0+ | ⚠️ Vercelでは動作不可 |
+| Tile Format | MVT (pbf), PNG | - | |
+
+### 主要ライブラリ
+
+```
+# api/requirements.txt より
+fastapi==0.115.6
+pydantic==2.10.3
+pydantic-settings==2.6.1
+psycopg2-binary==2.9.10
+pymbtiles==0.5.0
+shapely==2.0.6
+geoalchemy2==0.15.2
+httpx==0.28.1
+rio-tiler>=7.0.0      # ⚠️ Vercelでは動作不可
+rasterio>=1.4.0       # ⚠️ Vercelでは動作不可
+```
+
+---
+
+## 5. 環境設定
+
+### ローカル開発
+
+```bash
+# PostGIS起動
+cd docker && docker compose up -d
+
+# API起動
+cd api
+cp .env.example .env  # DATABASE_URLをローカル用に設定
+uv sync
+uv run uvicorn lib.main:app --reload --port 3000
+```
+
+### 本番環境（Vercel）
+
+環境変数:
+| 変数名 | 値 |
+|--------|-----|
+| `DATABASE_URL` | `postgresql://postgres.xxx:[PASSWORD]@aws-0-xxx.pooler.supabase.com:6543/postgres` |
+| `ENVIRONMENT` | `production` |
+
+**重要**: Supabaseへの接続は**Pooler（ポート6543）**を使用すること。直接接続（ポート5432）はサーバーレス環境では接続枯渇の問題が発生する。
+
+---
+
+## 6. データベーススキーマ
+
+### tilesets テーブル
+```sql
+CREATE TABLE tilesets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('raster', 'vector')),
+    format VARCHAR(50) NOT NULL,
+    min_zoom INTEGER DEFAULT 0,
+    max_zoom INTEGER DEFAULT 22,
+    bounds GEOMETRY(POLYGON, 4326),
+    center GEOMETRY(POINT, 4326),
+    attribution TEXT,
+    is_public BOOLEAN DEFAULT false,
+    user_id UUID,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### features テーブル
+```sql
+CREATE TABLE features (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tileset_id UUID REFERENCES tilesets(id) ON DELETE CASCADE,
+    layer_name VARCHAR(255) DEFAULT 'default',
+    geom GEOMETRY NOT NULL,
+    properties JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 空間インデックス
+CREATE INDEX idx_features_geom ON features USING GIST (geom);
+```
+
+### raster_sources テーブル【新規】
+```sql
+CREATE TABLE raster_sources (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tileset_id UUID NOT NULL REFERENCES tilesets(id) ON DELETE CASCADE,
+    cog_url TEXT NOT NULL,                    -- COGファイルのURL
+    storage_provider VARCHAR(50) DEFAULT 'http',  -- 'supabase', 's3', 'http'
+    band_count INTEGER,
+    band_descriptions JSONB DEFAULT '[]',
+    statistics JSONB DEFAULT '{}',
+    native_crs VARCHAR(50),
+    native_resolution FLOAT,
+    recommended_min_zoom INTEGER,
+    recommended_max_zoom INTEGER,
+    acquisition_date TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (tileset_id)
+);
+```
+
+---
+
+## 7. 実装済みAPIエンドポイント
+
+### ベクタータイル（Vercelで動作）
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/` | プレビューページ（MapLibre GL JS） |
+| GET | `/api/health` | ヘルスチェック |
+| GET | `/api/health/db` | DB接続チェック |
+| GET | `/api/tilesets` | タイルセット一覧 |
+| GET | `/api/tilesets/{id}` | タイルセット詳細 |
+| GET | `/api/tilesets/{id}/tilejson.json` | タイルセットのTileJSON |
+| GET | `/api/tiles/features/{z}/{x}/{y}.pbf` | フィーチャーMVTタイル |
+| GET | `/api/tiles/features/tilejson.json` | フィーチャーのTileJSON |
+| GET | `/api/tiles/dynamic/{layer}/{z}/{x}/{y}.pbf` | 動的MVTタイル |
+| GET | `/api/tiles/mbtiles/{name}/{z}/{x}/{y}.{fmt}` | MBTilesタイル（ローカル用） |
+
+### ラスタータイル（⚠️ Vercelでは動作不可、Fly.io移行後に有効化）
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{format}` | ラスタタイル取得 |
+| GET | `/api/tiles/raster/{tileset_id}/tilejson.json` | TileJSON |
+| GET | `/api/tiles/raster/{tileset_id}/preview` | プレビュー画像 |
+| GET | `/api/tiles/raster/{tileset_id}/info` | COGメタデータ |
+| GET | `/api/tiles/raster/{tileset_id}/statistics` | バンド統計情報 |
+
+### フィルタリング機能
+
+`/api/tiles/features/{z}/{x}/{y}.pbf` は以下のクエリパラメータをサポート:
+
+| パラメータ | 説明 | 例 |
+|-----------|------|-----|
+| `tileset_id` | タイルセットIDでフィルタ | `tileset_id=uuid` |
+| `layer` | レイヤー名でフィルタ | `layer=landmarks` |
+| `filter` | 属性フィルタ式 | `filter=properties.type=station` |
+| `simplify` | 簡略化の有効/無効 | `simplify=false` |
+
+#### フィルタ式の構文
+
+```
+# 単純等価
+properties.type=station
+
+# 複数値（OR）
+properties.type=station,landmark
+
+# パターンマッチ
+properties.name~Tokyo
+
+# 複数条件（AND）
+properties.type=station;properties.name~Tokyo
+
+# 否定
+properties.type!=temple
+
+# 数値比較
+properties.population>1000000
+```
+
+---
+
+## 8. 今後の課題と実装方針
+
+### フェーズ1 追加機能（優先度: 高）
+
+#### 8.1 ラスタタイル対応（COG/GeoTIFF）⚠️ 部分完了
+
+**実装状況**: コード実装済み、Vercelでは動作不可
+
+**制限事項**:
+- rio-tiler/rasterioはGDAL（ネイティブライブラリ）に依存
+- Vercel Serverless環境ではネイティブ依存ライブラリが動作しない
+
+**今後の方針**:
+- API全体をFly.io（Docker）に移行時にラスタタイル機能を有効化
+- MCPサーバーと同じインフラ基盤で統一
+
+**サンプルCOGデータ**:
+```
+# Sentinel-2 True Color Image (AWS Public Dataset)
+https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/54/T/WN/2023/11/S2B_54TWN_20231118_1_L2A/TCI.tif
+```
+
+#### 8.2 PMTiles対応
+
+**目的**: PMTiles形式のタイルアーカイブに対応
+
+**実装方針**:
+1. `pmtiles` Pythonライブラリを使用（ネイティブ依存なし、Vercelでも動作可能）
+2. PMTilesファイルはHTTPレンジリクエストでアクセス
+3. 新規エンドポイント: `/api/tiles/pmtiles/{tileset_name}/{z}/{x}/{y}.{format}`
+
+**参考コード**:
+```python
+from pmtiles.reader import Reader, MmapSource, HttpSource
+
+def get_pmtiles_tile(pmtiles_url: str, z: int, x: int, y: int):
+    with Reader(HttpSource(pmtiles_url)) as reader:
+        tile_data = reader.get(z, x, y)
+        return tile_data
+```
+
+#### 8.3 認証機能（Supabase Auth）
+
+**目的**: タイルセットへのアクセス制御
+
+**実装方針**:
+1. Supabase Auth JWTトークン検証
+2. `is_public=false` のタイルセットは認証必須
+3. Row Level Security (RLS) の活用
+
+**実装ステップ**:
+1. Supabase Auth設定
+2. JWT検証ミドルウェア追加
+3. `user_id` に基づくアクセス制御
+4. RLSポリシー設定
+
+---
+
+### フェーズ2: MCPサーバー機能（優先度: 中）
+
+**目的**: Claude DesktopからGeoデータを検索・取得できるようにする
+
+**技術スタック**:
+- フレームワーク: FastMCP
+- ホスティング: Fly.io
+- プロトコル: MCP over HTTP/SSE
+
+**実装予定ツール**:
+
+| ツール名 | 説明 | パラメータ |
+|---------|------|-----------|
+| `list_tilesets` | タイルセット一覧取得 | `type?`, `is_public?` |
+| `get_tileset` | タイルセット詳細取得 | `tileset_id` |
+| `search_features` | フィーチャー検索 | `bbox?`, `layer?`, `filter?`, `limit?` |
+| `get_tile` | タイルデータ取得 | `tileset_id`, `z`, `x`, `y` |
+| `geocode` | 住所→座標変換 | `address` |
+| `reverse_geocode` | 座標→住所変換 | `lat`, `lng` |
+
+**ディレクトリ構造案**:
+```
+mcp/
+├── server.py              # FastMCPサーバー
+├── tools/
+│   ├── __init__.py
+│   ├── tilesets.py       # タイルセット関連ツール
+│   ├── features.py       # フィーチャー関連ツール
+│   └── geocoding.py      # ジオコーディングツール
+├── pyproject.toml
+└── Dockerfile            # Fly.io用
+```
+
+**Fly.io デプロイ**:
+```bash
+fly launch --name geo-base-mcp
+fly secrets set DATABASE_URL=...
+fly deploy
+```
+
+---
+
+### フェーズ3: 管理画面（Next.js）（優先度: 低）
+
+**目的**: タイルセットとフィーチャーの管理UI
+
+**技術スタック**:
+- フレームワーク: Next.js 14+ (App Router)
+- UI: shadcn/ui + Tailwind CSS
+- 地図: MapLibre GL JS
+- 認証: Supabase Auth
+
+**画面構成案**:
+
+1. **ダッシュボード** (`/`)
+   - タイルセット一覧
+   - 使用統計
+
+2. **タイルセット管理** (`/tilesets`)
+   - 一覧表示
+   - 作成・編集・削除
+   - プレビュー地図
+
+3. **フィーチャー管理** (`/tilesets/[id]/features`)
+   - フィーチャー一覧
+   - GeoJSON/Shapefileアップロード
+   - 地図上での編集
+
+4. **設定** (`/settings`)
+   - APIキー管理
+   - ユーザー設定
+
+---
+
+### 将来の移行計画: Vercel → Fly.io
+
+**目的**: ラスタタイル機能の有効化、MCPサーバーとの統一基盤
+
+**移行内容**:
+- API（FastAPI）をDockerコンテナ化
+- Fly.ioへデプロイ
+- rio-tiler/rasterioの有効化
+- MCPサーバーと同じインフラで運用
+
+**Dockerfile案**:
+```dockerfile
+FROM python:3.12-slim
+
+# GDAL依存関係インストール
+RUN apt-get update && apt-get install -y \
+    libgdal-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+CMD ["uvicorn", "lib.main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+---
+
+## 9. 参照資料
+
+### プロジェクト内ドキュメント
+- `/mnt/project/geolocation-tech-source.txt` - タイルサーバー実装のサンプルコード
+- `/mnt/project/PROJECT_ROADMAP.md` - プロジェクトロードマップ
+- `/mnt/project/geo-base.txt` - 最新ソースコード
+
+### 外部ドキュメント
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [PostGIS MVT Functions](https://postgis.net/docs/ST_AsMVT.html)
+- [TileJSON Specification](https://github.com/mapbox/tilejson-spec)
+- [Mapbox Vector Tile Specification](https://github.com/mapbox/vector-tile-spec)
+- [PMTiles Specification](https://github.com/protomaps/PMTiles)
+- [Cloud Optimized GeoTIFF](https://www.cogeo.org/)
+- [rio-tiler Documentation](https://cogeotiff.github.io/rio-tiler/)
+- [FastMCP Documentation](https://github.com/jlowin/fastmcp)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Fly.io Documentation](https://fly.io/docs/)
+
+---
+
+## 10. 注意事項・Tips
+
+### Vercelデプロイ時の注意
+
+1. **Python依存関係**: ネイティブ依存のあるライブラリ（rasterio等）は動作しない
+2. **接続タイムアウト**: Serverless Functionは最大30秒（Proプランで60秒）
+3. **コールドスタート**: 初回リクエストは遅延する可能性がある
+4. **モジュールパス**: `index.py`で`sys.path`の調整が必要
+
+### Supabase接続の注意
+
+1. **Pooler必須**: サーバーレス環境では必ずPooler接続（ポート6543）を使用
+2. **SSL必須**: `?sslmode=require` が自動付与される
+3. **PostGIS拡張**: 手動で `CREATE EXTENSION postgis;` が必要
+
+### ローカル開発Tips
+
+```bash
+# APIディレクトリで実行すること
+cd api
+uv run uvicorn lib.main:app --reload --port 3000
+
+# テストデータ投入
+cd .. && bash scripts/seed.sh
+
+# データベースマイグレーション（ラスター対応）
+psql -h localhost -U postgres -d geo_base -f docker/postgis-init/02_raster_schema.sql
+```
+
+### ラスタタイル開発（ローカル環境のみ）
+
+```bash
+# rio-tiler/rasterioインストール（ローカル環境）
+cd api
+uv add rio-tiler rasterio
+
+# ヘルスチェックでrasterio_available: trueを確認
+curl http://localhost:3000/api/health
+```
+
+---
+
+## 11. 連絡先・引き継ぎ情報
+
+- **GitHub**: https://github.com/mopinfish/geo-base
+- **本番環境**: https://geo-base-puce.vercel.app/
+- **Supabaseプロジェクト**: `zxpfupcxwfzfjvpfadww`
+
+---
+
+## 12. 変更履歴
+
+| 日付 | 変更内容 |
+|------|---------|
+| 2025-12-12 | 初版作成（Step 1.1〜1.4完了） |
+| 2025-12-12 | ラスタタイル対応（Step 1.5）追加、Fly.io移行方針追記 |
+
+---
+
+*このドキュメントは2025-12-12時点の情報です。*
+
+
 //////////////// FILE: LICENSE ////////////////
 
 MIT License
@@ -373,46 +924,31 @@ uv run uvicorn lib.main:app --reload --port 3000
 //////////////// FILE: api/index.py ////////////////
 
 """
-Vercel Serverless Function Entry Point
+Vercel entry point for geo-base API.
 
-This file exports the FastAPI app for Vercel deployment.
+This file is used by Vercel to serve the FastAPI application.
 """
 
 import sys
 from pathlib import Path
 
-# Add the api directory to the path for imports
+# Add the api directory to the Python path for Vercel
+# This is needed because Vercel runs from the project root
 api_dir = Path(__file__).parent
 if str(api_dir) not in sys.path:
     sys.path.insert(0, str(api_dir))
 
 from lib.main import app
 
-# Vercel expects the app to be named 'app' or 'handler'
-# FastAPI apps work directly with Vercel's Python runtime
+# Vercel requires the app to be exported as 'app'
+# The handler is automatically provided by Vercel Python runtime
 
 
 //////////////// FILE: api/lib/__init__.py ////////////////
 
 """
-geo-base API Library
-
-FastAPI-based Tile Server for geo-base.
+geo-base API library.
 """
-
-__version__ = "0.1.0"
-
-from lib.config import Settings, get_settings
-from lib.database import get_connection, get_db_connection
-from lib.main import app
-
-__all__ = [
-    "app",
-    "Settings",
-    "get_settings",
-    "get_connection",
-    "get_db_connection",
-]
 
 
 //////////////// FILE: api/lib/config.py ////////////////
@@ -449,6 +985,10 @@ class Settings(BaseSettings):
     supabase_anon_key: Optional[str] = None
     supabase_service_role_key: Optional[str] = None
 
+    # Supabase Storage settings
+    supabase_storage_bucket: str = "geo-tiles"  # Default bucket name for COG files
+    supabase_storage_public_url: Optional[str] = None  # Public URL for storage
+
     # Vercel Blob (optional, for production)
     blob_read_write_token: Optional[str] = None
 
@@ -457,6 +997,13 @@ class Settings(BaseSettings):
 
     # Tile settings
     default_tile_cache_ttl: int = 86400  # 24 hours
+
+    # Raster tile settings
+    raster_default_scale_min: float = 0
+    raster_default_scale_max: float = 3000
+    raster_default_format: str = "png"
+    raster_max_preview_size: int = 1024
+    raster_tile_size: int = 256
 
     @property
     def is_vercel(self) -> bool:
@@ -467,6 +1014,16 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production."""
         return self.environment == "production" or self.is_vercel
+
+    @property
+    def supabase_storage_base_url(self) -> Optional[str]:
+        """Get Supabase Storage base URL for public access."""
+        if self.supabase_storage_public_url:
+            return self.supabase_storage_public_url
+        if self.supabase_url:
+            # Default Supabase Storage URL pattern
+            return f"{self.supabase_url}/storage/v1/object/public/{self.supabase_storage_bucket}"
+        return None
 
 
 @lru_cache
@@ -709,6 +1266,18 @@ from lib.tiles import (
     get_mbtiles_metadata,
     get_tile_from_mbtiles,
 )
+from lib.raster_tiles import (
+    RASTER_MEDIA_TYPES,
+    is_rasterio_available,
+    get_raster_tile_async,
+    get_raster_preview,
+    get_cog_info,
+    get_cog_statistics,
+    generate_raster_tilejson,
+    get_raster_cache_headers,
+    get_raster_media_type,
+    validate_tile_format,
+)
 
 
 @asynccontextmanager
@@ -764,6 +1333,7 @@ def health_check():
         "status": "ok",
         "version": "0.1.0",
         "environment": settings.environment,
+        "rasterio_available": is_rasterio_available(),
     }
 
 
@@ -969,6 +1539,412 @@ def get_features_vector_tile(
 
 
 # ============================================================================
+# Tile Endpoints - Raster (COG)
+# ============================================================================
+
+
+@app.get("/api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{tile_format}")
+async def get_raster_tile(
+    tileset_id: str,
+    z: int,
+    x: int,
+    y: int,
+    tile_format: str,
+    indexes: str = Query(None, description="Comma-separated band indexes (e.g., '1,2,3')"),
+    scale_min: float = Query(None, description="Minimum value for rescaling"),
+    scale_max: float = Query(None, description="Maximum value for rescaling"),
+    colormap: str = Query(None, description="Colormap name for single-band visualization"),
+    conn=Depends(get_connection),
+):
+    """
+    Get a raster tile from a Cloud Optimized GeoTIFF (COG).
+    
+    Args:
+        tileset_id: Tileset ID or 'url' for direct COG URL access
+        z: Zoom level
+        x: X tile coordinate
+        y: Y tile coordinate
+        tile_format: Output format (png, jpg, webp)
+        indexes: Comma-separated band indexes (e.g., '1,2,3' for RGB)
+        scale_min: Minimum value for rescaling (default from settings)
+        scale_max: Maximum value for rescaling (default from settings)
+        colormap: Colormap name for single-band visualization
+    """
+    # Check if rio-tiler is available
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster tile service is not available. rio-tiler/rasterio not installed."
+        )
+    
+    # Validate tile format
+    try:
+        normalized_format = validate_tile_format(tile_format)
+        media_type = get_raster_media_type(normalized_format)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url, t.min_zoom, t.max_zoom,
+                       COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
+                       COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max,
+                       COALESCE(t.metadata->>'bands', NULL) as default_bands
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (settings.raster_default_scale_min, settings.raster_default_scale_max, tileset_id),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url, min_zoom, max_zoom, db_scale_min, db_scale_max, default_bands = row
+        
+        # Validate zoom level
+        if min_zoom and z < min_zoom:
+            raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
+        if max_zoom and z > max_zoom:
+            raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Parse band indexes
+    band_indexes = None
+    if indexes:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid band indexes format")
+    elif default_bands:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in default_bands.split(","))
+        except ValueError:
+            pass
+    
+    # Use provided scale values or database defaults
+    final_scale_min = scale_min if scale_min is not None else db_scale_min
+    final_scale_max = scale_max if scale_max is not None else db_scale_max
+    
+    # Generate tile
+    try:
+        tile_data = await get_raster_tile_async(
+            cog_url=cog_url,
+            z=z,
+            x=x,
+            y=y,
+            indexes=band_indexes,
+            scale_min=final_scale_min,
+            scale_max=final_scale_max,
+            img_format=normalized_format,
+            tile_size=settings.raster_tile_size,
+            colormap=colormap,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    if tile_data is None:
+        # Return empty/transparent tile for out-of-bounds requests
+        raise HTTPException(status_code=404, detail="Tile outside COG bounds")
+    
+    headers = get_raster_cache_headers(z, is_static=True)
+    
+    return Response(content=tile_data, media_type=media_type, headers=headers)
+
+
+@app.get("/api/tiles/raster/{tileset_id}/tilejson.json")
+def get_raster_tilejson(
+    tileset_id: str,
+    request: Request,
+    conn=Depends(get_connection),
+):
+    """
+    Get TileJSON for a raster tileset.
+    
+    Args:
+        tileset_id: Tileset ID
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.name, t.description, t.format, t.min_zoom, t.max_zoom,
+                       t.attribution, rs.cog_url
+                FROM tilesets t
+                LEFT JOIN raster_sources rs ON rs.tileset_id = t.id
+                WHERE t.id = %s AND t.type = 'raster'
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        name, description, tile_format, min_zoom, max_zoom, attribution, cog_url = row
+        base_url = get_base_url(request)
+        
+        # Try to get bounds from COG if available
+        bounds = None
+        center = None
+        if cog_url and is_rasterio_available():
+            try:
+                cog_info = get_cog_info(cog_url)
+                bounds = list(cog_info["bounds"])
+                # Calculate center
+                center_lng = (bounds[0] + bounds[2]) / 2
+                center_lat = (bounds[1] + bounds[3]) / 2
+                center = [center_lng, center_lat, (min_zoom or 0 + max_zoom or 18) // 2]
+            except Exception:
+                pass
+        
+        return generate_raster_tilejson(
+            tileset_id=tileset_id,
+            name=name,
+            base_url=base_url,
+            tile_format=tile_format or "png",
+            min_zoom=min_zoom or 0,
+            max_zoom=max_zoom or 22,
+            bounds=bounds,
+            center=center,
+            description=description,
+            attribution=attribution,
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
+
+
+@app.get("/api/tiles/raster/{tileset_id}/preview")
+async def get_raster_tile_preview(
+    tileset_id: str,
+    indexes: str = Query(None, description="Comma-separated band indexes"),
+    scale_min: float = Query(None, description="Minimum value for rescaling"),
+    scale_max: float = Query(None, description="Maximum value for rescaling"),
+    max_size: int = Query(512, description="Maximum dimension of preview image"),
+    format: str = Query("png", description="Output format (png, jpg, webp)"),
+    colormap: str = Query(None, description="Colormap name"),
+    conn=Depends(get_connection),
+):
+    """
+    Get a preview image of a raster tileset.
+    
+    Args:
+        tileset_id: Tileset ID
+        indexes: Comma-separated band indexes
+        scale_min: Minimum value for rescaling
+        scale_max: Maximum value for rescaling
+        max_size: Maximum dimension of preview
+        format: Output format
+        colormap: Colormap name
+    """
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster preview service is not available."
+        )
+    
+    # Validate format
+    try:
+        normalized_format = validate_tile_format(format)
+        media_type = get_raster_media_type(normalized_format)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Limit max_size
+    max_size = min(max_size, settings.raster_max_preview_size)
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url,
+                       COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
+                       COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (settings.raster_default_scale_min, settings.raster_default_scale_max, tileset_id),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url, db_scale_min, db_scale_max = row
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Parse band indexes
+    band_indexes = None
+    if indexes:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid band indexes format")
+    
+    # Use provided scale values or database defaults
+    final_scale_min = scale_min if scale_min is not None else db_scale_min
+    final_scale_max = scale_max if scale_max is not None else db_scale_max
+    
+    # Generate preview
+    try:
+        preview_data = get_raster_preview(
+            cog_url=cog_url,
+            indexes=band_indexes,
+            scale_min=final_scale_min,
+            scale_max=final_scale_max,
+            img_format=normalized_format,
+            max_size=max_size,
+            colormap=colormap,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    headers = {
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+    }
+    
+    return Response(content=preview_data, media_type=media_type, headers=headers)
+
+
+@app.get("/api/tiles/raster/{tileset_id}/info")
+def get_raster_info(
+    tileset_id: str,
+    conn=Depends(get_connection),
+):
+    """
+    Get metadata information about a raster tileset's COG.
+    
+    Args:
+        tileset_id: Tileset ID
+    """
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster info service is not available."
+        )
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url, t.name, t.description
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE t.id = %s
+                LIMIT 1
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url, name, description = row
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Get COG info
+    try:
+        cog_info = get_cog_info(cog_url)
+        return {
+            "tileset_id": tileset_id,
+            "name": name,
+            "description": description,
+            "cog_url": cog_url,
+            **cog_info,
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/tiles/raster/{tileset_id}/statistics")
+def get_raster_statistics(
+    tileset_id: str,
+    indexes: str = Query(None, description="Comma-separated band indexes"),
+    conn=Depends(get_connection),
+):
+    """
+    Get statistics for a raster tileset's bands.
+    
+    Args:
+        tileset_id: Tileset ID
+        indexes: Comma-separated band indexes to analyze
+    """
+    if not is_rasterio_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Raster statistics service is not available."
+        )
+    
+    # Get COG URL from database
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.cog_url
+                FROM raster_sources rs
+                WHERE rs.tileset_id = %s
+                LIMIT 1
+                """,
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+        
+        cog_url = row[0]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Parse band indexes
+    band_indexes = None
+    if indexes:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid band indexes format")
+    
+    # Get statistics
+    try:
+        stats = get_cog_statistics(cog_url, indexes=band_indexes)
+        return {
+            "tileset_id": tileset_id,
+            "statistics": stats,
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # TileJSON Endpoints
 # ============================================================================
 
@@ -1133,8 +2109,8 @@ def get_tileset_tilejson(tileset_id: str, request: Request, conn=Depends(get_con
         if tile_type == "vector":
             tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
         else:
-            # For raster, would need different endpoint
-            tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format}"
+            # For raster, use raster endpoint
+            tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format or 'png'}"
 
         return {
             "tilejson": "3.0.0",
@@ -1178,7 +2154,7 @@ PREVIEW_HTML = """
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             z-index: 1;
-            max-width: 300px;
+            max-width: 320px;
         }
         .info-panel h3 { margin: 0 0 10px 0; font-size: 18px; }
         .info-panel p { margin: 5px 0; font-size: 14px; color: #666; }
@@ -1190,6 +2166,9 @@ PREVIEW_HTML = """
         .endpoints h4 { margin: 0 0 8px 0; font-size: 14px; }
         .endpoints a { display: block; font-size: 12px; color: #007bff; margin: 4px 0; text-decoration: none; }
         .endpoints a:hover { text-decoration: underline; }
+        .layer-toggle { margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+        .layer-toggle h4 { margin: 0 0 8px 0; font-size: 14px; }
+        .layer-toggle label { display: block; font-size: 12px; margin: 4px 0; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -1197,12 +2176,18 @@ PREVIEW_HTML = """
         <h3>🗺️ geo-base Tile Server</h3>
         <p>API: <span id="api-status" class="status loading">checking...</span></p>
         <p>DB: <span id="db-status" class="status loading">checking...</span></p>
+        <p>Rasterio: <span id="rasterio-status" class="status loading">checking...</span></p>
         <div class="endpoints">
             <h4>API Endpoints</h4>
             <a href="/api/health" target="_blank">/api/health</a>
             <a href="/api/health/db" target="_blank">/api/health/db</a>
             <a href="/api/tilesets" target="_blank">/api/tilesets</a>
             <a href="/api/tiles/features/tilejson.json" target="_blank">/api/tiles/features/tilejson.json</a>
+        </div>
+        <div class="layer-toggle">
+            <h4>Layers</h4>
+            <label><input type="checkbox" id="toggle-features" checked> Vector Features</label>
+            <label><input type="checkbox" id="toggle-raster"> Sample Raster (if available)</label>
         </div>
     </div>
     <div id="map"></div>
@@ -1214,6 +2199,11 @@ PREVIEW_HTML = """
                 const el = document.getElementById('api-status');
                 el.textContent = data.status === 'ok' ? '✓ OK' : '✗ Error';
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
+                
+                // Check rasterio availability
+                const rasterioEl = document.getElementById('rasterio-status');
+                rasterioEl.textContent = data.rasterio_available ? '✓ Available' : '✗ Not installed';
+                rasterioEl.className = 'status ' + (data.rasterio_available ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('api-status');
@@ -1281,6 +2271,11 @@ PREVIEW_HTML = """
 
         map.addControl(new maplibregl.NavigationControl());
 
+        // Layer toggles
+        document.getElementById('toggle-features').addEventListener('change', (e) => {
+            map.setLayoutProperty('features-circle', 'visibility', e.target.checked ? 'visible' : 'none');
+        });
+
         // Popup on click
         map.on('click', 'features-circle', (e) => {
             const props = e.features[0].properties;
@@ -1314,6 +2309,499 @@ PREVIEW_HTML = """
 def preview_page():
     """Tile preview page with MapLibre GL JS."""
     return PREVIEW_HTML
+
+
+//////////////// FILE: api/lib/raster_tiles.py ////////////////
+
+"""
+Raster tile serving utilities for geo-base API.
+
+Features:
+- Cloud Optimized GeoTIFF (COG) tile generation
+- Dynamic tile rendering with rio-tiler
+- Multiple output formats (PNG, JPEG, WebP)
+- Band selection and rescaling
+- Preview image generation
+"""
+
+import asyncio
+from functools import lru_cache
+from io import BytesIO
+from typing import Any, Optional
+
+# Note: rio-tiler may not work in Vercel serverless due to GDAL dependencies
+# If deployment fails, consider using AWS Lambda with Docker image
+try:
+    from rio_tiler.io import Reader as COGReader
+    from rio_tiler.profiles import img_profiles
+    from rio_tiler.errors import TileOutsideBounds
+    RASTERIO_AVAILABLE = True
+except ImportError:
+    RASTERIO_AVAILABLE = False
+    COGReader = None
+    img_profiles = None
+    TileOutsideBounds = Exception
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+RASTER_MEDIA_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+}
+
+DEFAULT_TILE_SIZE = 256
+DEFAULT_SCALE_MIN = 0
+DEFAULT_SCALE_MAX = 3000  # Typical for Sentinel-2 reflectance values
+DEFAULT_RESAMPLING = "bilinear"
+
+# =============================================================================
+# Availability Check
+# =============================================================================
+
+
+def is_rasterio_available() -> bool:
+    """Check if rasterio/rio-tiler is available."""
+    return RASTERIO_AVAILABLE
+
+
+# =============================================================================
+# COG Tile Generation
+# =============================================================================
+
+
+def get_raster_tile(
+    cog_url: str,
+    z: int,
+    x: int,
+    y: int,
+    indexes: Optional[tuple[int, ...]] = None,
+    scale_min: float = DEFAULT_SCALE_MIN,
+    scale_max: float = DEFAULT_SCALE_MAX,
+    img_format: str = "png",
+    tile_size: int = DEFAULT_TILE_SIZE,
+    resampling: str = DEFAULT_RESAMPLING,
+    colormap: Optional[str] = None,
+) -> Optional[bytes]:
+    """
+    Generate a raster tile from a Cloud Optimized GeoTIFF.
+    
+    Args:
+        cog_url: URL or path to the COG file
+        z: Zoom level
+        x: X tile coordinate
+        y: Y tile coordinate
+        indexes: Band indexes to read (e.g., (1, 2, 3) for RGB)
+        scale_min: Minimum value for rescaling
+        scale_max: Maximum value for rescaling
+        img_format: Output image format (png, jpg, webp)
+        tile_size: Output tile size in pixels
+        resampling: Resampling method (bilinear, nearest, cubic, etc.)
+        colormap: Optional colormap name for single-band visualization
+        
+    Returns:
+        Tile image data as bytes, or None if tile is outside bounds
+    """
+    if not RASTERIO_AVAILABLE:
+        raise RuntimeError("rio-tiler is not available. Install with: pip install rio-tiler")
+    
+    try:
+        with COGReader(cog_url) as cog:
+            # Check if tile exists within COG bounds
+            if not cog.tile_exists(x, y, z):
+                return None
+            
+            # Read tile data
+            imgdata = cog.tile(
+                x, y, z,
+                indexes=indexes,
+                tilesize=tile_size,
+                resampling_method=resampling,
+            )
+            
+            # Rescale values to 0-255
+            imgdata.rescale(((scale_min, scale_max),))
+            
+            # Get render options
+            render_options = {}
+            if img_format.lower() in ("png", "webp"):
+                render_options = img_profiles.get("png") if img_format.lower() == "png" else {}
+            elif img_format.lower() in ("jpg", "jpeg"):
+                render_options = img_profiles.get("jpeg") or {"quality": 85}
+            
+            # Apply colormap if specified for single-band
+            if colormap and imgdata.count == 1:
+                render_options["colormap"] = colormap
+            
+            # Render to image
+            img_bytes = imgdata.render(
+                img_format=img_format.upper().replace("JPG", "JPEG"),
+                **render_options
+            )
+            
+            return img_bytes
+            
+    except TileOutsideBounds:
+        return None
+    except Exception as e:
+        raise RuntimeError(f"Error generating raster tile: {str(e)}") from e
+
+
+async def get_raster_tile_async(
+    cog_url: str,
+    z: int,
+    x: int,
+    y: int,
+    **kwargs,
+) -> Optional[bytes]:
+    """
+    Async wrapper for get_raster_tile.
+    
+    Runs the tile generation in a thread pool to avoid blocking.
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None,
+        lambda: get_raster_tile(cog_url, z, x, y, **kwargs)
+    )
+
+
+# =============================================================================
+# COG Preview Generation
+# =============================================================================
+
+
+def get_raster_preview(
+    cog_url: str,
+    indexes: Optional[tuple[int, ...]] = None,
+    scale_min: float = DEFAULT_SCALE_MIN,
+    scale_max: float = DEFAULT_SCALE_MAX,
+    img_format: str = "png",
+    max_size: int = 512,
+    colormap: Optional[str] = None,
+) -> bytes:
+    """
+    Generate a preview image from a COG.
+    
+    Args:
+        cog_url: URL or path to the COG file
+        indexes: Band indexes to read
+        scale_min: Minimum value for rescaling
+        scale_max: Maximum value for rescaling
+        img_format: Output image format
+        max_size: Maximum dimension of preview image
+        colormap: Optional colormap name
+        
+    Returns:
+        Preview image data as bytes
+    """
+    if not RASTERIO_AVAILABLE:
+        raise RuntimeError("rio-tiler is not available")
+    
+    try:
+        with COGReader(cog_url) as cog:
+            imgdata = cog.preview(
+                indexes=indexes,
+                max_size=max_size,
+            )
+            
+            imgdata.rescale(((scale_min, scale_max),))
+            
+            render_options = {}
+            if img_format.lower() in ("png", "webp"):
+                render_options = img_profiles.get("png") if img_format.lower() == "png" else {}
+            elif img_format.lower() in ("jpg", "jpeg"):
+                render_options = img_profiles.get("jpeg") or {"quality": 85}
+            
+            if colormap and imgdata.count == 1:
+                render_options["colormap"] = colormap
+            
+            return imgdata.render(
+                img_format=img_format.upper().replace("JPG", "JPEG"),
+                **render_options
+            )
+            
+    except Exception as e:
+        raise RuntimeError(f"Error generating preview: {str(e)}") from e
+
+
+# =============================================================================
+# COG Part (Bounding Box) Generation
+# =============================================================================
+
+
+def get_raster_part(
+    cog_url: str,
+    bbox: tuple[float, float, float, float],
+    indexes: Optional[tuple[int, ...]] = None,
+    scale_min: float = DEFAULT_SCALE_MIN,
+    scale_max: float = DEFAULT_SCALE_MAX,
+    img_format: str = "png",
+    max_size: int = 512,
+    dst_crs: Optional[str] = None,
+) -> bytes:
+    """
+    Generate an image for a specific bounding box from a COG.
+    
+    Args:
+        cog_url: URL or path to the COG file
+        bbox: Bounding box (minx, miny, maxx, maxy)
+        indexes: Band indexes to read
+        scale_min: Minimum value for rescaling
+        scale_max: Maximum value for rescaling
+        img_format: Output image format
+        max_size: Maximum dimension of output image
+        dst_crs: Target CRS for output (e.g., "EPSG:4326")
+        
+    Returns:
+        Image data as bytes
+    """
+    if not RASTERIO_AVAILABLE:
+        raise RuntimeError("rio-tiler is not available")
+    
+    try:
+        with COGReader(cog_url) as cog:
+            kwargs = {
+                "bbox": bbox,
+                "indexes": indexes,
+                "max_size": max_size,
+            }
+            
+            if dst_crs:
+                kwargs["dst_crs"] = dst_crs
+            
+            imgdata = cog.part(**kwargs)
+            imgdata.rescale(((scale_min, scale_max),))
+            
+            render_options = {}
+            if img_format.lower() in ("png", "webp"):
+                render_options = img_profiles.get("png") if img_format.lower() == "png" else {}
+            elif img_format.lower() in ("jpg", "jpeg"):
+                render_options = img_profiles.get("jpeg") or {"quality": 85}
+            
+            return imgdata.render(
+                img_format=img_format.upper().replace("JPG", "JPEG"),
+                **render_options
+            )
+            
+    except Exception as e:
+        raise RuntimeError(f"Error generating part image: {str(e)}") from e
+
+
+# =============================================================================
+# COG Metadata
+# =============================================================================
+
+
+def get_cog_info(cog_url: str) -> dict[str, Any]:
+    """
+    Get metadata information from a COG.
+    
+    Args:
+        cog_url: URL or path to the COG file
+        
+    Returns:
+        Dictionary with COG metadata
+    """
+    if not RASTERIO_AVAILABLE:
+        raise RuntimeError("rio-tiler is not available")
+    
+    try:
+        with COGReader(cog_url) as cog:
+            info = cog.info()
+            
+            return {
+                "bounds": info.bounds,
+                "crs": str(info.crs) if info.crs else None,
+                "band_metadata": info.band_metadata,
+                "band_descriptions": info.band_descriptions,
+                "dtype": info.dtype,
+                "nodata_type": info.nodata_type,
+                "colorinterp": info.colorinterp,
+                "count": info.count,
+                "width": info.width,
+                "height": info.height,
+                "driver": info.driver,
+                "minzoom": info.minzoom,
+                "maxzoom": info.maxzoom,
+            }
+            
+    except Exception as e:
+        raise RuntimeError(f"Error reading COG info: {str(e)}") from e
+
+
+def get_cog_statistics(
+    cog_url: str,
+    indexes: Optional[tuple[int, ...]] = None,
+) -> dict[str, Any]:
+    """
+    Get statistics for COG bands.
+    
+    Args:
+        cog_url: URL or path to the COG file
+        indexes: Band indexes to analyze
+        
+    Returns:
+        Dictionary with band statistics
+    """
+    if not RASTERIO_AVAILABLE:
+        raise RuntimeError("rio-tiler is not available")
+    
+    try:
+        with COGReader(cog_url) as cog:
+            stats = cog.statistics(indexes=indexes)
+            
+            return {
+                band: {
+                    "min": stat.min,
+                    "max": stat.max,
+                    "mean": stat.mean,
+                    "std": stat.std,
+                    "percentile_2": stat.percentile_2,
+                    "percentile_98": stat.percentile_98,
+                }
+                for band, stat in stats.items()
+            }
+            
+    except Exception as e:
+        raise RuntimeError(f"Error reading COG statistics: {str(e)}") from e
+
+
+# =============================================================================
+# TileJSON Generation for Raster
+# =============================================================================
+
+
+def generate_raster_tilejson(
+    tileset_id: str,
+    name: str,
+    base_url: str,
+    tile_format: str = "png",
+    min_zoom: int = 0,
+    max_zoom: int = 22,
+    bounds: Optional[list[float]] = None,
+    center: Optional[list[float]] = None,
+    description: Optional[str] = None,
+    attribution: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Generate TileJSON for a raster tileset.
+    
+    Args:
+        tileset_id: Tileset identifier
+        name: Tileset name
+        base_url: Base URL for tile requests
+        tile_format: Tile format (png, jpg, webp)
+        min_zoom: Minimum zoom level
+        max_zoom: Maximum zoom level
+        bounds: Tileset bounds [west, south, east, north]
+        center: Tileset center [lng, lat, zoom]
+        description: Tileset description
+        attribution: Data attribution
+        
+    Returns:
+        TileJSON specification dictionary
+    """
+    if bounds is None:
+        bounds = [-180, -85.051129, 180, 85.051129]
+    
+    if center is None:
+        center = [0, 0, 2]
+    
+    tilejson = {
+        "tilejson": "3.0.0",
+        "name": name,
+        "tiles": [f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format}"],
+        "minzoom": min_zoom,
+        "maxzoom": max_zoom,
+        "bounds": bounds,
+        "center": center,
+    }
+    
+    if description:
+        tilejson["description"] = description
+    
+    if attribution:
+        tilejson["attribution"] = attribution
+    
+    return tilejson
+
+
+# =============================================================================
+# Cache Headers for Raster Tiles
+# =============================================================================
+
+
+def get_raster_cache_headers(z: int, is_static: bool = True) -> dict[str, str]:
+    """
+    Generate cache headers for raster tiles.
+    
+    Raster tiles from COG are generally static, so we use longer cache times.
+    
+    Args:
+        z: Zoom level
+        is_static: Whether the source data is static
+        
+    Returns:
+        Dictionary of HTTP headers
+    """
+    # COG-based tiles are typically static
+    if is_static:
+        ttl = 604800  # 7 days
+    else:
+        # Dynamic raster processing (rare)
+        if z <= 6:
+            ttl = 86400  # 24 hours
+        elif z <= 12:
+            ttl = 3600  # 1 hour
+        else:
+            ttl = 300  # 5 minutes
+    
+    return {
+        "Cache-Control": f"public, max-age={ttl}, s-maxage={ttl}",
+        "Access-Control-Allow-Origin": "*",
+    }
+
+
+# =============================================================================
+# Utility Functions
+# =============================================================================
+
+
+def validate_tile_format(tile_format: str) -> str:
+    """
+    Validate and normalize tile format.
+    
+    Args:
+        tile_format: Input format string
+        
+    Returns:
+        Normalized format string
+        
+    Raises:
+        ValueError: If format is not supported
+    """
+    normalized = tile_format.lower()
+    if normalized not in RASTER_MEDIA_TYPES:
+        raise ValueError(f"Unsupported raster tile format: {tile_format}")
+    return normalized
+
+
+def get_raster_media_type(tile_format: str) -> str:
+    """
+    Get the media type for a raster tile format.
+    
+    Args:
+        tile_format: Tile format string
+        
+    Returns:
+        Media type string
+    """
+    normalized = validate_tile_format(tile_format)
+    return RASTER_MEDIA_TYPES[normalized]
 
 
 //////////////// FILE: api/lib/tiles.py ////////////////
@@ -1909,6 +3397,8 @@ dependencies = [
     "pmtiles>=3.0.0",
     "geoalchemy2>=0.14.0",
     "shapely>=2.0.0",
+    "rio-tiler>=8.0.2",
+    "rasterio>=1.4.3",
 ]
 
 [project.optional-dependencies]
@@ -1955,10 +3445,16 @@ python-dotenv==1.0.1
 # Database
 psycopg2-binary==2.9.10
 
-# Tile processing
+# Tile processing - Vector
 pymbtiles==0.5.0
 shapely==2.0.6
 geoalchemy2==0.15.2
+
+# Tile processing - Raster (COG)
+# Note: These have native dependencies (GDAL) that may not work on all platforms
+# If Vercel deployment fails, consider using AWS Lambda with Docker image
+rio-tiler>=7.0.0
+rasterio>=1.4.0
 
 # HTTP client (for future use)
 httpx==0.28.1
@@ -2189,6 +3685,8 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymbtiles" },
     { name = "python-dotenv" },
+    { name = "rasterio" },
+    { name = "rio-tiler" },
     { name = "shapely" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -2221,7 +3719,9 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "rasterio", specifier = ">=1.4.3" },
     { name = "rasterio", marker = "extra == 'raster'", specifier = ">=1.3.0" },
+    { name = "rio-tiler", specifier = ">=8.0.2" },
     { name = "rio-tiler", marker = "extra == 'raster'", specifier = ">=6.2.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "shapely", specifier = ">=2.0.0" },
@@ -3510,6 +5010,180 @@ CREATE TRIGGER update_features_updated_at
 COMMENT ON TABLE tilesets IS 'タイルセットのメタデータを管理';
 COMMENT ON TABLE features IS 'ベクタフィーチャーデータを格納';
 COMMENT ON TABLE tile_files IS '静的タイルファイルの参照情報を管理';
+
+
+//////////////// FILE: docker/postgis-init/02_raster_schema.sql ////////////////
+
+-- ============================================================================
+-- ラスタータイル対応用スキーマ拡張
+-- ============================================================================
+
+-- raster_sources テーブル: COGファイルのソース情報を管理
+CREATE TABLE IF NOT EXISTS raster_sources (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tileset_id UUID NOT NULL REFERENCES tilesets(id) ON DELETE CASCADE,
+    
+    -- COGファイルのURL（Supabase Storage, S3, HTTP URL等）
+    cog_url TEXT NOT NULL,
+    
+    -- ストレージプロバイダ
+    -- 'supabase': Supabase Storage
+    -- 's3': AWS S3
+    -- 'http': 直接HTTPアクセス
+    storage_provider VARCHAR(50) DEFAULT 'http',
+    
+    -- バンド情報
+    band_count INTEGER,
+    band_descriptions JSONB DEFAULT '[]',
+    
+    -- データ統計（キャッシュ用）
+    statistics JSONB DEFAULT '{}',
+    
+    -- COGのネイティブCRS
+    native_crs VARCHAR(50),
+    
+    -- COGのネイティブ解像度（メートル/ピクセル）
+    native_resolution FLOAT,
+    
+    -- 推奨ズームレンジ（COGの解像度から計算）
+    recommended_min_zoom INTEGER,
+    recommended_max_zoom INTEGER,
+    
+    -- 取得日時（衛星画像等のメタデータ）
+    acquisition_date TIMESTAMPTZ,
+    
+    -- メタデータ（追加情報）
+    metadata JSONB DEFAULT '{}',
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- 1つのtilesetに1つのraster_sourceのみ（将来的に複数対応可能にするため外す可能性あり）
+    UNIQUE (tileset_id)
+);
+
+-- インデックス作成
+CREATE INDEX IF NOT EXISTS idx_raster_sources_tileset_id ON raster_sources (tileset_id);
+CREATE INDEX IF NOT EXISTS idx_raster_sources_storage_provider ON raster_sources (storage_provider);
+
+-- updated_at自動更新用トリガー適用
+DROP TRIGGER IF EXISTS update_raster_sources_updated_at ON raster_sources;
+CREATE TRIGGER update_raster_sources_updated_at
+    BEFORE UPDATE ON raster_sources
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- コメント追加
+COMMENT ON TABLE raster_sources IS 'ラスタータイルセットのCOGソース情報を管理';
+COMMENT ON COLUMN raster_sources.cog_url IS 'Cloud Optimized GeoTIFFファイルのURL';
+COMMENT ON COLUMN raster_sources.storage_provider IS 'ストレージプロバイダ種別';
+COMMENT ON COLUMN raster_sources.band_descriptions IS 'バンドの説明（JSONBアレイ）';
+COMMENT ON COLUMN raster_sources.statistics IS 'バンドごとの統計情報（min, max, mean等）';
+
+-- ============================================================================
+-- サンプルデータ挿入（Sentinel-2 COG）
+-- ============================================================================
+
+-- サンプルラスタータイルセットを作成
+INSERT INTO tilesets (name, description, type, format, min_zoom, max_zoom, is_public, metadata)
+VALUES (
+    'sentinel2-sample',
+    'Sentinel-2 Sample COG (Tokyo Area)',
+    'raster',
+    'png',
+    6,
+    14,
+    true,
+    '{
+        "source": "Sentinel-2 L2A",
+        "bands": "1,2,3",
+        "scale_min": 0,
+        "scale_max": 3000,
+        "description": "RGB composite from Sentinel-2 satellite imagery"
+    }'::jsonb
+)
+ON CONFLICT DO NOTHING
+RETURNING id;
+
+-- サンプルCOGソースを登録（上記で作成したtilesetのIDを使用）
+-- Note: 実際のデプロイ時は、このURLを自分のCOGファイルに置き換えてください
+DO $$
+DECLARE
+    v_tileset_id UUID;
+BEGIN
+    -- サンプルtilesetのIDを取得
+    SELECT id INTO v_tileset_id FROM tilesets WHERE name = 'sentinel2-sample' LIMIT 1;
+    
+    IF v_tileset_id IS NOT NULL THEN
+        INSERT INTO raster_sources (
+            tileset_id,
+            cog_url,
+            storage_provider,
+            band_count,
+            band_descriptions,
+            native_crs,
+            recommended_min_zoom,
+            recommended_max_zoom,
+            metadata
+        )
+        VALUES (
+            v_tileset_id,
+            'https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/54/T/WN/2023/11/S2B_54TWN_20231118_1_L2A/TCI.tif',
+            's3',
+            3,
+            '["Red", "Green", "Blue"]'::jsonb,
+            'EPSG:32654',
+            6,
+            14,
+            '{
+                "satellite": "Sentinel-2B",
+                "processing_level": "L2A",
+                "tile_id": "54TWN",
+                "date": "2023-11-18",
+                "product": "True Color Image (TCI)"
+            }'::jsonb
+        )
+        ON CONFLICT (tileset_id) DO UPDATE
+        SET cog_url = EXCLUDED.cog_url,
+            updated_at = NOW();
+        
+        RAISE NOTICE 'Raster source created for tileset: %', v_tileset_id;
+    ELSE
+        RAISE NOTICE 'Sample tileset not found';
+    END IF;
+END $$;
+
+-- ============================================================================
+-- 便利なビュー作成
+-- ============================================================================
+
+-- ラスタータイルセット一覧ビュー
+CREATE OR REPLACE VIEW raster_tilesets_view AS
+SELECT 
+    t.id,
+    t.name,
+    t.description,
+    t.format,
+    t.min_zoom,
+    t.max_zoom,
+    t.is_public,
+    t.attribution,
+    t.metadata,
+    rs.cog_url,
+    rs.storage_provider,
+    rs.band_count,
+    rs.band_descriptions,
+    rs.native_crs,
+    rs.recommended_min_zoom,
+    rs.recommended_max_zoom,
+    rs.acquisition_date,
+    t.created_at,
+    t.updated_at
+FROM tilesets t
+JOIN raster_sources rs ON rs.tileset_id = t.id
+WHERE t.type = 'raster';
+
+COMMENT ON VIEW raster_tilesets_view IS 'ラスタータイルセットとそのソース情報を結合したビュー';
 
 
 //////////////// FILE: mcp/README.md ////////////////
