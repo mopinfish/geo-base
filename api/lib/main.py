@@ -3,13 +3,15 @@ FastAPI Tile Server for geo-base.
 """
 
 import os
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
 from lib.config import get_settings
 from lib.database import (
@@ -98,6 +100,62 @@ def get_base_url(request: Request) -> str:
     
     # Fallback to request URL
     return str(request.base_url).rstrip("/")
+
+
+# ============================================================================
+# Pydantic Models for CRUD Operations
+# ============================================================================
+
+
+class TilesetCreate(BaseModel):
+    """Request model for creating a tileset."""
+    name: str = Field(..., min_length=1, max_length=255, description="Tileset name")
+    description: Optional[str] = Field(None, description="Tileset description")
+    type: str = Field(..., pattern="^(vector|raster|pmtiles)$", description="Tileset type")
+    format: str = Field(..., pattern="^(pbf|png|jpg|webp|geojson)$", description="Tile format")
+    min_zoom: int = Field(0, ge=0, le=22, description="Minimum zoom level")
+    max_zoom: int = Field(22, ge=0, le=22, description="Maximum zoom level")
+    bounds: Optional[List[float]] = Field(None, description="Bounding box [west, south, east, north]")
+    center: Optional[List[float]] = Field(None, description="Center point [lon, lat, zoom]")
+    attribution: Optional[str] = Field(None, description="Attribution text")
+    is_public: bool = Field(False, description="Whether the tileset is public")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class TilesetUpdate(BaseModel):
+    """Request model for updating a tileset."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Tileset name")
+    description: Optional[str] = Field(None, description="Tileset description")
+    min_zoom: Optional[int] = Field(None, ge=0, le=22, description="Minimum zoom level")
+    max_zoom: Optional[int] = Field(None, ge=0, le=22, description="Maximum zoom level")
+    bounds: Optional[List[float]] = Field(None, description="Bounding box [west, south, east, north]")
+    center: Optional[List[float]] = Field(None, description="Center point [lon, lat, zoom]")
+    attribution: Optional[str] = Field(None, description="Attribution text")
+    is_public: Optional[bool] = Field(None, description="Whether the tileset is public")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class FeatureCreate(BaseModel):
+    """Request model for creating a feature."""
+    tileset_id: str = Field(..., description="Parent tileset UUID")
+    layer_name: str = Field("default", description="Layer name")
+    geometry: Dict[str, Any] = Field(..., description="GeoJSON geometry object")
+    properties: Optional[Dict[str, Any]] = Field(None, description="Feature properties")
+
+
+class FeatureUpdate(BaseModel):
+    """Request model for updating a feature."""
+    layer_name: Optional[str] = Field(None, description="Layer name")
+    geometry: Optional[Dict[str, Any]] = Field(None, description="GeoJSON geometry object")
+    properties: Optional[Dict[str, Any]] = Field(None, description="Feature properties")
+
+
+class FeatureResponse(BaseModel):
+    """Response model for a feature."""
+    id: str
+    type: str = "Feature"
+    geometry: Dict[str, Any]
+    properties: Dict[str, Any]
 
 
 # ============================================================================
@@ -1691,6 +1749,445 @@ def get_feature(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting feature: {str(e)}")
+
+
+# ============================================================================
+# Tileset CRUD Endpoints
+# ============================================================================
+
+
+@app.post("/api/tilesets", status_code=201)
+def create_tileset(
+    tileset: TilesetCreate,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Create a new tileset.
+    
+    Requires authentication.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Build bounds geometry if provided
+            bounds_sql = "NULL"
+            if tileset.bounds and len(tileset.bounds) == 4:
+                west, south, east, north = tileset.bounds
+                bounds_sql = f"ST_MakeEnvelope({west}, {south}, {east}, {north}, 4326)"
+            
+            # Build center geometry if provided
+            center_sql = "NULL"
+            if tileset.center and len(tileset.center) >= 2:
+                lon, lat = tileset.center[0], tileset.center[1]
+                center_sql = f"ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)"
+            
+            # Serialize metadata to JSON
+            metadata_json = json.dumps(tileset.metadata) if tileset.metadata else None
+            
+            cur.execute(
+                f"""
+                INSERT INTO tilesets (
+                    name, description, type, format,
+                    min_zoom, max_zoom, bounds, center,
+                    attribution, is_public, user_id, metadata
+                )
+                VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, {bounds_sql}, {center_sql},
+                    %s, %s, %s, %s
+                )
+                RETURNING id, name, description, type, format,
+                          min_zoom, max_zoom, attribution, is_public,
+                          created_at, updated_at
+                """,
+                (
+                    tileset.name,
+                    tileset.description,
+                    tileset.type,
+                    tileset.format,
+                    tileset.min_zoom,
+                    tileset.max_zoom,
+                    tileset.attribution,
+                    tileset.is_public,
+                    user.id,
+                    metadata_json,
+                ),
+            )
+            
+            row = cur.fetchone()
+            conn.commit()
+            
+            return {
+                "id": str(row[0]),
+                "name": row[1],
+                "description": row[2],
+                "type": row[3],
+                "format": row[4],
+                "min_zoom": row[5],
+                "max_zoom": row[6],
+                "attribution": row[7],
+                "is_public": row[8],
+                "created_at": row[9].isoformat() if row[9] else None,
+                "updated_at": row[10].isoformat() if row[10] else None,
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating tileset: {str(e)}")
+
+
+@app.patch("/api/tilesets/{tileset_id}")
+def update_tileset(
+    tileset_id: str,
+    tileset: TilesetUpdate,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Update an existing tileset.
+    
+    Requires authentication and ownership of the tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Check if tileset exists and user owns it
+            cur.execute(
+                "SELECT id, user_id FROM tilesets WHERE id = %s",
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to update this tileset")
+            
+            # Build update query dynamically
+            updates = []
+            params = []
+            
+            if tileset.name is not None:
+                updates.append("name = %s")
+                params.append(tileset.name)
+            
+            if tileset.description is not None:
+                updates.append("description = %s")
+                params.append(tileset.description)
+            
+            if tileset.min_zoom is not None:
+                updates.append("min_zoom = %s")
+                params.append(tileset.min_zoom)
+            
+            if tileset.max_zoom is not None:
+                updates.append("max_zoom = %s")
+                params.append(tileset.max_zoom)
+            
+            if tileset.bounds is not None and len(tileset.bounds) == 4:
+                west, south, east, north = tileset.bounds
+                updates.append(f"bounds = ST_MakeEnvelope({west}, {south}, {east}, {north}, 4326)")
+            
+            if tileset.center is not None and len(tileset.center) >= 2:
+                lon, lat = tileset.center[0], tileset.center[1]
+                updates.append(f"center = ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)")
+            
+            if tileset.attribution is not None:
+                updates.append("attribution = %s")
+                params.append(tileset.attribution)
+            
+            if tileset.is_public is not None:
+                updates.append("is_public = %s")
+                params.append(tileset.is_public)
+            
+            if tileset.metadata is not None:
+                updates.append("metadata = %s")
+                params.append(json.dumps(tileset.metadata))
+            
+            if not updates:
+                raise HTTPException(status_code=400, detail="No fields to update")
+            
+            updates.append("updated_at = NOW()")
+            params.append(tileset_id)
+            
+            cur.execute(
+                f"""
+                UPDATE tilesets
+                SET {', '.join(updates)}
+                WHERE id = %s
+                RETURNING id, name, description, type, format,
+                          min_zoom, max_zoom, attribution, is_public,
+                          created_at, updated_at
+                """,
+                params,
+            )
+            
+            row = cur.fetchone()
+            conn.commit()
+            
+            return {
+                "id": str(row[0]),
+                "name": row[1],
+                "description": row[2],
+                "type": row[3],
+                "format": row[4],
+                "min_zoom": row[5],
+                "max_zoom": row[6],
+                "attribution": row[7],
+                "is_public": row[8],
+                "created_at": row[9].isoformat() if row[9] else None,
+                "updated_at": row[10].isoformat() if row[10] else None,
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating tileset: {str(e)}")
+
+
+@app.delete("/api/tilesets/{tileset_id}", status_code=204)
+def delete_tileset(
+    tileset_id: str,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Delete a tileset and all associated features.
+    
+    Requires authentication and ownership of the tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Check if tileset exists and user owns it
+            cur.execute(
+                "SELECT id, user_id FROM tilesets WHERE id = %s",
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to delete this tileset")
+            
+            # Delete tileset (cascades to features due to FK constraint)
+            cur.execute("DELETE FROM tilesets WHERE id = %s", (tileset_id,))
+            conn.commit()
+            
+            return Response(status_code=204)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting tileset: {str(e)}")
+
+
+# ============================================================================
+# Feature CRUD Endpoints
+# ============================================================================
+
+
+@app.post("/api/features", status_code=201)
+def create_feature(
+    feature: FeatureCreate,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Create a new feature in a tileset.
+    
+    Requires authentication and ownership of the parent tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Check if tileset exists and user owns it
+            cur.execute(
+                "SELECT id, user_id FROM tilesets WHERE id = %s",
+                (feature.tileset_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to add features to this tileset")
+            
+            # Convert GeoJSON geometry to WKT
+            geometry_json = json.dumps(feature.geometry)
+            properties_json = json.dumps(feature.properties) if feature.properties else "{}"
+            
+            cur.execute(
+                """
+                INSERT INTO features (tileset_id, layer_name, geom, properties)
+                VALUES (%s, %s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s)
+                RETURNING id, layer_name, ST_AsGeoJSON(geom)::json as geometry, properties,
+                          created_at, updated_at
+                """,
+                (
+                    feature.tileset_id,
+                    feature.layer_name,
+                    geometry_json,
+                    properties_json,
+                ),
+            )
+            
+            row = cur.fetchone()
+            conn.commit()
+            
+            return {
+                "id": str(row[0]),
+                "type": "Feature",
+                "geometry": row[2],
+                "properties": {
+                    **(row[3] if row[3] else {}),
+                    "layer_name": row[1],
+                    "created_at": row[4].isoformat() if row[4] else None,
+                    "updated_at": row[5].isoformat() if row[5] else None,
+                },
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating feature: {str(e)}")
+
+
+@app.patch("/api/features/{feature_id}")
+def update_feature(
+    feature_id: str,
+    feature: FeatureUpdate,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Update an existing feature.
+    
+    Requires authentication and ownership of the parent tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Check if feature exists and user owns the parent tileset
+            cur.execute(
+                """
+                SELECT f.id, t.user_id
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE f.id = %s
+                """,
+                (feature_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Feature not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to update this feature")
+            
+            # Build update query dynamically
+            updates = []
+            params = []
+            
+            if feature.layer_name is not None:
+                updates.append("layer_name = %s")
+                params.append(feature.layer_name)
+            
+            if feature.geometry is not None:
+                geometry_json = json.dumps(feature.geometry)
+                updates.append("geom = ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)")
+                params.append(geometry_json)
+            
+            if feature.properties is not None:
+                updates.append("properties = %s")
+                params.append(json.dumps(feature.properties))
+            
+            if not updates:
+                raise HTTPException(status_code=400, detail="No fields to update")
+            
+            updates.append("updated_at = NOW()")
+            params.append(feature_id)
+            
+            cur.execute(
+                f"""
+                UPDATE features
+                SET {', '.join(updates)}
+                WHERE id = %s
+                RETURNING id, layer_name, ST_AsGeoJSON(geom)::json as geometry, properties,
+                          created_at, updated_at
+                """,
+                params,
+            )
+            
+            row = cur.fetchone()
+            conn.commit()
+            
+            return {
+                "id": str(row[0]),
+                "type": "Feature",
+                "geometry": row[2],
+                "properties": {
+                    **(row[3] if row[3] else {}),
+                    "layer_name": row[1],
+                    "created_at": row[4].isoformat() if row[4] else None,
+                    "updated_at": row[5].isoformat() if row[5] else None,
+                },
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating feature: {str(e)}")
+
+
+@app.delete("/api/features/{feature_id}", status_code=204)
+def delete_feature(
+    feature_id: str,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Delete a feature.
+    
+    Requires authentication and ownership of the parent tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Check if feature exists and user owns the parent tileset
+            cur.execute(
+                """
+                SELECT f.id, t.user_id
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE f.id = %s
+                """,
+                (feature_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Feature not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to delete this feature")
+            
+            # Delete feature
+            cur.execute("DELETE FROM features WHERE id = %s", (feature_id,))
+            conn.commit()
+            
+            return Response(status_code=204)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting feature: {str(e)}")
 
 
 

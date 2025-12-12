@@ -20,6 +20,14 @@ from .geocoding import (
     geocode,
     reverse_geocode,
 )
+from .crud import (
+    create_tileset,
+    update_tileset,
+    delete_tileset,
+    create_feature,
+    update_feature,
+    delete_feature,
+)
 
 __all__ = [
     # Tilesets
@@ -33,4 +41,11 @@ __all__ = [
     # Geocoding
     "geocode",
     "reverse_geocode",
+    # CRUD
+    "create_tileset",
+    "update_tileset",
+    "delete_tileset",
+    "create_feature",
+    "update_feature",
+    "delete_feature",
 ]

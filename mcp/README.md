@@ -1,71 +1,79 @@
-# geo-base MCP Server
+# geo-base MCP サーバー
 
-MCP (Model Context Protocol) Server for geo-base tile server. This enables Claude Desktop to access geographic data from the geo-base tile server.
+geo-base タイルサーバー用の MCP (Model Context Protocol) サーバーです。Claude Desktop から geo-base タイルサーバーの地理空間データにアクセスできるようになります。
 
-## Features
+## 機能一覧
 
-### Tileset Tools
-- **list_tilesets**: List all available tilesets (vector, raster, PMTiles)
-- **get_tileset**: Get detailed information about a specific tileset
-- **get_tileset_tilejson**: Get TileJSON metadata for map client integration
+### タイルセットツール
+- **list_tilesets**: 利用可能なタイルセット一覧を取得（ベクター、ラスター、PMTiles）
+- **get_tileset**: 特定のタイルセットの詳細情報を取得
+- **get_tileset_tilejson**: マップクライアント連携用のTileJSONメタデータを取得
 
-### Feature Tools
-- **search_features**: Search geographic features with bbox, layer, and filter criteria
-- **get_feature**: Get detailed information about a specific feature
+### フィーチャーツール
+- **search_features**: bbox、レイヤー、フィルター条件で地理フィーチャーを検索
+- **get_feature**: 特定のフィーチャーの詳細情報を取得
 
-### Geocoding Tools
-- **geocode**: Convert address or place name to coordinates (geocoding)
-- **reverse_geocode**: Convert coordinates to address (reverse geocoding)
+### ジオコーディングツール
+- **geocode**: 住所・地名から座標を取得（ジオコーディング）
+- **reverse_geocode**: 座標から住所を取得（逆ジオコーディング）
 
-### Utility Tools
-- **get_tile_url**: Generate URLs for specific map tiles
-- **health_check**: Check the health status of the tile server
-- **get_server_info**: Get MCP server configuration information
+### CRUDツール（認証必須）
+- **create_tileset**: 新しいタイルセットを作成
+- **update_tileset**: 既存のタイルセットを更新
+- **delete_tileset**: タイルセットと関連フィーチャーを削除
+- **create_feature**: タイルセットに新しいフィーチャーを作成
+- **update_feature**: 既存のフィーチャーを更新
+- **delete_feature**: フィーチャーを削除
 
-## Installation
+### ユーティリティツール
+- **get_tile_url**: 特定のマップタイルのURLを生成
+- **health_check**: タイルサーバーのヘルスステータスを確認
+- **get_server_info**: MCPサーバーの設定情報を取得
 
-### Prerequisites
-- Python 3.11+
-- uv (Python package manager)
-- Claude Desktop (for using the MCP server)
+## インストール
 
-### Setup
+### 前提条件
+- Python 3.11以上
+- uv（Pythonパッケージマネージャー）
+- Claude Desktop（MCPサーバー利用時）
+
+### セットアップ
 
 ```fish
-# Navigate to the mcp directory
+# mcpディレクトリに移動
 cd mcp
 
-# Create environment file
+# 環境ファイルを作成
 cp .env.example .env
 
-# Edit .env to set TILE_SERVER_URL
-# For local development: http://localhost:3000
-# For production: https://geo-base-puce.vercel.app
+# .envを編集してTILE_SERVER_URLを設定
+# ローカル開発: http://localhost:3000
+# 本番環境: https://geo-base-puce.vercel.app
 
-# Install dependencies
+# 依存関係をインストール
 uv sync
 
-# Run the server (for testing)
+# サーバーを起動（テスト用）
 uv run python server.py
 ```
 
-## Configuration
+## 設定
 
-### Environment Variables
+### 環境変数
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TILE_SERVER_URL` | `http://localhost:3000` | Base URL of the geo-base tile server |
-| `API_TOKEN` | (none) | JWT token for authenticated requests |
-| `SERVER_NAME` | `geo-base` | MCP server name |
-| `SERVER_VERSION` | `0.1.0` | MCP server version |
-| `ENVIRONMENT` | `development` | Environment (development/production) |
-| `HTTP_TIMEOUT` | `30.0` | HTTP request timeout in seconds |
-| `DEBUG` | `false` | Enable debug mode |
+| 変数名 | デフォルト値 | 説明 |
+|--------|-------------|------|
+| `TILE_SERVER_URL` | `http://localhost:3000` | geo-baseタイルサーバーのベースURL |
+| `API_TOKEN` | (なし) | 認証リクエスト用のJWTトークン |
+| `SERVER_NAME` | `geo-base` | MCPサーバー名 |
+| `SERVER_VERSION` | `0.1.0` | MCPサーバーバージョン |
+| `ENVIRONMENT` | `development` | 環境（development/production） |
+| `HTTP_TIMEOUT` | `30.0` | HTTPリクエストタイムアウト（秒） |
+| `DEBUG` | `false` | デバッグモードの有効化 |
 
-### Claude Desktop Configuration
+### Claude Desktop の設定
 
-Add the following to your Claude Desktop configuration file:
+Claude Desktop の設定ファイルに以下を追加してください：
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -90,81 +98,91 @@ Add the following to your Claude Desktop configuration file:
 }
 ```
 
-## Usage Examples
+## 使用例
 
-Once configured in Claude Desktop, you can use natural language to interact with the geo-base tile server:
+Claude Desktop で設定後、自然言語で geo-base タイルサーバーと対話できます：
 
-### List Tilesets
+### タイルセット一覧
 ```
-Show me all available tilesets
-```
-
-### Search Features
-```
-Find all features in Tokyo area (bbox: 139.5,35.5,140.0,36.0)
+利用可能なタイルセットを表示して
 ```
 
-### Get Tileset Information
+### フィーチャー検索
 ```
-Get details about tileset {tileset_id}
-```
-
-### Geocoding
-```
-Find the coordinates for "東京駅" (Tokyo Station)
+東京エリア（bbox: 139.5,35.5,140.0,36.0）のフィーチャーを検索して
 ```
 
-### Reverse Geocoding
+### タイルセット情報の取得
 ```
-What is the address at coordinates 35.6812, 139.7671?
-```
-
-### Health Check
-```
-Check if the tile server is healthy
+タイルセット {tileset_id} の詳細を教えて
 ```
 
-## Deployment (Fly.io)
+### ジオコーディング
+```
+東京駅の座標を調べて
+```
 
-For remote deployment using Fly.io:
+### 逆ジオコーディング
+```
+緯度35.6812、経度139.7671の住所は？
+```
 
-### Prerequisites
+### タイルセット作成（認証必須）
+```
+「東京の駅」という名前で「東京都内の鉄道駅」という説明のベクタータイルセットを作成して
+```
 
-1. [Fly.io account](https://fly.io/signup)
-2. [Fly CLI](https://fly.io/docs/flyctl/install/) installed
+### フィーチャー作成（認証必須）
+```
+タイルセット {tileset_id} に座標 [139.7671, 35.6812] で東京駅のポイントフィーチャーを追加して
+```
 
-### First-time Setup
+### ヘルスチェック
+```
+タイルサーバーが正常に動作しているか確認して
+```
+
+## デプロイ（Fly.io）
+
+Fly.io を使用したリモートデプロイの手順：
+
+### 前提条件
+
+1. [Fly.io アカウント](https://fly.io/signup)
+2. [Fly CLI](https://fly.io/docs/flyctl/install/) のインストール
+
+### 初回セットアップ
 
 ```fish
-# Install Fly CLI (if not installed)
+# Fly CLI をインストール（未インストールの場合）
 curl -L https://fly.io/install.sh | sh
 
-# Login to Fly.io
+# Fly.io にログイン
 fly auth login
 
-# Navigate to mcp directory
+# mcp ディレクトリに移動
 cd mcp
 
-# Launch the app (first time only)
+# アプリを作成（初回のみ）
 fly launch --no-deploy
 
-# Set secrets (optional, for authenticated API access)
+# シークレットを設定（認証APIアクセス用、オプション）
 fly secrets set API_TOKEN=your-jwt-token
 
-# Deploy
+# デプロイ
 fly deploy
 ```
 
-### Updating Deployment
+### デプロイの更新
 
 ```fish
 cd mcp
 fly deploy
 ```
 
-### Connecting Claude Desktop to Remote MCP Server
+### Claude Desktop からリモート MCP サーバーへの接続
 
-After deploying to Fly.io, update your Claude Desktop configuration to use the remote server:
+Fly.io にデプロイ後、Claude Desktop の設定を更新してリモートサーバーを使用します：
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -184,131 +202,204 @@ After deploying to Fly.io, update your Claude Desktop configuration to use the r
 }
 ```
 
-> **Note**: You need `mcp-proxy` to connect to remote SSE endpoints. Install it with:
+> **注意**: リモート SSE エンドポイントに接続するには `mcp-proxy` が必要です。以下でインストールしてください：
 > ```fish
 > uv tool install mcp-proxy
 > ```
 
-### Transport Modes
+### トランスポートモード
 
-The MCP server supports multiple transport modes:
+MCP サーバーは複数のトランスポートモードをサポートしています：
 
-| Mode | Environment Variable | Use Case |
-|------|---------------------|----------|
-| `stdio` | `MCP_TRANSPORT=stdio` | Local Claude Desktop (default) |
-| `sse` | `MCP_TRANSPORT=sse` | Remote connections via Fly.io |
-| `streamable-http` | `MCP_TRANSPORT=streamable-http` | Alternative HTTP transport |
+| モード | 環境変数 | 用途 |
+|--------|----------|------|
+| `stdio` | `MCP_TRANSPORT=stdio` | ローカル Claude Desktop（デフォルト） |
+| `sse` | `MCP_TRANSPORT=sse` | Fly.io 経由のリモート接続 |
+| `streamable-http` | `MCP_TRANSPORT=streamable-http` | 代替 HTTP トランスポート |
 
-### Monitoring
+### モニタリング
 
 ```fish
-# View logs
+# ログを表示
 fly logs
 
-# Check app status
+# アプリのステータスを確認
 fly status
 
-# Open dashboard
+# ダッシュボードを開く
 fly dashboard
 ```
 
-## Development
+## 開発
 
-### Running Tests
+### テストの実行
 
 ```fish
-# Install dev dependencies
+# 開発依存関係をインストール
 uv sync --extra dev
 
-# Run tests
+# テストを実行
 uv run pytest
+
+# 詳細表示でテストを実行
+uv run pytest -v
+
+# ライブテスト（本番サーバーに対して実行）
+TILE_SERVER_URL=https://geo-base-puce.vercel.app uv run python tests/live_test.py
 ```
 
-### Code Formatting
+### コードフォーマット
 
 ```fish
-# Format code
+# コードをフォーマット
 uv run black .
 
-# Lint code
+# コードをリント
 uv run ruff check .
 ```
 
-## API Reference
+## API リファレンス
 
-### Tileset Tools
+### タイルセットツール
 
 #### `list_tilesets(type?, is_public?)`
-Lists available tilesets from the tile server.
+タイルサーバーから利用可能なタイルセット一覧を取得します。
 
-**Parameters:**
-- `type` (optional): Filter by type ('vector', 'raster', 'pmtiles')
-- `is_public` (optional): Filter by public/private status
+**パラメータ:**
+- `type`（オプション）: タイプでフィルタリング（'vector', 'raster', 'pmtiles'）
+- `is_public`（オプション）: 公開/非公開ステータスでフィルタリング
 
-**Returns:** List of tilesets with id, name, description, type, format, and zoom range.
+**戻り値:** id、name、description、type、format、ズーム範囲を含むタイルセットのリスト
 
 #### `get_tileset(tileset_id)`
-Gets detailed information about a specific tileset.
+特定のタイルセットの詳細情報を取得します。
 
-**Parameters:**
-- `tileset_id`: UUID of the tileset
+**パラメータ:**
+- `tileset_id`: タイルセットのUUID
 
-**Returns:** Tileset details including bounds, center, metadata.
+**戻り値:** bounds、center、metadataを含むタイルセットの詳細
 
 #### `get_tileset_tilejson(tileset_id)`
-Gets TileJSON metadata for a tileset.
+タイルセットのTileJSONメタデータを取得します。
 
-**Parameters:**
-- `tileset_id`: UUID of the tileset
+**パラメータ:**
+- `tileset_id`: タイルセットのUUID
 
-**Returns:** TileJSON object with tiles URL, bounds, zoom range, vector_layers.
+**戻り値:** tiles URL、bounds、zoom range、vector_layersを含むTileJSONオブジェクト
 
-### Feature Tools
+### フィーチャーツール
 
 #### `search_features(bbox?, layer?, filter?, limit?, tileset_id?)`
-Searches for geographic features.
+地理フィーチャーを検索します。
 
-**Parameters:**
-- `bbox` (optional): Bounding box "minx,miny,maxx,maxy" (WGS84)
-- `layer` (optional): Layer name filter
-- `filter` (optional): Property filter "key=value"
-- `limit` (optional): Max features to return (default: 100)
-- `tileset_id` (optional): Limit to specific tileset
+**パラメータ:**
+- `bbox`（オプション）: バウンディングボックス "minx,miny,maxx,maxy"（WGS84）
+- `layer`（オプション）: レイヤー名フィルター
+- `filter`（オプション）: プロパティフィルター "key=value"
+- `limit`（オプション）: 返すフィーチャーの最大数（デフォルト: 100）
+- `tileset_id`（オプション）: 特定のタイルセットに限定
 
-**Returns:** List of GeoJSON features with geometry and properties.
+**戻り値:** ジオメトリとプロパティを含むGeoJSONフィーチャーのリスト
 
 #### `get_feature(feature_id)`
-Gets detailed information about a specific feature.
+特定のフィーチャーの詳細情報を取得します。
 
-**Parameters:**
-- `feature_id`: UUID of the feature
+**パラメータ:**
+- `feature_id`: フィーチャーのUUID
 
-**Returns:** GeoJSON feature with full geometry and properties.
+**戻り値:** 完全なジオメトリとプロパティを含むGeoJSONフィーチャー
 
-### Geocoding Tools
+### ジオコーディングツール
 
 #### `geocode(query, limit?, country_codes?, language?)`
-Converts address or place name to geographic coordinates.
+住所または地名を地理座標に変換します。
 
-**Parameters:**
-- `query`: Address or place name to search (e.g., "東京駅", "Tokyo Tower")
-- `limit` (optional): Maximum results (1-50, default: 5)
-- `country_codes` (optional): ISO 3166-1 country codes (e.g., "jp", "jp,us")
-- `language` (optional): Result language (default: "ja")
+**パラメータ:**
+- `query`: 検索する住所または地名（例: "東京駅", "Tokyo Tower"）
+- `limit`（オプション）: 最大結果数（1-50、デフォルト: 5）
+- `country_codes`（オプション）: ISO 3166-1 国コード（例: "jp", "jp,us"）
+- `language`（オプション）: 結果の言語（デフォルト: "ja"）
 
-**Returns:** List of matching locations with coordinates, address details, and bounds.
+**戻り値:** 座標、住所詳細、boundsを含むマッチした場所のリスト
 
 #### `reverse_geocode(latitude, longitude, zoom?, language?)`
-Converts geographic coordinates to address.
+地理座標を住所に変換します。
 
-**Parameters:**
-- `latitude`: Latitude in decimal degrees (WGS84)
-- `longitude`: Longitude in decimal degrees (WGS84)
-- `zoom` (optional): Detail level 0-18 (default: 18, building level)
-- `language` (optional): Result language (default: "ja")
+**パラメータ:**
+- `latitude`: 緯度（10進度、WGS84）
+- `longitude`: 経度（10進度、WGS84）
+- `zoom`（オプション）: 詳細レベル 0-18（デフォルト: 18、建物レベル）
+- `language`（オプション）: 結果の言語（デフォルト: "ja"）
 
-**Returns:** Address components, display name, and bounds for the location.
+**戻り値:** 住所コンポーネント、表示名、boundsを含む場所情報
 
-## License
+### CRUD ツール
 
-MIT License - see LICENSE file for details.
+> **注意:** すべてのCRUDツールは認証が必要です。有効なJWTトークンを `API_TOKEN` 環境変数に設定してください。
+
+#### `create_tileset(name, type, format, description?, ...)`
+新しいタイルセットを作成します。
+
+**パラメータ:**
+- `name`: タイルセット名（必須）
+- `type`: タイルセットタイプ（'vector', 'raster', 'pmtiles'）
+- `format`: タイルフォーマット（'pbf', 'png', 'jpg', 'webp', 'geojson'）
+- `description`（オプション）: タイルセットの説明
+- `min_zoom`（オプション）: 最小ズームレベル（0-22、デフォルト: 0）
+- `max_zoom`（オプション）: 最大ズームレベル（0-22、デフォルト: 22）
+- `bounds`（オプション）: バウンディングボックス [west, south, east, north]
+- `center`（オプション）: 中心点 [longitude, latitude]
+- `attribution`（オプション）: 帰属テキスト
+- `is_public`（オプション）: 公開設定（デフォルト: false）
+- `metadata`（オプション）: 追加メタデータオブジェクト
+
+**戻り値:** id、name、type、formatなどを含む作成されたタイルセットオブジェクト
+
+#### `update_tileset(tileset_id, name?, description?, ...)`
+既存のタイルセットを更新します。
+
+**パラメータ:**
+- `tileset_id`: 更新するタイルセットのUUID
+- その他のパラメータはすべてオプションで、指定された場合のみ更新
+
+**戻り値:** 更新されたタイルセットオブジェクト
+
+#### `delete_tileset(tileset_id)`
+タイルセットとそのすべてのフィーチャーを削除します。
+
+**パラメータ:**
+- `tileset_id`: 削除するタイルセットのUUID
+
+**戻り値:** 成功メッセージまたはエラー
+
+#### `create_feature(tileset_id, geometry, properties?, layer_name?)`
+タイルセットに新しいフィーチャーを作成します。
+
+**パラメータ:**
+- `tileset_id`: 親タイルセットのUUID
+- `geometry`: GeoJSONジオメトリオブジェクト（Point, LineString, Polygon など）
+- `properties`（オプション）: フィーチャープロパティ（キー・バリューペア）
+- `layer_name`（オプション）: レイヤー名（デフォルト: "default"）
+
+**戻り値:** GeoJSON Feature オブジェクトとして作成されたフィーチャー
+
+#### `update_feature(feature_id, geometry?, properties?, layer_name?)`
+既存のフィーチャーを更新します。
+
+**パラメータ:**
+- `feature_id`: 更新するフィーチャーのUUID
+- その他のパラメータはすべてオプションで、指定された場合のみ更新
+
+**戻り値:** GeoJSON Feature オブジェクトとして更新されたフィーチャー
+
+#### `delete_feature(feature_id)`
+フィーチャーを削除します。
+
+**パラメータ:**
+- `feature_id`: 削除するフィーチャーのUUID
+
+**戻り値:** 成功メッセージまたはエラー
+
+## ライセンス
+
+MIT ライセンス - 詳細は LICENSE ファイルを参照してください。
