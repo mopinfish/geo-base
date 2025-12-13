@@ -39,17 +39,14 @@ export function TilesetForm({
   // フォーム状態
   const [name, setName] = useState(initialData?.name || "");
   const [description, setDescription] = useState(initialData?.description || "");
-  const [type, setType] = useState<"vector" | "raster">(initialData?.type || "vector");
-  const [format, setFormat] = useState<"pbf" | "png" | "webp" | "jpg" | "pmtiles">(
+  const [type, setType] = useState<"vector" | "raster" | "pmtiles">(initialData?.type || "vector");
+  const [format, setFormat] = useState<"pbf" | "png" | "webp" | "jpg" | "geojson">(
     initialData?.format || "pbf"
   );
-  const [sourceType, setSourceType] = useState<"postgis" | "pmtiles" | "cog" | "mbtiles">(
-    initialData?.source_type || "postgis"
-  );
-  const [sourceUrl, setSourceUrl] = useState(initialData?.source_url || "");
   const [minZoom, setMinZoom] = useState(initialData?.min_zoom?.toString() || "0");
   const [maxZoom, setMaxZoom] = useState(initialData?.max_zoom?.toString() || "22");
   const [isPublic, setIsPublic] = useState(initialData?.is_public ?? false);
+  const [attribution, setAttribution] = useState(initialData?.attribution || "");
   const [boundsStr, setBoundsStr] = useState(
     initialData?.bounds ? initialData.bounds.join(", ") : ""
   );
@@ -78,23 +75,33 @@ export function TilesetForm({
       }
     }
 
-    const data: TilesetCreate | TilesetUpdate = {
-      name,
-      description: description || undefined,
-      ...(mode === "create" && {
+    if (mode === "create") {
+      const data: TilesetCreate = {
+        name,
+        description: description || undefined,
         type,
         format,
-        source_type: sourceType,
-        source_url: sourceUrl || undefined,
-      }),
-      min_zoom: minZoom ? parseInt(minZoom) : undefined,
-      max_zoom: maxZoom ? parseInt(maxZoom) : undefined,
-      bounds,
-      center,
-      is_public: isPublic,
-    };
-
-    await onSubmit(data);
+        min_zoom: minZoom ? parseInt(minZoom) : 0,
+        max_zoom: maxZoom ? parseInt(maxZoom) : 22,
+        bounds,
+        center,
+        attribution: attribution || undefined,
+        is_public: isPublic,
+      };
+      await onSubmit(data);
+    } else {
+      const data: TilesetUpdate = {
+        name,
+        description: description || undefined,
+        min_zoom: minZoom ? parseInt(minZoom) : undefined,
+        max_zoom: maxZoom ? parseInt(maxZoom) : undefined,
+        bounds,
+        center,
+        attribution: attribution || undefined,
+        is_public: isPublic,
+      };
+      await onSubmit(data);
+    }
   };
 
   return (
@@ -137,6 +144,17 @@ export function TilesetForm({
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="attribution">帰属表示（Attribution）</Label>
+            <Input
+              id="attribution"
+              value={attribution}
+              onChange={(e) => setAttribution(e.target.value)}
+              placeholder="© OpenStreetMap contributors"
+              disabled={isSubmitting}
+            />
+          </div>
+
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="is_public">公開設定</Label>
@@ -164,15 +182,19 @@ export function TilesetForm({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="type">タイプ *</Label>
-                <Select value={type} onValueChange={(v) => setType(v as "vector" | "raster")}>
+                <Select value={type} onValueChange={(v) => setType(v as "vector" | "raster" | "pmtiles")}>
                   <SelectTrigger id="type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="vector">ベクタ</SelectItem>
                     <SelectItem value="raster">ラスタ</SelectItem>
+                    <SelectItem value="pmtiles">PMTiles</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  PostGISからの動的生成はベクタを選択
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -186,43 +208,15 @@ export function TilesetForm({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pbf">PBF (Mapbox Vector Tiles)</SelectItem>
-                    <SelectItem value="pmtiles">PMTiles</SelectItem>
+                    <SelectItem value="geojson">GeoJSON</SelectItem>
                     <SelectItem value="png">PNG</SelectItem>
                     <SelectItem value="webp">WebP</SelectItem>
                     <SelectItem value="jpg">JPEG</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="source_type">ソースタイプ</Label>
-                <Select
-                  value={sourceType}
-                  onValueChange={(v) => setSourceType(v as typeof sourceType)}
-                >
-                  <SelectTrigger id="source_type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="postgis">PostGIS</SelectItem>
-                    <SelectItem value="pmtiles">PMTiles</SelectItem>
-                    <SelectItem value="mbtiles">MBTiles</SelectItem>
-                    <SelectItem value="cog">COG (Cloud Optimized GeoTIFF)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="source_url">ソースURL</Label>
-                <Input
-                  id="source_url"
-                  value={sourceUrl}
-                  onChange={(e) => setSourceUrl(e.target.value)}
-                  placeholder="https://... (任意)"
-                  disabled={isSubmitting}
-                />
+                <p className="text-xs text-muted-foreground">
+                  ベクタタイルには PBF を推奨
+                </p>
               </div>
             </div>
           </CardContent>

@@ -128,7 +128,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   }
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://geo-base-puce.vercel.app";
-  const tileUrl = `${apiBaseUrl}/api/tiles/pmtiles/${id}/{z}/{x}/{y}.${tileset.format}`;
+  const tileUrl = `${apiBaseUrl}/api/tiles/features/{z}/{x}/{y}.pbf?tileset_id=${id}`;
   const tileJsonUrl = `${apiBaseUrl}/api/tilesets/${id}/tilejson.json`;
 
   return (
@@ -205,13 +205,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                     {tileset.format}
                   </code>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">ソースタイプ</p>
-                  <Badge variant="secondary" className="mt-1">
-                    {tileset.source_type || "-"}
-                  </Badge>
-                </div>
-                <div>
+                <div className="col-span-2">
                   <p className="text-sm font-medium text-muted-foreground">ID</p>
                   <code className="mt-1 inline-block rounded bg-muted px-2 py-1 text-xs break-all">
                     {tileset.id}
@@ -219,14 +213,12 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 </div>
               </div>
 
-              {tileset.source_url && (
+              {tileset.attribution && (
                 <>
                   <Separator />
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">ソースURL</p>
-                    <code className="mt-1 inline-block rounded bg-muted px-2 py-1 text-xs break-all">
-                      {tileset.source_url}
-                    </code>
+                    <p className="text-sm font-medium text-muted-foreground">帰属表示</p>
+                    <p className="mt-1 text-sm">{tileset.attribution}</p>
                   </div>
                 </>
               )}
@@ -288,7 +280,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <CardContent className="space-y-4">
               <div>
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-muted-foreground">タイルURL</p>
+                  <p className="text-sm font-medium text-muted-foreground">タイルURL（フィーチャーベース）</p>
                   <Button
                     variant="ghost"
                     size="sm"

@@ -152,6 +152,7 @@ export default function TilesetsPage() {
                   <SelectItem value="all">すべてのタイプ</SelectItem>
                   <SelectItem value="vector">ベクタ</SelectItem>
                   <SelectItem value="raster">ラスタ</SelectItem>
+                  <SelectItem value="pmtiles">PMTiles</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={publicFilter} onValueChange={setPublicFilter}>
@@ -205,7 +206,6 @@ export default function TilesetsPage() {
                     <TableHead>名前</TableHead>
                     <TableHead>タイプ</TableHead>
                     <TableHead>フォーマット</TableHead>
-                    <TableHead>ソース</TableHead>
                     <TableHead>公開</TableHead>
                     <TableHead>更新日</TableHead>
                     <TableHead className="text-right">操作</TableHead>
@@ -235,11 +235,6 @@ export default function TilesetsPage() {
                       </TableCell>
                       <TableCell>
                         <code className="text-xs">{tileset.format}</code>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {tileset.source_type || "-"}
-                        </Badge>
                       </TableCell>
                       <TableCell>
                         {tileset.is_public ? (

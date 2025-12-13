@@ -13,14 +13,13 @@ export interface Tileset {
   id: string;
   name: string;
   description?: string;
-  type: 'vector' | 'raster';
-  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'pmtiles';
-  source_type?: 'postgis' | 'pmtiles' | 'cog' | 'mbtiles';
-  source_url?: string;
+  type: 'vector' | 'raster' | 'pmtiles';
+  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'geojson';
   min_zoom?: number;
   max_zoom?: number;
   bounds?: number[];
   center?: number[];
+  attribution?: string;
   is_public: boolean;
   owner_id?: string;
   created_at: string;
@@ -31,14 +30,13 @@ export interface Tileset {
 export interface TilesetCreate {
   name: string;
   description?: string;
-  type: 'vector' | 'raster';
-  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'pmtiles';
-  source_type?: 'postgis' | 'pmtiles' | 'cog' | 'mbtiles';
-  source_url?: string;
+  type: 'vector' | 'raster' | 'pmtiles';
+  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'geojson';
   min_zoom?: number;
   max_zoom?: number;
   bounds?: number[];
   center?: number[];
+  attribution?: string;
   is_public?: boolean;
   metadata?: Record<string, unknown>;
 }
@@ -50,6 +48,7 @@ export interface TilesetUpdate {
   max_zoom?: number;
   bounds?: number[];
   center?: number[];
+  attribution?: string;
   is_public?: boolean;
   metadata?: Record<string, unknown>;
 }
@@ -177,7 +176,7 @@ class ApiClient {
   // ============================
 
   async listTilesets(params?: {
-    type?: 'vector' | 'raster';
+    type?: 'vector' | 'raster' | 'pmtiles';
     is_public?: boolean;
   }): Promise<Tileset[]> {
     const searchParams = new URLSearchParams();
