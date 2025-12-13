@@ -144,8 +144,17 @@ export function GeoJSONPreview({ data, height = "400px" }: GeoJSONPreviewProps) 
     };
 
     data.features.forEach((feature) => {
-      if (feature.geometry && feature.geometry.coordinates) {
-        addCoordinatesToBounds(feature.geometry.coordinates);
+      if (feature.geometry) {
+        // GeometryCollectionの場合は個別にジオメトリを処理
+        if (feature.geometry.type === "GeometryCollection") {
+          feature.geometry.geometries.forEach((geom) => {
+            if ("coordinates" in geom) {
+              addCoordinatesToBounds(geom.coordinates);
+            }
+          });
+        } else if ("coordinates" in feature.geometry) {
+          addCoordinatesToBounds(feature.geometry.coordinates);
+        }
       }
     });
 

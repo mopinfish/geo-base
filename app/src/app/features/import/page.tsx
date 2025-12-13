@@ -141,15 +141,19 @@ export default function GeoJSONImportPage() {
 
   // 単一フィーチャーの作成
   const createFeature = async (feature: GeoJSONFeature): Promise<void> => {
-    const response = await api.createFeature({
-      tileset_id: selectedTilesetId,
-      geometry: feature.geometry,
-      properties: feature.properties || {},
-      layer_name: "imported",
-    });
+    try {
+      const response = await api.createFeature({
+        tileset_id: selectedTilesetId,
+        geometry: feature.geometry,
+        properties: feature.properties || {},
+        layer_name: "imported",
+      });
 
-    if (!response || response.error) {
-      throw new Error(response?.error || "作成に失敗しました");
+      if (!response) {
+        throw new Error("作成に失敗しました");
+      }
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : "作成に失敗しました");
     }
   };
 
