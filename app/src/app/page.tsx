@@ -39,9 +39,19 @@ export default function DashboardPage() {
         setHealth(healthData.value);
       }
       
-      // タイルセット結果の処理（配列であることを確認）
-      if (tilesetsData.status === "fulfilled" && Array.isArray(tilesetsData.value)) {
-        setTilesets(tilesetsData.value);
+      // タイルセット結果の処理
+      // APIレスポンスは {tilesets: [...], count: N} 形式
+      if (tilesetsData.status === "fulfilled") {
+        const data = tilesetsData.value;
+        if (Array.isArray(data)) {
+          // 配列が直接返ってくる場合
+          setTilesets(data);
+        } else if (data && Array.isArray(data.tilesets)) {
+          // {tilesets: [...]} 形式の場合
+          setTilesets(data.tilesets);
+        } else {
+          setTilesets([]);
+        }
       } else {
         setTilesets([]);
       }
