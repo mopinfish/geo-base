@@ -79,12 +79,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - 全オリジンを許可（開発・本番共通）
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # 全オリジンを許可
+    allow_credentials=False,  # "*"の場合はFalseが必要
     allow_methods=["*"],
     allow_headers=["*"],
 )
