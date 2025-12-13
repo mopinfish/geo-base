@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,10 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Save, ArrowLeft, AlertCircle } from "lucide-react";
-import Link from "next/link";
 import type { Tileset, TilesetCreate, TilesetUpdate } from "@/lib/api";
+import { ArrowLeft, Save, Loader2 } from "lucide-react";
 
 interface TilesetFormProps {
   mode: "create" | "edit";
@@ -27,6 +26,25 @@ interface TilesetFormProps {
   error?: string | null;
 }
 
+/**
+ * bounds/centerを安全に文字列に変換
+ */
+const coordinatesToString = (value: unknown): string => {
+  if (!value) return "";
+  
+  // すでに文字列の場合はそのまま返す
+  if (typeof value === "string") {
+    return value;
+  }
+  
+  // 配列の場合はjoinする
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+  
+  return "";
+};
+
 export function TilesetForm({
   mode,
   initialData,
@@ -34,44 +52,43 @@ export function TilesetForm({
   isSubmitting = false,
   error,
 }: TilesetFormProps) {
-  const router = useRouter();
-  
-  // フォーム状態
   const [name, setName] = useState(initialData?.name || "");
   const [description, setDescription] = useState(initialData?.description || "");
-  const [type, setType] = useState<"vector" | "raster" | "pmtiles">(initialData?.type || "vector");
+  const [type, setType] = useState<"vector" | "raster" | "pmtiles">(
+    initialData?.type || "vector"
+  );
   const [format, setFormat] = useState<"pbf" | "png" | "webp" | "jpg" | "geojson">(
     initialData?.format || "pbf"
   );
   const [minZoom, setMinZoom] = useState(initialData?.min_zoom?.toString() || "0");
   const [maxZoom, setMaxZoom] = useState(initialData?.max_zoom?.toString() || "22");
-  const [isPublic, setIsPublic] = useState(initialData?.is_public ?? false);
+  const [isPublic, setIsPublic] = useState(initialData?.is_public ?? true);
   const [attribution, setAttribution] = useState(initialData?.attribution || "");
   const [boundsStr, setBoundsStr] = useState(
-    initialData?.bounds ? initialData.bounds.join(", ") : ""
+    coordinatesToString(initialData?.bounds)
   );
   const [centerStr, setCenterStr] = useState(
-    initialData?.center ? initialData.center.join(", ") : ""
+    coordinatesToString(initialData?.center)
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // バウンディングボックスのパース
+    // バウンディングボックスをパース
     let bounds: number[] | undefined;
     if (boundsStr.trim()) {
-      bounds = boundsStr.split(",").map((s) => parseFloat(s.trim()));
-      if (bounds.length !== 4 || bounds.some(isNaN)) {
-        bounds = undefined;
+      const parts = boundsStr.split(",").map((s) => parseFloat(s.trim()));
+      if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+        bounds = parts;
       }
     }
 
-    // センターのパース
+    // 中心座標をパース
     let center: number[] | undefined;
     if (centerStr.trim()) {
-      center = centerStr.split(",").map((s) => parseFloat(s.trim()));
-      if (center.length < 2 || center.length > 3 || center.some(isNaN)) {
-        center = undefined;
+      const parts = centerStr.split(",").map((s) => parseFloat(s.trim()));
+      if (parts.length >= 2 && parts.every((n) => !isNaN(n))) {
+        center = parts;
       }
     }
 
@@ -81,45 +98,46 @@ export function TilesetForm({
         description: description || undefined,
         type,
         format,
-        min_zoom: minZoom ? parseInt(minZoom) : 0,
-        max_zoom: maxZoom ? parseInt(maxZoom) : 22,
+        min_zoom: parseInt(minZoom, 10),
+        max_zoom: parseInt(maxZoom, 10),
+        is_public: isPublic,
+        attribution: attribution || undefined,
         bounds,
         center,
-        attribution: attribution || undefined,
-        is_public: isPublic,
       };
       await onSubmit(data);
     } else {
       const data: TilesetUpdate = {
         name,
         description: description || undefined,
-        min_zoom: minZoom ? parseInt(minZoom) : undefined,
-        max_zoom: maxZoom ? parseInt(maxZoom) : undefined,
+        min_zoom: parseInt(minZoom, 10),
+        max_zoom: parseInt(maxZoom, 10),
+        is_public: isPublic,
+        attribution: attribution || undefined,
         bounds,
         center,
-        attribution: attribution || undefined,
-        is_public: isPublic,
       };
       await onSubmit(data);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* エラー表示 */}
-      {error && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* 基本情報 */}
+    <form onSubmit={handleSubmit}>
       <Card>
         <CardHeader>
-          <CardTitle>基本情報</CardTitle>
+          <CardTitle>
+            {mode === "create" ? "タイルセット情報" : "タイルセット編集"}
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          {/* エラー表示 */}
+          {error && (
+            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          {/* 名前 */}
           <div className="space-y-2">
             <Label htmlFor="name">名前 *</Label>
             <Input
@@ -128,10 +146,10 @@ export function TilesetForm({
               onChange={(e) => setName(e.target.value)}
               placeholder="タイルセット名"
               required
-              disabled={isSubmitting}
             />
           </div>
 
+          {/* 説明 */}
           <div className="space-y-2">
             <Label htmlFor="description">説明</Label>
             <Textarea
@@ -140,49 +158,18 @@ export function TilesetForm({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="タイルセットの説明（任意）"
               rows={3}
-              disabled={isSubmitting}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="attribution">帰属表示（Attribution）</Label>
-            <Input
-              id="attribution"
-              value={attribution}
-              onChange={(e) => setAttribution(e.target.value)}
-              placeholder="© OpenStreetMap contributors"
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="is_public">公開設定</Label>
-              <p className="text-xs text-muted-foreground">
-                公開すると誰でもアクセスできます
-              </p>
-            </div>
-            <Switch
-              id="is_public"
-              checked={isPublic}
-              onCheckedChange={setIsPublic}
-              disabled={isSubmitting}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* タイル設定（新規作成時のみ） */}
-      {mode === "create" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>タイル設定</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          {/* タイプとフォーマット（新規作成時のみ） */}
+          {mode === "create" && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="type">タイプ *</Label>
-                <Select value={type} onValueChange={(v) => setType(v as "vector" | "raster" | "pmtiles")}>
+                <Select
+                  value={type}
+                  onValueChange={(v) => setType(v as typeof type)}
+                >
                   <SelectTrigger id="type">
                     <SelectValue />
                   </SelectTrigger>
@@ -192,11 +179,7 @@ export function TilesetForm({
                     <SelectItem value="pmtiles">PMTiles</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  PostGISからの動的生成はベクタを選択
-                </p>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="format">フォーマット *</Label>
                 <Select
@@ -207,108 +190,122 @@ export function TilesetForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pbf">PBF (Mapbox Vector Tiles)</SelectItem>
-                    <SelectItem value="geojson">GeoJSON</SelectItem>
+                    <SelectItem value="pbf">PBF (Protocol Buffers)</SelectItem>
                     <SelectItem value="png">PNG</SelectItem>
                     <SelectItem value="webp">WebP</SelectItem>
                     <SelectItem value="jpg">JPEG</SelectItem>
+                    <SelectItem value="geojson">GeoJSON</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  ベクタタイルには PBF を推奨
-                </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
 
-      {/* ズーム・範囲設定 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>ズーム・範囲設定</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          {/* ズームレベル */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="min_zoom">最小ズーム</Label>
+              <Label htmlFor="minZoom">最小ズーム</Label>
               <Input
-                id="min_zoom"
+                id="minZoom"
                 type="number"
                 min="0"
                 max="22"
                 value={minZoom}
                 onChange={(e) => setMinZoom(e.target.value)}
-                disabled={isSubmitting}
               />
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="max_zoom">最大ズーム</Label>
+              <Label htmlFor="maxZoom">最大ズーム</Label>
               <Input
-                id="max_zoom"
+                id="maxZoom"
                 type="number"
                 min="0"
                 max="22"
                 value={maxZoom}
                 onChange={(e) => setMaxZoom(e.target.value)}
-                disabled={isSubmitting}
               />
             </div>
           </div>
 
+          {/* バウンディングボックス */}
           <div className="space-y-2">
             <Label htmlFor="bounds">バウンディングボックス</Label>
             <Input
               id="bounds"
               value={boundsStr}
               onChange={(e) => setBoundsStr(e.target.value)}
-              placeholder="west, south, east, north (例: 139.5, 35.5, 140.0, 36.0)"
-              disabled={isSubmitting}
+              placeholder="west, south, east, north（例: 139.5, 35.5, 140.0, 36.0）"
             />
             <p className="text-xs text-muted-foreground">
-              カンマ区切りで4つの値を入力（西経度, 南緯度, 東経度, 北緯度）
+              カンマ区切りで西経、南緯、東経、北緯の順に入力
             </p>
           </div>
 
+          {/* 中心座標 */}
           <div className="space-y-2">
             <Label htmlFor="center">中心座標</Label>
             <Input
               id="center"
               value={centerStr}
               onChange={(e) => setCenterStr(e.target.value)}
-              placeholder="longitude, latitude (例: 139.7, 35.7)"
-              disabled={isSubmitting}
+              placeholder="longitude, latitude（例: 139.7671, 35.6812）"
             />
             <p className="text-xs text-muted-foreground">
-              カンマ区切りで2〜3つの値を入力（経度, 緯度, [ズーム]）
+              カンマ区切りで経度、緯度の順に入力（オプションでズームレベルも指定可）
             </p>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* アクションボタン */}
-      <div className="flex items-center justify-between">
-        <Link href="/tilesets">
-          <Button type="button" variant="outline">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            戻る
+          {/* 帰属表示 */}
+          <div className="space-y-2">
+            <Label htmlFor="attribution">帰属表示（Attribution）</Label>
+            <Input
+              id="attribution"
+              value={attribution}
+              onChange={(e) => setAttribution(e.target.value)}
+              placeholder="© OpenStreetMap contributors"
+            />
+            <p className="text-xs text-muted-foreground">
+              地図上に表示するデータ提供者のクレジット表記
+            </p>
+          </div>
+
+          {/* 公開設定 */}
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="isPublic">公開設定</Label>
+              <p className="text-sm text-muted-foreground">
+                公開すると誰でもアクセスできます
+              </p>
+            </div>
+            <Switch
+              id="isPublic"
+              checked={isPublic}
+              onCheckedChange={setIsPublic}
+            />
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-between">
+          <Link href="/tilesets">
+            <Button type="button" variant="outline">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              キャンセル
+            </Button>
+          </Link>
+          <Button type="submit" disabled={isSubmitting || !name}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                {mode === "create" ? "作成" : "保存"}
+              </>
+            )}
           </Button>
-        </Link>
-        <Button type="submit" disabled={isSubmitting || !name}>
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              {mode === "create" ? "作成" : "保存"}
-            </>
-          )}
-        </Button>
-      </div>
+        </CardFooter>
+      </Card>
     </form>
   );
 }
