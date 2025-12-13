@@ -148,10 +148,65 @@ Supabaseを使用する場合:
 - Supabaseダッシュボードで接続情報を確認
 - 環境変数が正しく設定されているか確認
 
-## 本番環境
+---
 
-| サービス | URL |
+# Vercel デプロイ構成
+
+同一リポジトリから2つのVercelプロジェクトをデプロイします。
+
+## プロジェクト構成
+
+| Vercelプロジェクト | Root Directory | URL | 説明 |
+|------------------|----------------|-----|------|
+| `geo-base` | `.`（ルート） | geo-base-puce.vercel.app | FastAPI タイルサーバー |
+| `geo-base-admin` | `app` | geo-base-admin.vercel.app | Next.js 管理画面 |
+
+## 既存APIプロジェクト（変更不要）
+
+現在の `geo-base` プロジェクトは変更不要です。
+
+## Admin UIプロジェクトの作成手順
+
+### 1. Vercel Dashboardで新規プロジェクト作成
+
+1. [Vercel Dashboard](https://vercel.com/dashboard) にログイン
+2. **Add New...** → **Project** をクリック
+3. 同じリポジトリ `mopinfish/geo-base` を選択
+4. **Import** をクリック
+
+### 2. プロジェクト設定
+
+| 設定項目 | 値 |
 |---------|-----|
-| Admin UI | （Vercelにデプロイ予定） |
-| API | https://geo-base-puce.vercel.app |
-| MCP Server | https://geo-base-mcp.fly.dev |
+| Project Name | `geo-base-admin` |
+| Framework Preset | `Next.js`（自動検出） |
+| Root Directory | `app` ← **重要: 必ず設定** |
+| Build Command | （デフォルトのまま） |
+| Output Directory | （デフォルトのまま） |
+
+### 3. 環境変数の設定
+
+| 変数名 | 値 | 説明 |
+|--------|-----|------|
+| `NEXT_PUBLIC_API_URL` | `https://geo-base-puce.vercel.app` | 本番API URL |
+| `NEXT_PUBLIC_MCP_URL` | `https://geo-base-mcp.fly.dev` | 本番MCP URL |
+
+### 4. デプロイ
+
+**Deploy** をクリックしてデプロイを開始。
+
+### 5. 動作確認
+
+デプロイ完了後、以下のURLで動作確認：
+- Admin UI: `https://geo-base-admin.vercel.app`
+- API: `https://geo-base-puce.vercel.app/api/health`
+
+---
+
+## 本番環境一覧
+
+| サービス | URL | プラットフォーム |
+|---------|-----|----------------|
+| Admin UI | https://geo-base-admin.vercel.app | Vercel |
+| API | https://geo-base-puce.vercel.app | Vercel |
+| MCP Server | https://geo-base-mcp.fly.dev | Fly.io |
