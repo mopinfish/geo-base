@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import { FeatureForm } from "@/components/features";
-import type { Feature, Tileset, FeatureUpdate } from "@/lib/api";
+import type { Feature, Tileset, FeatureCreate, FeatureUpdate } from "@/lib/api";
 import { ArrowLeft, Pencil, RefreshCw } from "lucide-react";
 
 interface EditFeaturePageProps {
@@ -56,11 +56,11 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
     fetchData();
   }, [id, isReady]);
 
-  const handleSubmit = async (data: FeatureUpdate) => {
+  const handleSubmit = async (data: FeatureCreate | FeatureUpdate) => {
     setIsSubmitting(true);
     setError(null);
     try {
-      await api.updateFeature(id, data);
+      await api.updateFeature(id, data as FeatureUpdate);
       router.push(`/features/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "フィーチャーの更新に失敗しました");

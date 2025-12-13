@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import { FeatureForm } from "@/components/features";
-import type { Tileset, FeatureCreate } from "@/lib/api";
+import type { Tileset, FeatureCreate, FeatureUpdate } from "@/lib/api";
 import { ArrowLeft, Plus, RefreshCw } from "lucide-react";
 
 export default function NewFeaturePage() {
@@ -43,11 +43,11 @@ export default function NewFeaturePage() {
     fetchTilesets();
   }, [isReady]);
 
-  const handleSubmit = async (data: FeatureCreate) => {
+  const handleSubmit = async (data: FeatureCreate | FeatureUpdate) => {
     setIsSubmitting(true);
     setError(null);
     try {
-      const feature = await api.createFeature(data);
+      const feature = await api.createFeature(data as FeatureCreate);
       router.push(`/features/${feature.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "フィーチャーの作成に失敗しました");

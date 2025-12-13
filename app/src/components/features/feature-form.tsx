@@ -26,7 +26,7 @@ type GeometryType = "Point" | "LineString" | "Polygon";
 // フォームのスキーマ
 const featureFormSchema = z.object({
   tileset_id: z.string().min(1, "タイルセットを選択してください"),
-  layer_name: z.string().default("default"),
+  layer_name: z.string().min(1, "レイヤー名を入力してください"),
 });
 
 type FeatureFormValues = z.infer<typeof featureFormSchema>;
