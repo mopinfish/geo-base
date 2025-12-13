@@ -102,6 +102,58 @@ export interface ApiError {
 }
 
 // ============================
+// データソース型定義
+// ============================
+
+export type DatasourceType = 'pmtiles' | 'cog';
+export type StorageProvider = 'supabase' | 's3' | 'http';
+
+export interface Datasource {
+  id: string;
+  tileset_id: string;
+  tileset_name: string;
+  type: DatasourceType;
+  url: string;
+  storage_provider: StorageProvider;
+  // PMTiles固有
+  tile_type?: string;
+  compression?: string;
+  layers?: unknown[];
+  // COG固有
+  band_count?: number;
+  band_descriptions?: string[];
+  native_crs?: string;
+  native_resolution?: number;
+  // 共通
+  min_zoom?: number;
+  max_zoom?: number;
+  bounds?: number[] | Record<string, number>;
+  center?: number[] | Record<string, number>;
+  metadata?: Record<string, unknown>;
+  is_public: boolean;
+  user_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatasourceCreate {
+  tileset_id: string;
+  type: DatasourceType;
+  url: string;
+  storage_provider?: StorageProvider;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DatasourceTestResult {
+  status: 'ok' | 'error';
+  type: DatasourceType;
+  url?: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+  info?: Record<string, unknown>;
+}
+
+// ============================
 // API クライアント
 // ============================
 
@@ -279,6 +331,48 @@ class ApiClient {
   async deleteFeature(id: string): Promise<void> {
     await this.request<null>(`/api/features/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ============================
+  // データソース API
+  // ============================
+
+  async listDatasources(params?: {
+    type?: DatasourceType;
+    include_private?: boolean;
+  }): Promise<{ datasources: Datasource[]; count: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.type) searchParams.append('type', params.type);
+    if (params?.include_private !== undefined) {
+      searchParams.append('include_private', String(params.include_private));
+    }
+    const query = searchParams.toString();
+    return this.request<{ datasources: Datasource[]; count: number }>(
+      `/api/datasources${query ? `?${query}` : ''}`
+    );
+  }
+
+  async getDatasource(id: string): Promise<Datasource> {
+    return this.request<Datasource>(`/api/datasources/${id}`);
+  }
+
+  async createDatasource(data: DatasourceCreate): Promise<Datasource> {
+    return this.request<Datasource>('/api/datasources', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteDatasource(id: string): Promise<void> {
+    await this.request<null>(`/api/datasources/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testDatasource(id: string): Promise<DatasourceTestResult> {
+    return this.request<DatasourceTestResult>(`/api/datasources/${id}/test`, {
+      method: 'POST',
     });
   }
 
