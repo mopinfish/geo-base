@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Map,
   Layers,
@@ -11,11 +11,13 @@ import {
   LogOut,
   Menu,
   X,
+  Loader2,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { createClient } from "@/lib/supabase/client";
 
 interface NavItem {
   title: string;
@@ -56,7 +58,23 @@ const bottomNavItems: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Logout error:", error);
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <>
@@ -139,21 +157,23 @@ export function Sidebar() {
               );
             })}
             <button
-              className="mt-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              onClick={() => {
-                // TODO: ログアウト処理
-                console.log("Logout clicked");
-              }}
+              className="mt-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
             >
-              <LogOut className="h-4 w-4" />
-              ログアウト
+              {isLoggingOut ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+              {isLoggingOut ? "ログアウト中..." : "ログアウト"}
             </button>
           </div>
 
           {/* バージョン情報 */}
           <div className="border-t p-4">
             <p className="text-xs text-muted-foreground">
-              geo-base Admin v0.1.0
+              geo-base Admin v0.2.0
             </p>
           </div>
         </div>

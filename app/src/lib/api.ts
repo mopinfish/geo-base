@@ -13,14 +13,13 @@ export interface Tileset {
   id: string;
   name: string;
   description?: string;
-  type: 'vector' | 'raster';
-  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'pmtiles';
-  source_type?: 'postgis' | 'pmtiles' | 'cog' | 'mbtiles';
-  source_url?: string;
+  type: 'vector' | 'raster' | 'pmtiles';
+  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'geojson';
   min_zoom?: number;
   max_zoom?: number;
   bounds?: number[];
   center?: number[];
+  attribution?: string;
   is_public: boolean;
   owner_id?: string;
   created_at: string;
@@ -31,14 +30,13 @@ export interface Tileset {
 export interface TilesetCreate {
   name: string;
   description?: string;
-  type: 'vector' | 'raster';
-  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'pmtiles';
-  source_type?: 'postgis' | 'pmtiles' | 'cog' | 'mbtiles';
-  source_url?: string;
+  type: 'vector' | 'raster' | 'pmtiles';
+  format: 'pbf' | 'png' | 'webp' | 'jpg' | 'geojson';
   min_zoom?: number;
   max_zoom?: number;
   bounds?: number[];
   center?: number[];
+  attribution?: string;
   is_public?: boolean;
   metadata?: Record<string, unknown>;
 }
@@ -50,6 +48,7 @@ export interface TilesetUpdate {
   max_zoom?: number;
   bounds?: number[];
   center?: number[];
+  attribution?: string;
   is_public?: boolean;
   metadata?: Record<string, unknown>;
 }
@@ -151,13 +150,34 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error: ApiError = await response.json().catch(() => ({
-        detail: `HTTP ${response.status}: ${response.statusText}`,
-      }));
-      throw new Error(error.detail);
+      let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const error: ApiError = await response.json();
+        errorDetail = error.detail || errorDetail;
+      } catch {
+        // JSONパースに失敗した場合はデフォルトのエラーメッセージを使用
+      }
+      throw new Error(errorDetail);
     }
 
-    return response.json();
+    // 204 No Content や空レスポンスの場合はnullを返す
+    const contentLength = response.headers.get('content-length');
+    if (response.status === 204 || contentLength === '0') {
+      return null as T;
+    }
+
+    // レスポンスボディが空かどうか確認
+    const text = await response.text();
+    if (!text) {
+      return null as T;
+    }
+
+    // JSONとしてパース
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return null as T;
+    }
   }
 
   // ============================
@@ -177,16 +197,16 @@ class ApiClient {
   // ============================
 
   async listTilesets(params?: {
-    type?: 'vector' | 'raster';
+    type?: 'vector' | 'raster' | 'pmtiles';
     is_public?: boolean;
-  }): Promise<Tileset[]> {
+  }): Promise<Tileset[] | { tilesets: Tileset[]; count: number }> {
     const searchParams = new URLSearchParams();
     if (params?.type) searchParams.append('type', params.type);
     if (params?.is_public !== undefined) {
       searchParams.append('is_public', String(params.is_public));
     }
     const query = searchParams.toString();
-    return this.request<Tileset[]>(`/api/tilesets${query ? `?${query}` : ''}`);
+    return this.request<Tileset[] | { tilesets: Tileset[]; count: number }>(`/api/tilesets${query ? `?${query}` : ''}`);
   }
 
   async getTileset(id: string): Promise<Tileset> {
@@ -208,7 +228,7 @@ class ApiClient {
   }
 
   async deleteTileset(id: string): Promise<void> {
-    await this.request<void>(`/api/tilesets/${id}`, {
+    await this.request<null>(`/api/tilesets/${id}`, {
       method: 'DELETE',
     });
   }
@@ -257,7 +277,7 @@ class ApiClient {
   }
 
   async deleteFeature(id: string): Promise<void> {
-    await this.request<void>(`/api/features/${id}`, {
+    await this.request<null>(`/api/features/${id}`, {
       method: 'DELETE',
     });
   }

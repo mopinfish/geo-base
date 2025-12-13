@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "東京駅", "type": "station"},
+      "geometry": {"type": "Point", "coordinates": [139.7671, 35.6812]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "東京タワー", "type": "landmark"},
+      "geometry": {"type": "Point", "coordinates": [139.7454, 35.6586]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "東京スカイツリー", "type": "landmark"},
+      "geometry": {"type": "Point", "coordinates": [139.8107, 35.7101]}
+    }
+  ]
+}
