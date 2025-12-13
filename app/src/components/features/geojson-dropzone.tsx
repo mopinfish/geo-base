@@ -8,10 +8,7 @@ import { Upload, FileJson, AlertCircle, Check } from "lucide-react";
 // GeoJSON型定義
 export interface GeoJSONFeature {
   type: "Feature";
-  geometry: {
-    type: string;
-    coordinates: unknown;
-  };
+  geometry: GeoJSON.Geometry;
   properties: Record<string, unknown> | null;
 }
 
