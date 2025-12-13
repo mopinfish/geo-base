@@ -5,7 +5,8 @@ import { AdminLayout } from "@/components/layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { api, type Tileset, type HealthStatus } from "@/lib/api";
+import { useApi } from "@/hooks/use-api";
+import type { Tileset, HealthStatus } from "@/lib/api";
 import { 
   Layers, 
   Map, 
@@ -18,6 +19,7 @@ import {
 import Link from "next/link";
 
 export default function DashboardPage() {
+  const { api, isReady } = useApi();
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,9 +39,19 @@ export default function DashboardPage() {
         setHealth(healthData.value);
       }
       
-      // タイルセット結果の処理（配列であることを確認）
-      if (tilesetsData.status === "fulfilled" && Array.isArray(tilesetsData.value)) {
-        setTilesets(tilesetsData.value);
+      // タイルセット結果の処理
+      // APIレスポンスは {tilesets: [...], count: N} 形式
+      if (tilesetsData.status === "fulfilled") {
+        const data = tilesetsData.value;
+        if (Array.isArray(data)) {
+          // 配列が直接返ってくる場合
+          setTilesets(data);
+        } else if (data && Array.isArray(data.tilesets)) {
+          // {tilesets: [...]} 形式の場合
+          setTilesets(data.tilesets);
+        } else {
+          setTilesets([]);
+        }
       } else {
         setTilesets([]);
       }
@@ -51,9 +63,12 @@ export default function DashboardPage() {
     }
   };
 
+  // isReadyがtrueになったらデータを取得
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (isReady) {
+      fetchData();
+    }
+  }, [isReady]);
 
   // 安全にフィルタリング（tilesetsが配列でない場合に備える）
   const safeFilterTilesets = Array.isArray(tilesets) ? tilesets : [];
@@ -71,7 +86,7 @@ export default function DashboardPage() {
               geo-base タイルサーバーの管理画面へようこそ
             </p>
           </div>
-          <Button onClick={fetchData} variant="outline" size="sm">
+          <Button onClick={fetchData} variant="outline" size="sm" disabled={!isReady}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             更新
           </Button>
@@ -131,9 +146,11 @@ export default function DashboardPage() {
               <Layers className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{safeFilterTilesets.length}</div>
+              <div className="text-2xl font-bold">
+                {!isReady || isLoading ? "-" : safeFilterTilesets.length}
+              </div>
               <p className="text-xs text-muted-foreground">
-                ベクタ: {vectorTilesets.length} / ラスタ: {rasterTilesets.length}
+                ベクタ: {!isReady || isLoading ? "-" : vectorTilesets.length} / ラスタ: {!isReady || isLoading ? "-" : rasterTilesets.length}
               </p>
             </CardContent>
           </Card>
@@ -146,10 +163,10 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {safeFilterTilesets.filter((t) => t.is_public).length}
+                {!isReady || isLoading ? "-" : safeFilterTilesets.filter((t) => t.is_public).length}
               </div>
               <p className="text-xs text-muted-foreground">
-                非公開: {safeFilterTilesets.filter((t) => !t.is_public).length}
+                非公開: {!isReady || isLoading ? "-" : safeFilterTilesets.filter((t) => !t.is_public).length}
               </p>
             </CardContent>
           </Card>
@@ -195,7 +212,11 @@ export default function DashboardPage() {
               <CardDescription>最新の5件を表示</CardDescription>
             </CardHeader>
             <CardContent>
-              {safeFilterTilesets.length === 0 ? (
+              {!isReady || isLoading ? (
+                <p className="text-sm text-muted-foreground">
+                  読み込み中...
+                </p>
+              ) : safeFilterTilesets.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   タイルセットがありません
                 </p>
