@@ -119,15 +119,17 @@ def get_raster_tile(
             
             # Apply colormap if specified for single-band
             if colormap and imgdata.count == 1:
-                render_options["colormap"] = colormap
+                try:
+                    from matplotlib import cm
+                    render_options["colormap"] = cm.get_cmap(colormap)
+                except ImportError:
+                    pass
             
-            # Render to image
-            img_bytes = imgdata.render(
+            # Render to bytes
+            return imgdata.render(
                 img_format=img_format.upper().replace("JPG", "JPEG"),
                 **render_options
             )
-            
-            return img_bytes
             
     except TileOutsideBounds:
         return None
@@ -155,17 +157,17 @@ async def get_raster_tile_async(
 
 
 # =============================================================================
-# COG Preview Generation
+# Preview Image Generation
 # =============================================================================
 
 
 def get_raster_preview(
     cog_url: str,
+    max_size: int = 512,
     indexes: Optional[tuple[int, ...]] = None,
     scale_min: float = DEFAULT_SCALE_MIN,
     scale_max: float = DEFAULT_SCALE_MAX,
     img_format: str = "png",
-    max_size: int = 512,
     colormap: Optional[str] = None,
 ) -> bytes:
     """
@@ -173,15 +175,15 @@ def get_raster_preview(
     
     Args:
         cog_url: URL or path to the COG file
+        max_size: Maximum width/height of the preview
         indexes: Band indexes to read
         scale_min: Minimum value for rescaling
         scale_max: Maximum value for rescaling
         img_format: Output image format
-        max_size: Maximum dimension of preview image
         colormap: Optional colormap name
         
     Returns:
-        Preview image data as bytes
+        Preview image as bytes
     """
     if not RASTERIO_AVAILABLE:
         raise RuntimeError("rio-tiler is not available")
@@ -214,7 +216,7 @@ def get_raster_preview(
 
 
 # =============================================================================
-# COG Part (Bounding Box) Generation
+# Part/Crop Image Generation
 # =============================================================================
 
 
@@ -225,7 +227,7 @@ def get_raster_part(
     scale_min: float = DEFAULT_SCALE_MIN,
     scale_max: float = DEFAULT_SCALE_MAX,
     img_format: str = "png",
-    max_size: int = 512,
+    max_size: int = 1024,
     dst_crs: Optional[str] = None,
 ) -> bytes:
     """
@@ -233,16 +235,16 @@ def get_raster_part(
     
     Args:
         cog_url: URL or path to the COG file
-        bbox: Bounding box (minx, miny, maxx, maxy)
+        bbox: Bounding box (west, south, east, north) in WGS84
         indexes: Band indexes to read
         scale_min: Minimum value for rescaling
         scale_max: Maximum value for rescaling
         img_format: Output image format
-        max_size: Maximum dimension of output image
-        dst_crs: Target CRS for output (e.g., "EPSG:4326")
+        max_size: Maximum output size
+        dst_crs: Target CRS (default: use source CRS)
         
     Returns:
-        Image data as bytes
+        Part image as bytes
     """
     if not RASTERIO_AVAILABLE:
         raise RuntimeError("rio-tiler is not available")
@@ -298,21 +300,38 @@ def get_cog_info(cog_url: str) -> dict[str, Any]:
         with COGReader(cog_url) as cog:
             info = cog.info()
             
-            return {
-                "bounds": info.bounds,
-                "crs": str(info.crs) if info.crs else None,
-                "band_metadata": info.band_metadata,
-                "band_descriptions": info.band_descriptions,
-                "dtype": info.dtype,
-                "nodata_type": info.nodata_type,
-                "colorinterp": info.colorinterp,
-                "count": info.count,
-                "width": info.width,
-                "height": info.height,
-                "driver": info.driver,
-                "minzoom": info.minzoom,
-                "maxzoom": info.maxzoom,
+            # Build result with safe attribute access
+            result = {
+                "bounds": getattr(info, 'bounds', None),
+                "crs": str(info.crs) if getattr(info, 'crs', None) else None,
+                "band_metadata": getattr(info, 'band_metadata', []),
+                "band_descriptions": getattr(info, 'band_descriptions', []),
+                "dtype": getattr(info, 'dtype', None),
+                "nodata_type": getattr(info, 'nodata_type', None),
+                "colorinterp": getattr(info, 'colorinterp', None),
+                "count": getattr(info, 'count', None),
+                "width": getattr(info, 'width', None),
+                "height": getattr(info, 'height', None),
+                "driver": getattr(info, 'driver', None),
             }
+            
+            # minzoom/maxzoom may not exist in all rio-tiler versions
+            # Try to get from info, otherwise calculate from the reader
+            if hasattr(info, 'minzoom'):
+                result["minzoom"] = info.minzoom
+            elif hasattr(cog, 'minzoom'):
+                result["minzoom"] = cog.minzoom
+            else:
+                result["minzoom"] = 0
+                
+            if hasattr(info, 'maxzoom'):
+                result["maxzoom"] = info.maxzoom
+            elif hasattr(cog, 'maxzoom'):
+                result["maxzoom"] = cog.maxzoom
+            else:
+                result["maxzoom"] = 22
+            
+            return result
             
     except Exception as e:
         raise RuntimeError(f"Error reading COG info: {str(e)}") from e

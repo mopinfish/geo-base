@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS tilesets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    type VARCHAR(50) NOT NULL CHECK (type IN ('raster', 'vector')),
+    type VARCHAR(50) NOT NULL CHECK (type IN ('raster', 'vector', 'pmtiles')),
     format VARCHAR(50) NOT NULL CHECK (format IN ('png', 'jpg', 'webp', 'pbf', 'geojson', 'mbtiles', 'pmtiles', 'cog')),
     min_zoom INTEGER DEFAULT 0,
     max_zoom INTEGER DEFAULT 22,
