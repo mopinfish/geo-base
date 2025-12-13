@@ -58,10 +58,16 @@ export default function TilesetsPage() {
       console.log("Fetching tilesets...");
       const data = await api.listTilesets();
       console.log("API Response:", data);
-      console.log("Is Array:", Array.isArray(data));
       
-      // 配列であることを確認
-      const tilesetsArray = Array.isArray(data) ? data : [];
+      // APIレスポンスの形式に対応
+      // - 配列の場合: data そのもの
+      // - オブジェクトの場合: data.tilesets
+      let tilesetsArray: Tileset[] = [];
+      if (Array.isArray(data)) {
+        tilesetsArray = data;
+      } else if (data && typeof data === 'object' && 'tilesets' in data) {
+        tilesetsArray = (data as { tilesets: Tileset[] }).tilesets;
+      }
       console.log("Tilesets array:", tilesetsArray);
       
       setTilesets(tilesetsArray);
