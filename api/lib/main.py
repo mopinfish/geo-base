@@ -74,17 +74,17 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="geo-base Tile Server",
-    description="地理空間タイル配信API",
+    description="åœ°ç†ç©ºé–“ã‚¿ã‚¤ãƒ«é…ä¿¡API",
     version="0.4.0",
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - 全オリジンを許可（開発・本番共通）
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # 全オリジンを許可
+    allow_credentials=False,  # "*"の場合はFalseが必要
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1480,18 +1480,23 @@ def get_tileset_tilejson(
             (pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers,
              name, description, attribution) = row
             
+            # Build metadata dict for generate_pmtiles_tilejson
+            metadata = {
+                "tile_type": tile_type or "mvt",
+                "min_zoom": min_zoom or 0,
+                "max_zoom": max_zoom or 22,
+                "bounds": bounds,
+                "center": center,
+                "layers": layers or [],
+            }
+            
             return generate_pmtiles_tilejson(
                 tileset_id=tileset_id,
-                name=name,
+                tileset_name=name,
+                metadata=metadata,
                 base_url=base_url,
-                tile_type=tile_type or "mvt",
-                min_zoom=min_zoom or 0,
-                max_zoom=max_zoom or 22,
-                bounds=bounds,
-                center=center,
-                description=description,
-                attribution=attribution,
-                layers=layers,
+                description=description or "",
+                attribution=attribution or "",
             )
         elif tileset_type == "raster":
             # Delegate to raster TileJSON
@@ -2737,12 +2742,12 @@ PREVIEW_HTML = """
             .then(response => response.json())
             .then(data => {
                 const el = document.getElementById('db-status');
-                el.textContent = data.status === 'ok' ? '✔ Connected' : '✖ ' + data.database;
+                el.textContent = data.status === 'ok' ? 'âœ” Connected' : 'âœ– ' + data.database;
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('db-status');
-                el.textContent = '✖ Error';
+                el.textContent = 'âœ– Error';
                 el.className = 'status error';
             });
 
@@ -2830,3 +2835,4 @@ PREVIEW_HTML = """
 def preview_page():
     """Tile preview page with MapLibre GL JS."""
     return PREVIEW_HTML
+
