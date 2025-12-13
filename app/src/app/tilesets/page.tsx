@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, type Tileset } from "@/lib/api";
+import { useApi } from "@/hooks/use-api";
+import type { Tileset } from "@/lib/api";
 import { 
   Plus, 
   RefreshCw, 
@@ -30,9 +31,13 @@ import {
   Layers,
   Eye,
   Pencil,
+  Globe,
+  Lock,
 } from "lucide-react";
 
 export default function TilesetsPage() {
+  const api = useApi();
+  
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [filteredTilesets, setFilteredTilesets] = useState<Tileset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,7 +46,7 @@ export default function TilesetsPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [publicFilter, setPublicFilter] = useState<string>("all");
 
-  const fetchTilesets = async () => {
+  const fetchTilesets = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -57,11 +62,11 @@ export default function TilesetsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api]);
 
   useEffect(() => {
     fetchTilesets();
-  }, []);
+  }, [fetchTilesets]);
 
   // フィルタリング
   useEffect(() => {
@@ -210,15 +215,20 @@ export default function TilesetsPage() {
                   {filteredTilesets.map((tileset) => (
                     <TableRow key={tileset.id}>
                       <TableCell>
-                        <div>
-                          <div className="font-medium">{tileset.name}</div>
-                          {tileset.description && (
-                            <div className="text-xs text-muted-foreground">
-                              {tileset.description.slice(0, 50)}
-                              {tileset.description.length > 50 && "..."}
-                            </div>
-                          )}
-                        </div>
+                        <Link 
+                          href={`/tilesets/${tileset.id}`}
+                          className="hover:underline"
+                        >
+                          <div>
+                            <div className="font-medium">{tileset.name}</div>
+                            {tileset.description && (
+                              <div className="text-xs text-muted-foreground">
+                                {tileset.description.slice(0, 50)}
+                                {tileset.description.length > 50 && "..."}
+                              </div>
+                            )}
+                          </div>
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{tileset.type}</Badge>
@@ -232,9 +242,17 @@ export default function TilesetsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={tileset.is_public ? "default" : "outline"}>
-                          {tileset.is_public ? "公開" : "非公開"}
-                        </Badge>
+                        {tileset.is_public ? (
+                          <Badge variant="default" className="gap-1">
+                            <Globe className="h-3 w-3" />
+                            公開
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="gap-1">
+                            <Lock className="h-3 w-3" />
+                            非公開
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(tileset.updated_at)}
@@ -242,12 +260,12 @@ export default function TilesetsPage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Link href={`/tilesets/${tileset.id}`}>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" title="詳細">
                               <Eye className="h-4 w-4" />
                             </Button>
                           </Link>
                           <Link href={`/tilesets/${tileset.id}/edit`}>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" title="編集">
                               <Pencil className="h-4 w-4" />
                             </Button>
                           </Link>
