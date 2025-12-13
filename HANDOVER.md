@@ -402,11 +402,44 @@ CREATE TABLE raster_sources (
 | pointColor | string | ポイントの色 |
 | hideBaseMap | boolean | ベースマップを非表示にするか |
 
+### 動作確認結果（2025-12-14）
+
+| タイルタイプ | 動作確認 | 備考 |
+|-------------|----------|------|
+| PMTiles | ✅ 成功 | フィレンツェ地域のサンプルデータで表示確認 |
+| COG (ラスター) | ✅ 成功 | 北海道南部（Sentinel-2 Tile 54TWN）で表示確認 |
+| Vector (PostGIS) | ✅ 成功 | 既存のPostGISベースMVT表示確認済み |
+
+### 注意事項
+
+1. **タイルの範囲**: PMTiles/COGファイルは特定の地域のみをカバーしているため、地図を適切な位置にパンする必要がある
+2. **TileJSONのbounds**: 現在、デフォルト値（全世界）が設定されているため、実際のCOG範囲とは異なる場合がある
+3. **CORS設定**: `allow_credentials=False`に設定（`allow_origins=["*"]`との併用制約のため）
+
 ---
 
 ## 7. 次のステップ（未実装）
 
-### フィーチャー地図表示の改善
+### 高優先度
+
+#### マップビューワーの初期表示位置改善
+
+**目的**: タイルセットの実際のデータ範囲に自動的にフィットする
+
+**現状の問題**:
+- TileJSONのboundsがデフォルト値（全世界）になっている場合、地図がデータのない位置を表示する
+- ユーザーが手動でパンしないとタイルが見えない
+
+**実装方針**:
+1. データソース登録時に実際のboundsを計算・保存
+2. タイルセットのbounds/centerを自動更新するAPIエンドポイント追加
+3. TilesetMapPreviewで「データ範囲にフィット」ボタンの動作を改善
+
+**優先度**: 高
+
+### 中優先度
+
+#### フィーチャー地図表示の改善
 
 **目的**: フィーチャー詳細ページでの地図表示を改善
 
@@ -417,7 +450,27 @@ CREATE TABLE raster_sources (
 
 **優先度**: 中
 
-### タイルセット統計・分析機能
+#### 本番デプロイ
+
+**対象**:
+- API（CORS修正、PMTiles TileJSON修正）
+- Admin UI（マップビューワー追加）
+
+**手順**:
+```bash
+# develop → main へマージ後、自動デプロイ
+git checkout main
+git merge develop
+git push origin main
+```
+
+**注意点**:
+- Supabaseの本番DBに`pmtiles_sources`と`raster_sources`テーブルが必要
+- 本番のRLSポリシーは`04_rls_policies.sql.supabase`を使用
+
+### 低優先度
+
+#### タイルセット統計・分析機能
 
 **目的**: タイルセットの利用状況やフィーチャー数などの統計表示
 
@@ -428,7 +481,9 @@ CREATE TABLE raster_sources (
 
 **優先度**: 低
 
-### ~~PMTiles用TileJSONエンドポイント修正~~ ✅ 完了
+### 完了した課題
+
+#### ~~PMTiles用TileJSONエンドポイント修正~~ ✅ 完了
 
 **症状**: pmtilesタイプのタイルセットでTileJSON取得時に500エラー
 
@@ -441,25 +496,20 @@ CREATE TABLE raster_sources (
 
 **ステータス**: ✅ 修正完了
 
-### 本番デプロイ（Vercel）
+#### ~~CORS設定の修正~~ ✅ 完了
 
-**対象**:
-- API（Step 3.8.1のデータソースエンドポイント追加）
-- Admin UI（Step 3.8のUI更新）
+**症状**: ブラウザからのタイルリクエストがCORSエラーでブロックされる
 
-**手順**:
-```bash
-# develop → main へマージ後、自動デプロイ
-# または手動でVercelにプッシュ
-```
+**原因**: `allow_origins=["*"]`と`allow_credentials=True`の組み合わせはブラウザで拒否される
 
-**注意点**:
-- Supabaseの本番DBに`pmtiles_sources`と`raster_sources`テーブルが必要
-- 本番のRLSポリシーは`04_rls_policies.sql.supabase`を使用
+**修正内容**:
+- `api/lib/main.py`のCORSMiddleware設定を`allow_credentials=False`に変更
+
+**ステータス**: ✅ 修正完了
 
 ---
 
-## 7. 既知の問題
+## 8. 既知の問題
 
 ### 1. DB接続プール枯渇
 
@@ -570,6 +620,23 @@ npm run dev
 | Admin UI | http://localhost:3000 |
 | API Docs | http://localhost:8000/docs |
 
+### テスト用サンプルデータ
+
+ローカルテストで使用できるサンプルデータソース：
+
+#### PMTiles
+| 名前 | URL | 範囲 |
+|------|-----|------|
+| Protomaps Firenze | `https://protomaps.github.io/PMTiles/protomaps(vector)ODbL_firenze.pmtiles` | イタリア・フィレンツェ（緯度43.77, 経度11.25） |
+| US ZCTAs | `https://r2-public.protomaps.com/protomaps-sample-datasets/cb_2018_us_zcta510_500k.pmtiles` | 米国全域 |
+
+#### COG (Cloud Optimized GeoTIFF)
+| 名前 | URL | 範囲 |
+|------|-----|------|
+| Sentinel-2 54TWN | `https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/54/T/WN/2023/11/S2B_54TWN_20231118_1_L2A/TCI.tif` | 北海道南部（緯度42.36〜43.34, 経度140.99〜142.35）, z7-13 |
+
+**注意**: COGはローカル環境でのみ動作（Vercelでは rasterio が使用不可）
+
 ---
 
 ## 10. 本番環境URL一覧
@@ -624,8 +691,8 @@ npm run dev
 | 2025-12-14 | 1.3.0 | GeoJSONインポート機能（Step 3.7完了）、フィーチャー一覧にインポートボタン追加 |
 | 2025-12-14 | 1.4.0 | データソース管理UI（Step 3.8完了）、PMTiles/COG接続テスト、aiopmtiles/rio-tiler互換性修正 |
 | 2025-12-14 | 1.4.1 | PMTiles TileJSONエンドポイント500エラー修正（generate_pmtiles_tilejson引数修正） |
-| 2025-12-14 | 1.5.0 | マップビューワー（Step 3.9完了）、TilesetMapPreviewコンポーネント追加 |
+| 2025-12-14 | 1.5.0 | マップビューワー（Step 3.9完了）、TilesetMapPreviewコンポーネント追加、CORS設定修正 |
 
 ---
 
-*このドキュメントは2025-12-14時点の情報です。APIバージョン: 0.4.0 / MCPバージョン: 0.2.0 / Admin UIバージョン: 0.8.0*
+*このドキュメントは2025-12-14時点の情報です。APIバージョン: 0.4.0 / MCPバージョン: 0.2.0 / Admin UIバージョン: 0.8.0（Step 3.9完了）*
