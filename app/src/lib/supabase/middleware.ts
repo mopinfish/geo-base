@@ -2,7 +2,21 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
+ * Supabaseキーを取得（新形式優先、レガシーにフォールバック）
+ */
+function getSupabaseKey(): string {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? 
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
+
+/**
  * ミドルウェア用のSupabaseクライアントを作成し、セッションを更新
+ * 
+ * 環境変数は以下のいずれかを使用可能：
+ * - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY（推奨・新形式）
+ * - NEXT_PUBLIC_SUPABASE_ANON_KEY（レガシー形式）
  * 
  * @param request - Next.js Request
  * @returns Promise<NextResponse>
@@ -14,7 +28,7 @@ export async function updateSession(request: NextRequest) {
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabaseKey(),
     {
       cookies: {
         getAll() {

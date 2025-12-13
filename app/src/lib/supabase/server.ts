@@ -2,7 +2,21 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 /**
+ * Supabaseキーを取得（新形式優先、レガシーにフォールバック）
+ */
+function getSupabaseKey(): string {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? 
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
+
+/**
  * サーバーコンポーネント・サーバーアクション用のSupabaseクライアントを作成
+ * 
+ * 環境変数は以下のいずれかを使用可能：
+ * - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY（推奨・新形式）
+ * - NEXT_PUBLIC_SUPABASE_ANON_KEY（レガシー形式）
  * 
  * @returns Promise<Supabase Server Client>
  */
@@ -11,7 +25,7 @@ export async function createClient() {
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabaseKey(),
     {
       cookies: {
         getAll() {
