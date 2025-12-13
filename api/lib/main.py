@@ -7,6 +7,7 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from enum import Enum
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -73,8 +74,8 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="geo-base Tile Server",
-    description="åœ°ç†ç©ºé–“ã‚¿ã‚¤ãƒ«é…ä¿¡API",
-    version="0.3.0",
+    description="地理空間タイル配信API",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -159,6 +160,40 @@ class FeatureResponse(BaseModel):
 
 
 # ============================================================================
+# Pydantic Models for Datasources
+# ============================================================================
+
+
+class DatasourceType(str, Enum):
+    """Datasource type enum."""
+    pmtiles = "pmtiles"
+    cog = "cog"
+
+
+class StorageProvider(str, Enum):
+    """Storage provider enum."""
+    supabase = "supabase"
+    s3 = "s3"
+    http = "http"
+
+
+class DatasourceCreate(BaseModel):
+    """Request model for creating a datasource."""
+    tileset_id: str = Field(..., description="Parent tileset UUID")
+    type: DatasourceType = Field(..., description="Datasource type (pmtiles or cog)")
+    url: str = Field(..., min_length=1, description="URL to the data source")
+    storage_provider: StorageProvider = Field(StorageProvider.http, description="Storage provider")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class DatasourceUpdate(BaseModel):
+    """Request model for updating a datasource."""
+    url: Optional[str] = Field(None, min_length=1, description="URL to the data source")
+    storage_provider: Optional[StorageProvider] = Field(None, description="Storage provider")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+# ============================================================================
 # Health Check Endpoints
 # ============================================================================
 
@@ -168,7 +203,7 @@ def health_check():
     """Basic health check endpoint."""
     return {
         "status": "ok",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "environment": settings.environment,
         "rasterio_available": is_rasterio_available(),
         "pmtiles_available": is_pmtiles_available(),
@@ -934,7 +969,7 @@ async def get_raster_tile_preview(
         indexes: Comma-separated band indexes
         scale_min: Minimum value for rescaling
         scale_max: Maximum value for rescaling
-        max_size: Maximum dimension of preview
+        max_size: Maximum dimension of the preview image
         format: Output format
         colormap: Colormap name
     """
@@ -951,9 +986,6 @@ async def get_raster_tile_preview(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    # Limit max_size
-    max_size = min(max_size, settings.raster_max_preview_size)
-    
     # Get COG URL from database with access check
     try:
         with conn.cursor() as cur:
@@ -961,7 +993,8 @@ async def get_raster_tile_preview(
                 """
                 SELECT rs.cog_url, t.is_public, t.user_id,
                        COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
-                       COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max
+                       COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max,
+                       COALESCE(t.metadata->>'bands', NULL) as default_bands
                 FROM raster_sources rs
                 JOIN tilesets t ON rs.tileset_id = t.id
                 WHERE t.id = %s
@@ -974,7 +1007,7 @@ async def get_raster_tile_preview(
         if not row:
             raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
         
-        cog_url, is_public, owner_user_id, db_scale_min, db_scale_max = row
+        cog_url, is_public, owner_user_id, db_scale_min, db_scale_max, default_bands = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
         
         # Check access
@@ -1002,6 +1035,11 @@ async def get_raster_tile_preview(
             band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid band indexes format")
+    elif default_bands:
+        try:
+            band_indexes = tuple(int(i.strip()) for i in default_bands.split(","))
+        except ValueError:
+            pass
     
     # Use provided scale values or database defaults
     final_scale_min = scale_min if scale_min is not None else db_scale_min
@@ -1009,24 +1047,22 @@ async def get_raster_tile_preview(
     
     # Generate preview
     try:
-        preview_data = get_raster_preview(
+        preview_data = await get_raster_preview(
             cog_url=cog_url,
             indexes=band_indexes,
             scale_min=final_scale_min,
             scale_max=final_scale_max,
-            img_format=normalized_format,
             max_size=max_size,
+            img_format=normalized_format,
             colormap=colormap,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-    headers = {
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-    }
+    if preview_data is None:
+        raise HTTPException(status_code=500, detail="Failed to generate preview")
     
-    return Response(content=preview_data, media_type=media_type, headers=headers)
+    return Response(content=preview_data, media_type=media_type)
 
 
 @app.get("/api/tiles/raster/{tileset_id}/info")
@@ -1334,7 +1370,7 @@ def get_tileset(
         tileset = dict(zip(columns, row))
         is_public = tileset.get("is_public", True)
         owner_user_id = str(tileset.get("user_id")) if tileset.get("user_id") else None
-        
+
         # Check access
         if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
             if not user:
@@ -1348,11 +1384,15 @@ def get_tileset(
                 detail="You do not have permission to access this tileset"
             )
 
-        # Convert datetime and UUID to string
+        # Convert types
         if tileset.get("id"):
             tileset["id"] = str(tileset["id"])
         if tileset.get("user_id"):
             tileset["user_id"] = str(tileset["user_id"])
+        if tileset.get("bounds"):
+            tileset["bounds"] = json.loads(tileset["bounds"])
+        if tileset.get("center"):
+            tileset["center"] = json.loads(tileset["center"])
         if tileset.get("created_at"):
             tileset["created_at"] = tileset["created_at"].isoformat()
         if tileset.get("updated_at"):
@@ -1362,7 +1402,7 @@ def get_tileset(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting tileset: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
 
 
 @app.get("/api/tilesets/{tileset_id}/tilejson.json")
@@ -1372,13 +1412,16 @@ def get_tileset_tilejson(
     conn=Depends(get_connection),
     user: Optional[User] = Depends(get_current_user),
 ):
-    """Get TileJSON for a specific tileset with access control."""
+    """
+    Get TileJSON for a tileset.
+    
+    Routes to appropriate handler based on tileset type.
+    """
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT name, description, type, format, min_zoom, max_zoom,
-                       attribution, is_public, user_id
+                SELECT type, is_public, user_id
                 FROM tilesets
                 WHERE id = %s
                 """,
@@ -1389,10 +1432,9 @@ def get_tileset_tilejson(
         if not row:
             raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
 
-        (name, description, tile_type, tile_format,
-         min_zoom, max_zoom, attribution, is_public, owner_user_id) = row
+        tileset_type, is_public, owner_user_id = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
-        
+
         # Check access
         if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
             if not user:
@@ -1405,355 +1447,89 @@ def get_tileset_tilejson(
                 status_code=403,
                 detail="You do not have permission to access this tileset"
             )
-        
+
         base_url = get_base_url(request)
 
-        # Determine tile URL based on type
-        if tile_type == "vector":
-            tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
-        elif tile_type == "raster":
-            tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format or 'png'}"
-        elif tile_type == "pmtiles":
-            # Check PMTiles source
+        # Route based on type
+        if tileset_type == "vector":
+            return {
+                "tilejson": "3.0.0",
+                "tiles": [f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"],
+                "minzoom": 0,
+                "maxzoom": 22,
+            }
+        elif tileset_type == "pmtiles":
+            # Delegate to PMTiles endpoint (handled internally)
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT tile_type FROM pmtiles_sources WHERE tileset_id = %s",
+                    """
+                    SELECT ps.pmtiles_url, ps.tile_type, ps.min_zoom, ps.max_zoom,
+                           ps.bounds, ps.center, ps.layers,
+                           t.name, t.description, t.attribution
+                    FROM pmtiles_sources ps
+                    JOIN tilesets t ON ps.tileset_id = t.id
+                    WHERE t.id = %s
+                    """,
                     (tileset_id,),
                 )
-                pmtiles_row = cur.fetchone()
+                row = cur.fetchone()
             
-            if pmtiles_row:
-                ext = "pbf" if pmtiles_row[0] == "mvt" else (pmtiles_row[0] or "pbf")
-                tile_url = f"{base_url}/api/tiles/pmtiles/{tileset_id}/{{z}}/{{x}}/{{y}}.{ext}"
-            else:
-                tile_url = f"{base_url}/api/tiles/pmtiles/{tileset_id}/{{z}}/{{x}}/{{y}}.pbf"
+            if not row:
+                raise HTTPException(status_code=404, detail="PMTiles source not found")
+            
+            (pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers,
+             name, description, attribution) = row
+            
+            return generate_pmtiles_tilejson(
+                tileset_id=tileset_id,
+                name=name,
+                base_url=base_url,
+                tile_type=tile_type or "mvt",
+                min_zoom=min_zoom or 0,
+                max_zoom=max_zoom or 22,
+                bounds=bounds,
+                center=center,
+                description=description,
+                attribution=attribution,
+                layers=layers,
+            )
+        elif tileset_type == "raster":
+            # Delegate to raster TileJSON
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT t.name, t.description, t.format, t.min_zoom, t.max_zoom,
+                           t.attribution, rs.cog_url
+                    FROM tilesets t
+                    LEFT JOIN raster_sources rs ON rs.tileset_id = t.id
+                    WHERE t.id = %s
+                    """,
+                    (tileset_id,),
+                )
+                row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Raster source not found")
+            
+            name, description, tile_format, min_zoom, max_zoom, attribution, cog_url = row
+            
+            return generate_raster_tilejson(
+                tileset_id=tileset_id,
+                name=name,
+                base_url=base_url,
+                tile_format=tile_format or "png",
+                min_zoom=min_zoom or 0,
+                max_zoom=max_zoom or 22,
+                description=description,
+                attribution=attribution,
+            )
         else:
-            tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
+            raise HTTPException(status_code=400, detail=f"Unknown tileset type: {tileset_type}")
 
-        return {
-            "tilejson": "3.0.0",
-            "name": name,
-            "description": description,
-            "tiles": [tile_url],
-            "minzoom": min_zoom or 0,
-            "maxzoom": max_zoom or 22,
-            "attribution": attribution,
-            "bounds": [-180, -85.051129, 180, 85.051129],
-            "center": [139.7, 35.7, 10],
-        }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
-
-
-
-# ============================================================================
-# Features API Endpoints
-# ============================================================================
-
-
-@app.get("/api/features")
-def search_features(
-    request: Request,
-    conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
-    bbox: Optional[str] = Query(None, description="Bounding box: minx,miny,maxx,maxy"),
-    layer: Optional[str] = Query(None, description="Layer name filter"),
-    tileset_id: Optional[str] = Query(None, description="Tileset ID filter"),
-    filter: Optional[str] = Query(None, description="Attribute filter (key=value)"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of features"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
-):
-    """
-    Search and list features with optional filters.
-    
-    Supports:
-    - Bounding box spatial filter
-    - Layer name filter
-    - Tileset ID filter
-    - Attribute filter (simple key=value)
-    - Pagination (limit/offset)
-    """
-    try:
-        with conn.cursor() as cur:
-            # Build query dynamically
-            conditions = []
-            params = []
-            
-            # Tileset access control
-            if tileset_id:
-                # Check tileset access
-                cur.execute(
-                    "SELECT is_public, user_id FROM tilesets WHERE id = %s",
-                    (tileset_id,)
-                )
-                tileset_row = cur.fetchone()
-                if tileset_row:
-                    is_public, owner_user_id = tileset_row
-                    owner_user_id = str(owner_user_id) if owner_user_id else None
-                    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-                        if not user:
-                            raise HTTPException(
-                                status_code=401,
-                                detail="Authentication required to access features from this tileset",
-                                headers={"WWW-Authenticate": "Bearer"},
-                            )
-                        raise HTTPException(
-                            status_code=403,
-                            detail="You do not have permission to access features from this tileset"
-                        )
-                conditions.append("f.tileset_id = %s")
-                params.append(tileset_id)
-            else:
-                # Only show features from public tilesets or user's tilesets
-                if user:
-                    conditions.append("(t.is_public = true OR t.user_id = %s)")
-                    params.append(user.id)
-                else:
-                    conditions.append("t.is_public = true")
-            
-            # Bounding box filter
-            if bbox:
-                try:
-                    minx, miny, maxx, maxy = map(float, bbox.split(","))
-                    conditions.append(
-                        "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                    )
-                    params.extend([minx, miny, maxx, maxy])
-                except ValueError:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Invalid bbox format. Use: minx,miny,maxx,maxy"
-                    )
-            
-            # Layer filter
-            if layer:
-                conditions.append("f.layer_name = %s")
-                params.append(layer)
-            
-            # Attribute filter (simple key=value)
-            if filter:
-                if "=" in filter:
-                    key, value = filter.split("=", 1)
-                    conditions.append("f.properties->>%s = %s")
-                    params.extend([key.strip(), value.strip()])
-            
-            # Build WHERE clause
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-            
-            # Count query
-            count_sql = f"""
-                SELECT COUNT(*)
-                FROM features f
-                LEFT JOIN tilesets t ON f.tileset_id = t.id
-                WHERE {where_clause}
-            """
-            cur.execute(count_sql, params)
-            total_count = cur.fetchone()[0]
-            
-            # Main query
-            sql = f"""
-                SELECT 
-                    f.id,
-                    f.tileset_id,
-                    f.layer_name,
-                    f.properties,
-                    ST_AsGeoJSON(f.geom)::json as geometry,
-                    f.created_at,
-                    f.updated_at
-                FROM features f
-                LEFT JOIN tilesets t ON f.tileset_id = t.id
-                WHERE {where_clause}
-                ORDER BY f.created_at DESC
-                LIMIT %s OFFSET %s
-            """
-            params.extend([limit, offset])
-            cur.execute(sql, params)
-            
-            columns = [desc[0] for desc in cur.description]
-            rows = cur.fetchall()
-        
-        # Format features as GeoJSON
-        features = []
-        for row in rows:
-            feature_dict = dict(zip(columns, row))
-            feature = {
-                "type": "Feature",
-                "id": str(feature_dict["id"]),
-                "geometry": feature_dict["geometry"],
-                "properties": {
-                    **(feature_dict["properties"] or {}),
-                    "layer_name": feature_dict["layer_name"],
-                    "tileset_id": str(feature_dict["tileset_id"]) if feature_dict["tileset_id"] else None,
-                    "created_at": feature_dict["created_at"].isoformat() if feature_dict["created_at"] else None,
-                    "updated_at": feature_dict["updated_at"].isoformat() if feature_dict["updated_at"] else None,
-                }
-            }
-            features.append(feature)
-        
-        return {
-            "type": "FeatureCollection",
-            "features": features,
-            "count": len(features),
-            "total_count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "query": {
-                "bbox": bbox,
-                "layer": layer,
-                "tileset_id": tileset_id,
-                "filter": filter,
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching features: {str(e)}")
-
-
-@app.get("/api/features/layers")
-def list_feature_layers(
-    conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
-    tileset_id: Optional[str] = Query(None, description="Filter by tileset ID"),
-):
-    """
-    List available feature layers.
-    
-    Returns distinct layer names with feature counts.
-    """
-    try:
-        with conn.cursor() as cur:
-            conditions = []
-            params = []
-            
-            if tileset_id:
-                conditions.append("f.tileset_id = %s")
-                params.append(tileset_id)
-            
-            # Access control
-            if user:
-                conditions.append("(t.is_public = true OR t.user_id = %s)")
-                params.append(user.id)
-            else:
-                conditions.append("t.is_public = true")
-            
-            where_clause = " AND ".join(conditions) if conditions else "1=1"
-            
-            sql = f"""
-                SELECT 
-                    f.layer_name,
-                    COUNT(*) as feature_count,
-                    f.tileset_id,
-                    t.name as tileset_name
-                FROM features f
-                LEFT JOIN tilesets t ON f.tileset_id = t.id
-                WHERE {where_clause}
-                GROUP BY f.layer_name, f.tileset_id, t.name
-                ORDER BY f.layer_name
-            """
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-        
-        layers = [
-            {
-                "layer_name": row[0],
-                "feature_count": row[1],
-                "tileset_id": str(row[2]) if row[2] else None,
-                "tileset_name": row[3],
-            }
-            for row in rows
-        ]
-        
-        return {
-            "layers": layers,
-            "count": len(layers),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing layers: {str(e)}")
-
-
-@app.get("/api/features/{feature_id}")
-def get_feature(
-    feature_id: str,
-    conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
-):
-    """
-    Get a specific feature by ID.
-    
-    Returns the feature as a GeoJSON Feature object.
-    """
-    try:
-        with conn.cursor() as cur:
-            # Get feature with tileset info for access control
-            cur.execute(
-                """
-                SELECT 
-                    f.id,
-                    f.tileset_id,
-                    f.layer_name,
-                    f.properties,
-                    ST_AsGeoJSON(f.geom)::json as geometry,
-                    f.created_at,
-                    f.updated_at,
-                    t.is_public,
-                    t.user_id as tileset_user_id
-                FROM features f
-                LEFT JOIN tilesets t ON f.tileset_id = t.id
-                WHERE f.id = %s
-                """,
-                (feature_id,)
-            )
-            row = cur.fetchone()
-        
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Feature not found: {feature_id}")
-        
-        columns = ["id", "tileset_id", "layer_name", "properties", "geometry", 
-                   "created_at", "updated_at", "is_public", "tileset_user_id"]
-        feature_dict = dict(zip(columns, row))
-        
-        # Check access via tileset
-        is_public = feature_dict.get("is_public", True)
-        owner_user_id = str(feature_dict["tileset_user_id"]) if feature_dict["tileset_user_id"] else None
-        tileset_id = str(feature_dict["tileset_id"]) if feature_dict["tileset_id"] else None
-        
-        if tileset_id and not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Authentication required to access this feature",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this feature"
-            )
-        
-        # Format as GeoJSON Feature
-        return {
-            "type": "Feature",
-            "id": str(feature_dict["id"]),
-            "geometry": feature_dict["geometry"],
-            "properties": {
-                **(feature_dict["properties"] or {}),
-                "layer_name": feature_dict["layer_name"],
-                "tileset_id": str(feature_dict["tileset_id"]) if feature_dict["tileset_id"] else None,
-                "created_at": feature_dict["created_at"].isoformat() if feature_dict["created_at"] else None,
-                "updated_at": feature_dict["updated_at"].isoformat() if feature_dict["updated_at"] else None,
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting feature: {str(e)}")
-
-
-# ============================================================================
-# Tileset CRUD Endpoints
-# ============================================================================
 
 
 @app.post("/api/tilesets", status_code=201)
@@ -1769,19 +1545,18 @@ def create_tileset(
     """
     try:
         with conn.cursor() as cur:
-            # Build bounds geometry if provided
+            # Build geometry SQL
             bounds_sql = "NULL"
+            center_sql = "NULL"
+            
             if tileset.bounds and len(tileset.bounds) == 4:
                 west, south, east, north = tileset.bounds
                 bounds_sql = f"ST_MakeEnvelope({west}, {south}, {east}, {north}, 4326)"
             
-            # Build center geometry if provided
-            center_sql = "NULL"
             if tileset.center and len(tileset.center) >= 2:
                 lon, lat = tileset.center[0], tileset.center[1]
                 center_sql = f"ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)"
             
-            # Serialize metadata to JSON
             metadata_json = json.dumps(tileset.metadata) if tileset.metadata else None
             
             cur.execute(
@@ -2099,9 +1874,8 @@ def update_feature(
                 params.append(feature.layer_name)
             
             if feature.geometry is not None:
-                geometry_json = json.dumps(feature.geometry)
                 updates.append("geom = ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)")
-                params.append(geometry_json)
+                params.append(json.dumps(feature.geometry))
             
             if feature.properties is not None:
                 updates.append("properties = %s")
@@ -2119,7 +1893,7 @@ def update_feature(
                 SET {', '.join(updates)}
                 WHERE id = %s
                 RETURNING id, layer_name, ST_AsGeoJSON(geom)::json as geometry, properties,
-                          created_at, updated_at
+                          tileset_id, created_at, updated_at
                 """,
                 params,
             )
@@ -2134,8 +1908,9 @@ def update_feature(
                 "properties": {
                     **(row[3] if row[3] else {}),
                     "layer_name": row[1],
-                    "created_at": row[4].isoformat() if row[4] else None,
-                    "updated_at": row[5].isoformat() if row[5] else None,
+                    "tileset_id": str(row[4]),
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
                 },
             }
             
@@ -2190,106 +1965,784 @@ def delete_feature(
         raise HTTPException(status_code=500, detail=f"Error deleting feature: {str(e)}")
 
 
+@app.get("/api/features")
+def list_features(
+    tileset_id: str = Query(None, description="Filter by tileset ID"),
+    layer: str = Query(None, description="Filter by layer name"),
+    bbox: str = Query(None, description="Bounding box filter (minx,miny,maxx,maxy)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of features"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+):
+    """
+    List features with optional filters.
+    
+    Returns GeoJSON FeatureCollection.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Build query
+            conditions = []
+            params = []
+            
+            if tileset_id:
+                # Check access to tileset
+                cur.execute(
+                    "SELECT is_public, user_id FROM tilesets WHERE id = %s",
+                    (tileset_id,),
+                )
+                row = cur.fetchone()
+                
+                if row:
+                    is_public, owner_user_id = row
+                    owner_user_id = str(owner_user_id) if owner_user_id else None
+                    
+                    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+                        if not user:
+                            raise HTTPException(
+                                status_code=401,
+                                detail="Authentication required to access this tileset",
+                                headers={"WWW-Authenticate": "Bearer"},
+                            )
+                        raise HTTPException(
+                            status_code=403,
+                            detail="You do not have permission to access this tileset"
+                        )
+                
+                conditions.append("f.tileset_id = %s")
+                params.append(tileset_id)
+            else:
+                # Only return features from public tilesets if no tileset_id specified
+                conditions.append("t.is_public = true")
+            
+            if layer:
+                conditions.append("f.layer_name = %s")
+                params.append(layer)
+            
+            if bbox:
+                try:
+                    minx, miny, maxx, maxy = [float(x) for x in bbox.split(",")]
+                    conditions.append(
+                        "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
+                    )
+                    params.extend([minx, miny, maxx, maxy])
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Invalid bbox format")
+            
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+            
+            # Get total count
+            cur.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE {where_clause}
+                """,
+                params,
+            )
+            total_count = cur.fetchone()[0]
+            
+            # Get features
+            cur.execute(
+                f"""
+                SELECT f.id, f.layer_name, ST_AsGeoJSON(f.geom)::json as geometry,
+                       f.properties, f.tileset_id, f.created_at, f.updated_at
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE {where_clause}
+                ORDER BY f.created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                params + [limit, offset],
+            )
+            rows = cur.fetchall()
+            
+            features = []
+            for row in rows:
+                features.append({
+                    "id": str(row[0]),
+                    "type": "Feature",
+                    "geometry": row[2],
+                    "properties": {
+                        **(row[3] if row[3] else {}),
+                        "layer_name": row[1],
+                        "tileset_id": str(row[4]),
+                        "created_at": row[5].isoformat() if row[5] else None,
+                        "updated_at": row[6].isoformat() if row[6] else None,
+                    },
+                })
+            
+            return {
+                "type": "FeatureCollection",
+                "features": features,
+                "total_count": total_count,
+                "limit": limit,
+                "offset": offset,
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing features: {str(e)}")
+
+
+@app.get("/api/features/{feature_id}")
+def get_feature(
+    feature_id: str,
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+):
+    """Get a specific feature by ID."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.id, f.layer_name, ST_AsGeoJSON(f.geom)::json as geometry,
+                       f.properties, f.tileset_id, f.created_at, f.updated_at,
+                       t.is_public, t.user_id
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE f.id = %s
+                """,
+                (feature_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Feature not found")
+            
+            is_public = row[7]
+            owner_user_id = str(row[8]) if row[8] else None
+            
+            # Check access
+            if not check_tileset_access(str(row[4]), is_public, owner_user_id, user):
+                if not user:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Authentication required to access this feature",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                raise HTTPException(
+                    status_code=403,
+                    detail="You do not have permission to access this feature"
+                )
+            
+            return {
+                "id": str(row[0]),
+                "type": "Feature",
+                "geometry": row[2],
+                "properties": {
+                    **(row[3] if row[3] else {}),
+                    "layer_name": row[1],
+                    "tileset_id": str(row[4]),
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
+                },
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching feature: {str(e)}")
+
+
+# ============================================================================
+# Datasources API (CRUD)
+# ============================================================================
+
+
+@app.get("/api/datasources")
+def list_datasources(
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+    type: Optional[str] = Query(None, description="Filter by type (pmtiles or cog)"),
+    include_private: bool = Query(False, description="Include private datasources (requires auth)"),
+):
+    """
+    List all accessible datasources (PMTiles and COG sources combined).
+    
+    By default, only datasources from public tilesets are returned.
+    With authentication and include_private=true, also returns user's private datasources.
+    """
+    try:
+        datasources = []
+        
+        with conn.cursor() as cur:
+            # Build conditions for both queries
+            if include_private and user:
+                access_condition = "(t.is_public = true OR t.user_id = %s)"
+                access_params = [user.id]
+            else:
+                access_condition = "t.is_public = true"
+                access_params = []
+            
+            # Get PMTiles sources
+            if type is None or type == "pmtiles":
+                cur.execute(
+                    f"""
+                    SELECT ps.id, ps.tileset_id, ps.pmtiles_url, ps.storage_provider,
+                           ps.tile_type, ps.tile_compression, ps.min_zoom, ps.max_zoom,
+                           ps.bounds, ps.center, ps.metadata, ps.created_at, ps.updated_at,
+                           t.name as tileset_name, t.is_public, t.user_id
+                    FROM pmtiles_sources ps
+                    JOIN tilesets t ON ps.tileset_id = t.id
+                    WHERE {access_condition}
+                    ORDER BY ps.created_at DESC
+                    """,
+                    access_params,
+                )
+                
+                for row in cur.fetchall():
+                    datasources.append({
+                        "id": str(row[0]),
+                        "tileset_id": str(row[1]),
+                        "type": "pmtiles",
+                        "url": row[2],
+                        "storage_provider": row[3],
+                        "tile_type": row[4],
+                        "compression": row[5],
+                        "min_zoom": row[6],
+                        "max_zoom": row[7],
+                        "bounds": row[8],
+                        "center": row[9],
+                        "metadata": row[10],
+                        "created_at": row[11].isoformat() if row[11] else None,
+                        "updated_at": row[12].isoformat() if row[12] else None,
+                        "tileset_name": row[13],
+                        "is_public": row[14],
+                        "user_id": str(row[15]) if row[15] else None,
+                    })
+            
+            # Get COG sources
+            if type is None or type == "cog":
+                cur.execute(
+                    f"""
+                    SELECT rs.id, rs.tileset_id, rs.cog_url, rs.storage_provider,
+                           rs.band_count, rs.native_crs, rs.recommended_min_zoom, rs.recommended_max_zoom,
+                           rs.metadata, rs.created_at, rs.updated_at,
+                           t.name as tileset_name, t.is_public, t.user_id
+                    FROM raster_sources rs
+                    JOIN tilesets t ON rs.tileset_id = t.id
+                    WHERE {access_condition}
+                    ORDER BY rs.created_at DESC
+                    """,
+                    access_params,
+                )
+                
+                for row in cur.fetchall():
+                    datasources.append({
+                        "id": str(row[0]),
+                        "tileset_id": str(row[1]),
+                        "type": "cog",
+                        "url": row[2],
+                        "storage_provider": row[3],
+                        "band_count": row[4],
+                        "native_crs": row[5],
+                        "min_zoom": row[6],
+                        "max_zoom": row[7],
+                        "metadata": row[8],
+                        "created_at": row[9].isoformat() if row[9] else None,
+                        "updated_at": row[10].isoformat() if row[10] else None,
+                        "tileset_name": row[11],
+                        "is_public": row[12],
+                        "user_id": str(row[13]) if row[13] else None,
+                    })
+        
+        # Sort by created_at descending
+        datasources.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        
+        return {"datasources": datasources, "count": len(datasources)}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing datasources: {str(e)}")
+
+
+@app.get("/api/datasources/{datasource_id}")
+def get_datasource(
+    datasource_id: str,
+    conn=Depends(get_connection),
+    user: Optional[User] = Depends(get_current_user),
+):
+    """Get a specific datasource by ID."""
+    try:
+        with conn.cursor() as cur:
+            # Try PMTiles first
+            cur.execute(
+                """
+                SELECT ps.id, ps.tileset_id, ps.pmtiles_url, ps.storage_provider,
+                       ps.tile_type, ps.tile_compression, ps.min_zoom, ps.max_zoom,
+                       ps.bounds, ps.center, ps.layers, ps.metadata, ps.created_at, ps.updated_at,
+                       t.name as tileset_name, t.is_public, t.user_id
+                FROM pmtiles_sources ps
+                JOIN tilesets t ON ps.tileset_id = t.id
+                WHERE ps.id = %s
+                """,
+                (datasource_id,),
+            )
+            row = cur.fetchone()
+            
+            if row:
+                is_public = row[15]
+                owner_user_id = str(row[16]) if row[16] else None
+                
+                # Check access
+                if not check_tileset_access(str(row[1]), is_public, owner_user_id, user):
+                    if not user:
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Authentication required to access this datasource",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You do not have permission to access this datasource"
+                    )
+                
+                return {
+                    "id": str(row[0]),
+                    "tileset_id": str(row[1]),
+                    "type": "pmtiles",
+                    "url": row[2],
+                    "storage_provider": row[3],
+                    "tile_type": row[4],
+                    "compression": row[5],
+                    "min_zoom": row[6],
+                    "max_zoom": row[7],
+                    "bounds": row[8],
+                    "center": row[9],
+                    "layers": row[10],
+                    "metadata": row[11],
+                    "created_at": row[12].isoformat() if row[12] else None,
+                    "updated_at": row[13].isoformat() if row[13] else None,
+                    "tileset_name": row[14],
+                    "is_public": row[15],
+                    "user_id": owner_user_id,
+                }
+            
+            # Try COG
+            cur.execute(
+                """
+                SELECT rs.id, rs.tileset_id, rs.cog_url, rs.storage_provider,
+                       rs.band_count, rs.band_descriptions, rs.native_crs, rs.native_resolution,
+                       rs.recommended_min_zoom, rs.recommended_max_zoom,
+                       rs.metadata, rs.created_at, rs.updated_at,
+                       t.name as tileset_name, t.is_public, t.user_id
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE rs.id = %s
+                """,
+                (datasource_id,),
+            )
+            row = cur.fetchone()
+            
+            if row:
+                is_public = row[14]
+                owner_user_id = str(row[15]) if row[15] else None
+                
+                # Check access
+                if not check_tileset_access(str(row[1]), is_public, owner_user_id, user):
+                    if not user:
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Authentication required to access this datasource",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You do not have permission to access this datasource"
+                    )
+                
+                return {
+                    "id": str(row[0]),
+                    "tileset_id": str(row[1]),
+                    "type": "cog",
+                    "url": row[2],
+                    "storage_provider": row[3],
+                    "band_count": row[4],
+                    "band_descriptions": row[5],
+                    "native_crs": row[6],
+                    "native_resolution": row[7],
+                    "min_zoom": row[8],
+                    "max_zoom": row[9],
+                    "metadata": row[10],
+                    "created_at": row[11].isoformat() if row[11] else None,
+                    "updated_at": row[12].isoformat() if row[12] else None,
+                    "tileset_name": row[13],
+                    "is_public": row[14],
+                    "user_id": owner_user_id,
+                }
+            
+            raise HTTPException(status_code=404, detail="Datasource not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching datasource: {str(e)}")
+
+
+@app.post("/api/datasources", status_code=201)
+def create_datasource(
+    datasource: DatasourceCreate,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Create a new datasource.
+    
+    Requires authentication and ownership of the parent tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Check if tileset exists and user owns it
+            cur.execute(
+                "SELECT id, user_id, type FROM tilesets WHERE id = %s",
+                (datasource.tileset_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to add datasource to this tileset")
+            
+            tileset_type = row[2]
+            
+            # Validate type matches tileset type
+            if datasource.type == DatasourceType.pmtiles and tileset_type != "pmtiles":
+                raise HTTPException(
+                    status_code=400,
+                    detail="PMTiles datasource can only be added to pmtiles type tileset"
+                )
+            if datasource.type == DatasourceType.cog and tileset_type != "raster":
+                raise HTTPException(
+                    status_code=400,
+                    detail="COG datasource can only be added to raster type tileset"
+                )
+            
+            metadata_json = json.dumps(datasource.metadata) if datasource.metadata else None
+            
+            if datasource.type == DatasourceType.pmtiles:
+                # Check if datasource already exists for this tileset
+                cur.execute(
+                    "SELECT id FROM pmtiles_sources WHERE tileset_id = %s",
+                    (datasource.tileset_id,),
+                )
+                if cur.fetchone():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Datasource already exists for this tileset"
+                    )
+                
+                cur.execute(
+                    """
+                    INSERT INTO pmtiles_sources (tileset_id, pmtiles_url, storage_provider, metadata)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, tileset_id, pmtiles_url, storage_provider, metadata,
+                              created_at, updated_at
+                    """,
+                    (
+                        datasource.tileset_id,
+                        datasource.url,
+                        datasource.storage_provider.value,
+                        metadata_json,
+                    ),
+                )
+                
+                row = cur.fetchone()
+                conn.commit()
+                
+                return {
+                    "id": str(row[0]),
+                    "tileset_id": str(row[1]),
+                    "type": "pmtiles",
+                    "url": row[2],
+                    "storage_provider": row[3],
+                    "metadata": row[4],
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
+                }
+            
+            else:  # COG
+                # Check if datasource already exists for this tileset
+                cur.execute(
+                    "SELECT id FROM raster_sources WHERE tileset_id = %s",
+                    (datasource.tileset_id,),
+                )
+                if cur.fetchone():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Datasource already exists for this tileset"
+                    )
+                
+                cur.execute(
+                    """
+                    INSERT INTO raster_sources (tileset_id, cog_url, storage_provider, metadata)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, tileset_id, cog_url, storage_provider, metadata,
+                              created_at, updated_at
+                    """,
+                    (
+                        datasource.tileset_id,
+                        datasource.url,
+                        datasource.storage_provider.value,
+                        metadata_json,
+                    ),
+                )
+                
+                row = cur.fetchone()
+                conn.commit()
+                
+                return {
+                    "id": str(row[0]),
+                    "tileset_id": str(row[1]),
+                    "type": "cog",
+                    "url": row[2],
+                    "storage_provider": row[3],
+                    "metadata": row[4],
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
+                }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating datasource: {str(e)}")
+
+
+@app.delete("/api/datasources/{datasource_id}", status_code=204)
+def delete_datasource(
+    datasource_id: str,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Delete a datasource.
+    
+    Requires authentication and ownership of the parent tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Try PMTiles first
+            cur.execute(
+                """
+                SELECT ps.id, t.user_id
+                FROM pmtiles_sources ps
+                JOIN tilesets t ON ps.tileset_id = t.id
+                WHERE ps.id = %s
+                """,
+                (datasource_id,),
+            )
+            row = cur.fetchone()
+            
+            if row:
+                if str(row[1]) != user.id:
+                    raise HTTPException(status_code=403, detail="Not authorized to delete this datasource")
+                
+                cur.execute("DELETE FROM pmtiles_sources WHERE id = %s", (datasource_id,))
+                conn.commit()
+                return Response(status_code=204)
+            
+            # Try COG
+            cur.execute(
+                """
+                SELECT rs.id, t.user_id
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE rs.id = %s
+                """,
+                (datasource_id,),
+            )
+            row = cur.fetchone()
+            
+            if row:
+                if str(row[1]) != user.id:
+                    raise HTTPException(status_code=403, detail="Not authorized to delete this datasource")
+                
+                cur.execute("DELETE FROM raster_sources WHERE id = %s", (datasource_id,))
+                conn.commit()
+                return Response(status_code=204)
+            
+            raise HTTPException(status_code=404, detail="Datasource not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting datasource: {str(e)}")
+
+
+@app.post("/api/datasources/{datasource_id}/test")
+async def test_datasource_connection(
+    datasource_id: str,
+    conn=Depends(get_connection),
+    user: User = Depends(require_auth),
+):
+    """
+    Test connection to a datasource.
+    
+    For PMTiles: Attempts to read metadata from the file.
+    For COG: Attempts to read info from the file.
+    
+    Requires authentication and ownership of the parent tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Try PMTiles first
+            cur.execute(
+                """
+                SELECT ps.id, ps.pmtiles_url, t.user_id
+                FROM pmtiles_sources ps
+                JOIN tilesets t ON ps.tileset_id = t.id
+                WHERE ps.id = %s
+                """,
+                (datasource_id,),
+            )
+            row = cur.fetchone()
+            
+            if row:
+                if str(row[2]) != user.id:
+                    raise HTTPException(status_code=403, detail="Not authorized to test this datasource")
+                
+                pmtiles_url = row[1]
+                
+                if not is_pmtiles_available():
+                    return {
+                        "status": "error",
+                        "type": "pmtiles",
+                        "message": "PMTiles service is not available",
+                    }
+                
+                try:
+                    metadata = await get_pmtiles_metadata(pmtiles_url)
+                    return {
+                        "status": "ok",
+                        "type": "pmtiles",
+                        "url": pmtiles_url,
+                        "metadata": metadata,
+                    }
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "type": "pmtiles",
+                        "url": pmtiles_url,
+                        "message": str(e),
+                    }
+            
+            # Try COG
+            cur.execute(
+                """
+                SELECT rs.id, rs.cog_url, t.user_id
+                FROM raster_sources rs
+                JOIN tilesets t ON rs.tileset_id = t.id
+                WHERE rs.id = %s
+                """,
+                (datasource_id,),
+            )
+            row = cur.fetchone()
+            
+            if row:
+                if str(row[2]) != user.id:
+                    raise HTTPException(status_code=403, detail="Not authorized to test this datasource")
+                
+                cog_url = row[1]
+                
+                if not is_rasterio_available():
+                    return {
+                        "status": "error",
+                        "type": "cog",
+                        "message": "Raster service is not available",
+                    }
+                
+                try:
+                    info = get_cog_info(cog_url)
+                    return {
+                        "status": "ok",
+                        "type": "cog",
+                        "url": cog_url,
+                        "info": info,
+                    }
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "type": "cog",
+                        "url": cog_url,
+                        "message": str(e),
+                    }
+            
+            raise HTTPException(status_code=404, detail="Datasource not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error testing datasource: {str(e)}")
+
 
 # ============================================================================
 # Preview Page
 # ============================================================================
 
-
 PREVIEW_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8" />
-    <title>geo-base Tile Preview</title>
-    <script src="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.css" />
+    <meta charset="utf-8">
+    <title>geo-base Tile Server</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.4.1/dist/maplibre-gl.css">
+    <script src="https://unpkg.com/maplibre-gl@4.4.1/dist/maplibre-gl.js"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { margin: 0; padding: 0; font-family: sans-serif; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         .info-panel {
             position: absolute;
             top: 10px;
             left: 10px;
             background: white;
-            padding: 15px 20px;
+            padding: 15px;
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             z-index: 1;
-            max-width: 320px;
+            max-width: 300px;
         }
-        .info-panel h3 { margin: 0 0 10px 0; font-size: 18px; }
+        .info-panel h2 { margin: 0 0 10px 0; font-size: 18px; }
         .info-panel p { margin: 5px 0; font-size: 14px; color: #666; }
-        .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .status { padding: 4px 8px; border-radius: 4px; font-size: 12px; display: inline-block; }
         .status.ok { background: #d4edda; color: #155724; }
         .status.error { background: #f8d7da; color: #721c24; }
-        .status.loading { background: #fff3cd; color: #856404; }
-        .endpoints { margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
-        .endpoints h4 { margin: 0 0 8px 0; font-size: 14px; }
-        .endpoints a { display: block; font-size: 12px; color: #007bff; margin: 4px 0; text-decoration: none; }
-        .endpoints a:hover { text-decoration: underline; }
-        .layer-toggle { margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
-        .layer-toggle h4 { margin: 0 0 8px 0; font-size: 14px; }
-        .layer-toggle label { display: block; font-size: 12px; margin: 4px 0; cursor: pointer; }
+        .layer-toggle { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; }
+        .layer-toggle label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     </style>
 </head>
 <body>
+    <div id="map"></div>
     <div class="info-panel">
-        <h3>ðŸ—ºï¸ geo-base Tile Server</h3>
-        <p>API: <span id="api-status" class="status loading">checking...</span></p>
-        <p>DB: <span id="db-status" class="status loading">checking...</span></p>
-        <p>PMTiles: <span id="pmtiles-status" class="status loading">checking...</span></p>
-        <p>Auth: <span id="auth-status" class="status loading">checking...</span></p>
-        <div class="endpoints">
-            <h4>API Endpoints</h4>
-            <a href="/api/health" target="_blank">/api/health</a>
-            <a href="/api/health/db" target="_blank">/api/health/db</a>
-            <a href="/api/tilesets" target="_blank">/api/tilesets</a>
-            <a href="/api/tiles/features/tilejson.json" target="_blank">/api/tiles/features/tilejson.json</a>
-            <a href="/api/auth/status" target="_blank">/api/auth/status</a>
-        </div>
+        <h2>geo-base Tile Server</h2>
+        <p>Version: 0.4.0</p>
+        <p>DB Status: <span id="db-status" class="status">checking...</span></p>
         <div class="layer-toggle">
-            <h4>Layers</h4>
-            <label><input type="checkbox" id="toggle-features" checked> Vector Features</label>
+            <label>
+                <input type="checkbox" id="toggle-features" checked>
+                Show Features Layer
+            </label>
         </div>
     </div>
-    <div id="map"></div>
+
     <script>
         // Check API health
-        fetch('/api/health')
-            .then(res => res.json())
-            .then(data => {
-                const el = document.getElementById('api-status');
-                el.textContent = data.status === 'ok' ? 'âœ” OK' : 'âœ— Error';
-                el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
-                
-                // Check PMTiles availability
-                const pmtilesEl = document.getElementById('pmtiles-status');
-                pmtilesEl.textContent = data.pmtiles_available ? 'âœ” Available' : 'âœ— Not installed';
-                pmtilesEl.className = 'status ' + (data.pmtiles_available ? 'ok' : 'error');
-                
-                // Check Auth configuration
-                const authEl = document.getElementById('auth-status');
-                authEl.textContent = data.auth_configured ? 'âœ” Configured' : 'âœ— Not configured';
-                authEl.className = 'status ' + (data.auth_configured ? 'ok' : 'error');
-            })
-            .catch(() => {
-                const el = document.getElementById('api-status');
-                el.textContent = 'âœ— Error';
-                el.className = 'status error';
-            });
-
-        // Check DB health
         fetch('/api/health/db')
-            .then(res => res.json())
+            .then(response => response.json())
             .then(data => {
                 const el = document.getElementById('db-status');
-                el.textContent = data.status === 'ok' ? 'âœ” Connected' : 'âœ— ' + data.database;
+                el.textContent = data.status === 'ok' ? '✔ Connected' : '✖ ' + data.database;
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('db-status');
-                el.textContent = 'âœ— Error';
+                el.textContent = '✖ Error';
                 el.className = 'status error';
             });
 
@@ -2377,5 +2830,3 @@ PREVIEW_HTML = """
 def preview_page():
     """Tile preview page with MapLibre GL JS."""
     return PREVIEW_HTML
-
-
