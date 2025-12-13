@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 
 export default function DatasourcesPage() {
-  const { api, loading: apiLoading } = useApi();
+  const { api, isReady } = useApi();
   const [datasources, setDatasources] = useState<Datasource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export default function DatasourcesPage() {
   const [testResults, setTestResults] = useState<Record<string, { status: 'ok' | 'error'; message?: string }>>({});
 
   const fetchDatasources = async () => {
-    if (apiLoading || !api) return;
+    if (!isReady || !api) return;
 
     setLoading(true);
     setError(null);
@@ -93,7 +93,7 @@ export default function DatasourcesPage() {
 
   useEffect(() => {
     fetchDatasources();
-  }, [api, apiLoading, filterType, includePrivate]);
+  }, [api, isReady, filterType, includePrivate]);
 
   const handleDelete = async () => {
     if (!deletingId || !api) return;
