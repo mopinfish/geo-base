@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AdminLayout } from "@/components/layout";
 import { TilesetForm } from "@/components/tilesets/tileset-form";
 import { useApi } from "@/hooks/use-api";
-import type { TilesetCreate } from "@/lib/api";
+import type { TilesetCreate, TilesetUpdate } from "@/lib/api";
 import { Plus } from "lucide-react";
 
 export default function NewTilesetPage() {
@@ -15,11 +15,12 @@ export default function NewTilesetPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (data: TilesetCreate) => {
+  const handleSubmit = async (data: TilesetCreate | TilesetUpdate) => {
     setIsSubmitting(true);
     setError(null);
     
     try {
+      // 新規作成時は TilesetCreate として扱う
       const tileset = await api.createTileset(data as TilesetCreate);
       router.push(`/tilesets/${tileset.id}`);
     } catch (err) {

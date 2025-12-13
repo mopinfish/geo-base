@@ -8,7 +8,7 @@ import { TilesetForm } from "@/components/tilesets/tileset-form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
-import type { Tileset, TilesetUpdate } from "@/lib/api";
+import type { Tileset, TilesetCreate, TilesetUpdate } from "@/lib/api";
 import { Pencil, RefreshCw, ArrowLeft } from "lucide-react";
 
 interface EditTilesetPageProps {
@@ -43,12 +43,13 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
     fetchTileset();
   }, [id]);
 
-  const handleSubmit = async (data: TilesetUpdate) => {
+  const handleSubmit = async (data: TilesetCreate | TilesetUpdate) => {
     setIsSubmitting(true);
     setError(null);
     
     try {
-      await api.updateTileset(id, data);
+      // 編集時は TilesetUpdate として扱う
+      await api.updateTileset(id, data as TilesetUpdate);
       router.push(`/tilesets/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "タイルセットの更新に失敗しました");
