@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,14 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, type Feature, type Tileset } from "@/lib/api";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useApi } from "@/hooks/use-api";
+import type { Feature, Tileset } from "@/lib/api";
 import { 
   Plus, 
   RefreshCw, 
@@ -30,9 +25,12 @@ import {
   Eye,
   Pencil,
   MapPin,
+  ChevronDown,
 } from "lucide-react";
 
 export default function FeaturesPage() {
+  const router = useRouter();
+  const { api, isReady } = useApi();
   const [features, setFeatures] = useState<Feature[]>([]);
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,8 +38,29 @@ export default function FeaturesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTileset, setSelectedTileset] = useState<string>("all");
   const [limit, setLimit] = useState(50);
+  
+  // デバッグ: router が正しく取得されているか確認
+  useEffect(() => {
+    console.log("[DEBUG] router:", router);
+    console.log("[DEBUG] isReady:", isReady);
+  }, [router, isReady]);
+  
+  // デバッグ: 新規作成ボタンのハンドラー
+  const handleNewClick = () => {
+    console.log("[DEBUG] 新規作成ボタンがクリックされました");
+    console.log("[DEBUG] router.push を呼び出します");
+    router.push("/features/new");
+  };
+  
+  // デバッグ: タイルセット変更ハンドラー
+  const handleTilesetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    console.log("[DEBUG] タイルセット変更:", e.target.value);
+    setSelectedTileset(e.target.value);
+  };
 
   const fetchData = async () => {
+    if (!isReady) return;
+    
     setIsLoading(true);
     setError(null);
     try {
@@ -61,8 +80,15 @@ export default function FeaturesPage() {
       }
       
       // タイルセット結果の処理（配列であることを確認）
-      if (tilesetsResult.status === "fulfilled" && Array.isArray(tilesetsResult.value)) {
-        setTilesets(tilesetsResult.value);
+      if (tilesetsResult.status === "fulfilled") {
+        const result = tilesetsResult.value;
+        if (Array.isArray(result)) {
+          setTilesets(result);
+        } else if (result && typeof result === 'object' && 'tilesets' in result) {
+          setTilesets((result as { tilesets: Tileset[] }).tilesets);
+        } else {
+          setTilesets([]);
+        }
       } else {
         setTilesets([]);
       }
@@ -77,7 +103,7 @@ export default function FeaturesPage() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedTileset, limit]);
+  }, [selectedTileset, limit, isReady]);
 
   // 安全にフィルタリング（配列でない場合に備える）
   const safeFeatures = Array.isArray(features) ? features : [];
@@ -108,7 +134,17 @@ export default function FeaturesPage() {
 
   const getTilesetName = (tilesetId: string): string => {
     const tileset = safeTilesets.find((t) => t.id === tilesetId);
-    return tileset?.name || tilesetId;
+    return tileset?.name || tilesetId.slice(0, 8) + "...";
+  };
+
+  const getSelectedTilesetName = (): string => {
+    if (selectedTileset === "all") return "すべてのタイルセット";
+    const tileset = safeTilesets.find((t) => t.id === selectedTileset);
+    return tileset?.name || "タイルセット";
+  };
+
+  const getLimitLabel = (): string => {
+    return `${limit}件`;
   };
 
   return (
@@ -127,7 +163,7 @@ export default function FeaturesPage() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               更新
             </Button>
-            <Button>
+            <Button onClick={handleNewClick}>
               <Plus className="mr-2 h-4 w-4" />
               新規作成
             </Button>
@@ -147,29 +183,34 @@ export default function FeaturesPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select value={selectedTileset} onValueChange={setSelectedTileset}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="タイルセット" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">すべてのタイルセット</SelectItem>
+              {/* ネイティブselectを使用（Radix UIのポータル問題を回避） */}
+              <div className="relative">
+                <select
+                  value={selectedTileset}
+                  onChange={handleTilesetChange}
+                  className="h-9 w-[200px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="all">すべてのタイルセット</option>
                   {safeTilesets.map((tileset) => (
-                    <SelectItem key={tileset.id} value={tileset.id}>
+                    <option key={tileset.id} value={tileset.id}>
                       {tileset.name}
-                    </SelectItem>
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
-              <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="表示件数" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10件</SelectItem>
-                  <SelectItem value="50">50件</SelectItem>
-                  <SelectItem value="100">100件</SelectItem>
-                </SelectContent>
-              </Select>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+              </div>
+              <div className="relative">
+                <select
+                  value={String(limit)}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  className="h-9 w-[120px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="10">10件</option>
+                  <option value="50">50件</option>
+                  <option value="100">100件</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -203,6 +244,12 @@ export default function FeaturesPage() {
               <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
                 <MapPin className="mb-2 h-8 w-8" />
                 <p>フィーチャーがありません</p>
+                <button 
+                  onClick={() => router.push("/features/new")}
+                  className="mt-2 text-primary hover:underline"
+                >
+                  新規フィーチャーを作成
+                </button>
               </div>
             ) : (
               <Table>
@@ -221,12 +268,20 @@ export default function FeaturesPage() {
                   {filteredFeatures.map((feature) => (
                     <TableRow key={feature.id}>
                       <TableCell>
-                        <code className="text-xs">{feature.id.slice(0, 8)}...</code>
+                        <button 
+                          onClick={() => router.push(`/features/${feature.id}`)}
+                          className="hover:underline"
+                        >
+                          <code className="text-xs">{feature.id.slice(0, 8)}...</code>
+                        </button>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">
+                        <button 
+                          onClick={() => router.push(`/tilesets/${feature.tileset_id}`)}
+                          className="text-sm hover:underline"
+                        >
                           {getTilesetName(feature.tileset_id)}
-                        </span>
+                        </button>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{feature.layer_name}</Badge>
@@ -246,10 +301,18 @@ export default function FeaturesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => router.push(`/features/${feature.id}`)}
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => router.push(`/features/${feature.id}/edit`)}
+                          >
                             <Pencil className="h-4 w-4" />
                           </Button>
                         </div>

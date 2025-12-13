@@ -1,6 +1,6 @@
 {
   "name": "geo-base-admin",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -29,6 +29,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.560.0",
+    "maplibre-gl": "^4.7.1",
     "next": "16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1",
