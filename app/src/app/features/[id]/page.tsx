@@ -39,6 +39,29 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // GeoJSON Feature を Admin UI の Feature 型に変換
+  const convertGeoJsonFeature = (geoJsonFeature: {
+    type: string;
+    id: string;
+    geometry: GeoJSON.Geometry;
+    properties: Record<string, unknown>;
+  }): Feature => {
+    const props = geoJsonFeature.properties || {};
+    return {
+      id: geoJsonFeature.id,
+      tileset_id: (props.tileset_id as string) || "",
+      layer_name: (props.layer_name as string) || "default",
+      geometry: geoJsonFeature.geometry,
+      properties: Object.fromEntries(
+        Object.entries(props).filter(
+          ([key]) => !["tileset_id", "layer_name", "created_at", "updated_at"].includes(key)
+        )
+      ),
+      created_at: (props.created_at as string) || new Date().toISOString(),
+      updated_at: (props.updated_at as string) || new Date().toISOString(),
+    };
+  };
+
   const fetchData = async () => {
     if (!isReady) return;
     
@@ -46,15 +69,33 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
     setError(null);
     try {
       const featureData = await api.getFeature(id);
-      setFeature(featureData);
+      
+      // GeoJSON Feature形式を変換
+      const rawFeature = featureData as unknown as {
+        type: string;
+        id: string;
+        geometry: GeoJSON.Geometry;
+        properties: Record<string, unknown>;
+      };
+      
+      let convertedFeature: Feature;
+      if (rawFeature.type === "Feature") {
+        convertedFeature = convertGeoJsonFeature(rawFeature);
+      } else {
+        convertedFeature = featureData;
+      }
+      
+      setFeature(convertedFeature);
       
       // タイルセット情報も取得
-      try {
-        const tilesetData = await api.getTileset(featureData.tileset_id);
-        setTileset(tilesetData);
-      } catch {
-        // タイルセット取得に失敗しても続行
-        console.warn("Failed to fetch tileset info");
+      if (convertedFeature.tileset_id) {
+        try {
+          const tilesetData = await api.getTileset(convertedFeature.tileset_id);
+          setTileset(tilesetData);
+        } catch {
+          // タイルセット取得に失敗しても続行
+          console.warn("Failed to fetch tileset info");
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "フィーチャーの取得に失敗しました");

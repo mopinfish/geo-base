@@ -245,6 +245,7 @@ export function FeatureForm({
   // フォーム送信
   const handleFormSubmit = async (values: FeatureFormValues) => {
     const geometry = buildGeometry();
+    
     if (!geometry) {
       alert("ジオメトリを入力してください");
       return;

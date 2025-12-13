@@ -38,24 +38,28 @@ export default function FeaturesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTileset, setSelectedTileset] = useState<string>("all");
   const [limit, setLimit] = useState(50);
-  
-  // デバッグ: router が正しく取得されているか確認
-  useEffect(() => {
-    console.log("[DEBUG] router:", router);
-    console.log("[DEBUG] isReady:", isReady);
-  }, [router, isReady]);
-  
-  // デバッグ: 新規作成ボタンのハンドラー
-  const handleNewClick = () => {
-    console.log("[DEBUG] 新規作成ボタンがクリックされました");
-    console.log("[DEBUG] router.push を呼び出します");
-    router.push("/features/new");
-  };
-  
-  // デバッグ: タイルセット変更ハンドラー
-  const handleTilesetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    console.log("[DEBUG] タイルセット変更:", e.target.value);
-    setSelectedTileset(e.target.value);
+
+  // GeoJSON Feature を Admin UI の Feature 型に変換
+  const convertGeoJsonFeature = (geoJsonFeature: {
+    type: string;
+    id: string;
+    geometry: GeoJSON.Geometry;
+    properties: Record<string, unknown>;
+  }): Feature => {
+    const props = geoJsonFeature.properties || {};
+    return {
+      id: geoJsonFeature.id,
+      tileset_id: (props.tileset_id as string) || "",
+      layer_name: (props.layer_name as string) || "default",
+      geometry: geoJsonFeature.geometry,
+      properties: Object.fromEntries(
+        Object.entries(props).filter(
+          ([key]) => !["tileset_id", "layer_name", "created_at", "updated_at"].includes(key)
+        )
+      ),
+      created_at: (props.created_at as string) || new Date().toISOString(),
+      updated_at: (props.updated_at as string) || new Date().toISOString(),
+    };
   };
 
   const fetchData = async () => {
@@ -72,9 +76,34 @@ export default function FeaturesPage() {
         api.listTilesets(),
       ]);
       
-      // フィーチャー結果の処理（配列であることを確認）
-      if (featuresResult.status === "fulfilled" && Array.isArray(featuresResult.value)) {
-        setFeatures(featuresResult.value);
+      // フィーチャー結果の処理（GeoJSON FeatureCollection形式に対応）
+      if (featuresResult.status === "fulfilled") {
+        const result = featuresResult.value as unknown;
+        
+        if (Array.isArray(result)) {
+          // 配列形式
+          setFeatures(result);
+        } else if (result && typeof result === 'object') {
+          const obj = result as Record<string, unknown>;
+          
+          if (obj.type === "FeatureCollection" && Array.isArray(obj.features)) {
+            // GeoJSON FeatureCollection形式 → 変換
+            const converted = (obj.features as Array<{
+              type: string;
+              id: string;
+              geometry: GeoJSON.Geometry;
+              properties: Record<string, unknown>;
+            }>).map(convertGeoJsonFeature);
+            setFeatures(converted);
+          } else if ('features' in obj && Array.isArray(obj.features)) {
+            // {"features": [...], "count": N} 形式
+            setFeatures(obj.features as Feature[]);
+          } else {
+            setFeatures([]);
+          }
+        } else {
+          setFeatures([]);
+        }
       } else {
         setFeatures([]);
       }
@@ -132,7 +161,8 @@ export default function FeaturesPage() {
     return geometry.type;
   };
 
-  const getTilesetName = (tilesetId: string): string => {
+  const getTilesetName = (tilesetId: string | undefined | null): string => {
+    if (!tilesetId) return "(未設定)";
     const tileset = safeTilesets.find((t) => t.id === tilesetId);
     return tileset?.name || tilesetId.slice(0, 8) + "...";
   };
@@ -163,7 +193,7 @@ export default function FeaturesPage() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               更新
             </Button>
-            <Button onClick={handleNewClick}>
+            <Button onClick={() => router.push("/features/new")}>
               <Plus className="mr-2 h-4 w-4" />
               新規作成
             </Button>
@@ -187,7 +217,7 @@ export default function FeaturesPage() {
               <div className="relative">
                 <select
                   value={selectedTileset}
-                  onChange={handleTilesetChange}
+                  onChange={(e) => setSelectedTileset(e.target.value)}
                   className="h-9 w-[200px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="all">すべてのタイルセット</option>
@@ -276,12 +306,18 @@ export default function FeaturesPage() {
                         </button>
                       </TableCell>
                       <TableCell>
-                        <button 
-                          onClick={() => router.push(`/tilesets/${feature.tileset_id}`)}
-                          className="text-sm hover:underline"
-                        >
-                          {getTilesetName(feature.tileset_id)}
-                        </button>
+                        {feature.tileset_id ? (
+                          <button 
+                            onClick={() => router.push(`/tilesets/${feature.tileset_id}`)}
+                            className="text-sm hover:underline"
+                          >
+                            {getTilesetName(feature.tileset_id)}
+                          </button>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {getTilesetName(feature.tileset_id)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{feature.layer_name}</Badge>

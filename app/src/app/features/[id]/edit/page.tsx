@@ -25,6 +25,29 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // GeoJSON Feature を Admin UI の Feature 型に変換
+  const convertGeoJsonFeature = (geoJsonFeature: {
+    type: string;
+    id: string;
+    geometry: GeoJSON.Geometry;
+    properties: Record<string, unknown>;
+  }): Feature => {
+    const props = geoJsonFeature.properties || {};
+    return {
+      id: geoJsonFeature.id,
+      tileset_id: (props.tileset_id as string) || "",
+      layer_name: (props.layer_name as string) || "default",
+      geometry: geoJsonFeature.geometry,
+      properties: Object.fromEntries(
+        Object.entries(props).filter(
+          ([key]) => !["tileset_id", "layer_name", "created_at", "updated_at"].includes(key)
+        )
+      ),
+      created_at: (props.created_at as string) || new Date().toISOString(),
+      updated_at: (props.updated_at as string) || new Date().toISOString(),
+    };
+  };
+
   const fetchData = async () => {
     if (!isReady) return;
     
@@ -36,7 +59,19 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
         api.listTilesets(),
       ]);
       
-      setFeature(featureData);
+      // GeoJSON Feature形式を変換
+      const rawFeature = featureData as unknown as {
+        type: string;
+        id: string;
+        geometry: GeoJSON.Geometry;
+        properties: Record<string, unknown>;
+      };
+      
+      if (rawFeature.type === "Feature") {
+        setFeature(convertGeoJsonFeature(rawFeature));
+      } else {
+        setFeature(featureData);
+      }
       
       if (Array.isArray(tilesetsResult)) {
         setTilesets(tilesetsResult);
