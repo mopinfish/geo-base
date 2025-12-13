@@ -24,7 +24,7 @@ except ImportError:
 # Constants
 # =============================================================================
 
-# PMTiles tile type mapping
+# PMTiles tile type mapping (by enum value)
 PMTILES_TILE_TYPES = {
     0: "unknown",
     1: "mvt",      # Mapbox Vector Tile
@@ -34,7 +34,7 @@ PMTILES_TILE_TYPES = {
     5: "avif",
 }
 
-# PMTiles compression mapping
+# PMTiles compression mapping (by enum value)
 PMTILES_COMPRESSION = {
     0: "unknown",
     1: "none",
@@ -117,6 +117,16 @@ async def get_pmtiles_metadata(pmtiles_url: str) -> dict[str, Any]:
     """
     Get metadata from a PMTiles file.
     
+    aiopmtiles Reader API:
+    - await src.metadata(): dict - PMTiles JSON metadata
+    - src.bounds: tuple - (west, south, east, north)
+    - src.center: tuple - (lon, lat, zoom)
+    - src.minzoom: int - Minimum zoom level
+    - src.maxzoom: int - Maximum zoom level
+    - src.is_vector: bool - True if vector tiles
+    - src.tile_type: TileType enum - Tile type
+    - src.tile_compression: Compression enum - Compression type
+    
     Args:
         pmtiles_url: URL to the PMTiles file
         
@@ -130,53 +140,87 @@ async def get_pmtiles_metadata(pmtiles_url: str) -> dict[str, Any]:
         raise RuntimeError("aiopmtiles is not available")
     
     try:
-        async with PMTilesReader(pmtiles_url) as reader:
-            # Get header info
-            header = reader.header()
-            
-            # Get JSON metadata if available
+        async with PMTilesReader(pmtiles_url) as src:
+            # Get JSON metadata (it's an async method)
             metadata = {}
             try:
-                metadata = await reader.metadata()
+                metadata = await src.metadata()
+                if not isinstance(metadata, dict):
+                    metadata = {}
             except Exception:
                 pass
             
-            # Parse tile type and compression
-            tile_type_id = header.get("tile_type", 0)
-            compression_id = header.get("tile_compression", 0)
+            # Get tile type - it's an Enum, extract .value
+            tile_type_str = "unknown"
+            try:
+                tile_type_enum = src.tile_type
+                # Handle Enum - get the integer value
+                if hasattr(tile_type_enum, 'value'):
+                    tile_type_id = tile_type_enum.value
+                else:
+                    tile_type_id = int(tile_type_enum)
+                tile_type_str = PMTILES_TILE_TYPES.get(tile_type_id, "unknown")
+            except Exception:
+                # Fallback: infer from is_vector
+                try:
+                    tile_type_str = "mvt" if src.is_vector else "png"
+                except Exception:
+                    pass
             
-            tile_type = PMTILES_TILE_TYPES.get(tile_type_id, "unknown")
-            compression = PMTILES_COMPRESSION.get(compression_id, "unknown")
+            # Get compression - it's an Enum, extract .value
+            compression_str = "unknown"
+            try:
+                comp_enum = src.tile_compression
+                # Handle Enum - get the integer value
+                if hasattr(comp_enum, 'value'):
+                    comp_id = comp_enum.value
+                else:
+                    comp_id = int(comp_enum)
+                compression_str = PMTILES_COMPRESSION.get(comp_id, "unknown")
+            except Exception:
+                pass
             
-            # Extract bounds
+            # Get bounds - it's a tuple
             bounds = None
-            if all(k in header for k in ["min_lon_e7", "min_lat_e7", "max_lon_e7", "max_lat_e7"]):
-                bounds = [
-                    header["min_lon_e7"] / 1e7,
-                    header["min_lat_e7"] / 1e7,
-                    header["max_lon_e7"] / 1e7,
-                    header["max_lat_e7"] / 1e7,
-                ]
+            try:
+                if src.bounds:
+                    b = src.bounds
+                    if isinstance(b, (list, tuple)) and len(b) >= 4:
+                        bounds = list(b[:4])
+            except Exception:
+                pass
             
-            # Extract center
+            # Get center - it's a tuple (lon, lat, zoom)
             center = None
-            if all(k in header for k in ["center_lon_e7", "center_lat_e7", "center_zoom"]):
-                center = [
-                    header["center_lon_e7"] / 1e7,
-                    header["center_lat_e7"] / 1e7,
-                    header["center_zoom"],
-                ]
+            try:
+                if src.center:
+                    c = src.center
+                    if isinstance(c, (list, tuple)) and len(c) >= 3:
+                        center = list(c[:3])
+            except Exception:
+                pass
+            
+            # Get zoom levels
+            min_zoom = 0
+            max_zoom = 22
+            try:
+                if hasattr(src, 'minzoom') and src.minzoom is not None:
+                    min_zoom = int(src.minzoom)
+                if hasattr(src, 'maxzoom') and src.maxzoom is not None:
+                    max_zoom = int(src.maxzoom)
+            except Exception:
+                pass
             
             return {
-                "tile_type": tile_type,
-                "tile_compression": compression,
-                "min_zoom": header.get("min_zoom", 0),
-                "max_zoom": header.get("max_zoom", 22),
+                "tile_type": tile_type_str,
+                "tile_compression": compression_str,
+                "min_zoom": min_zoom,
+                "max_zoom": max_zoom,
                 "bounds": bounds,
                 "center": center,
                 "metadata": metadata,
                 # Vector layer info (if available in metadata)
-                "layers": metadata.get("vector_layers", []),
+                "layers": metadata.get("vector_layers", []) if isinstance(metadata, dict) else [],
             }
             
     except Exception as e:
@@ -252,75 +296,65 @@ def get_pmtiles_cache_headers(z: int, is_static: bool = True) -> dict[str, str]:
 
 def generate_pmtiles_tilejson(
     tileset_id: str,
-    name: str,
+    tileset_name: str,
+    metadata: dict[str, Any],
     base_url: str,
-    tile_type: str = "mvt",
-    min_zoom: int = 0,
-    max_zoom: int = 22,
-    bounds: Optional[list[float]] = None,
-    center: Optional[list[float]] = None,
-    description: Optional[str] = None,
-    attribution: Optional[str] = None,
-    layers: Optional[list[dict]] = None,
+    description: str = "",
+    attribution: str = "",
 ) -> dict[str, Any]:
     """
     Generate TileJSON for a PMTiles tileset.
     
     Args:
-        tileset_id: Tileset identifier
-        name: Tileset name
+        tileset_id: Tileset ID
+        tileset_name: Human-readable tileset name
+        metadata: PMTiles metadata from get_pmtiles_metadata()
         base_url: Base URL for tile requests
-        tile_type: Tile type (mvt, png, jpeg, webp)
-        min_zoom: Minimum zoom level
-        max_zoom: Maximum zoom level
-        bounds: Tileset bounds [west, south, east, north]
-        center: Tileset center [lng, lat, zoom]
-        description: Optional description
-        attribution: Optional attribution
-        layers: Optional vector layer info
+        description: Optional tileset description
+        attribution: Optional attribution string
         
     Returns:
         TileJSON dictionary
     """
-    # Determine file extension based on tile type
-    extensions = {
+    tile_type = metadata.get("tile_type", "mvt")
+    
+    # Determine format extension
+    format_ext = {
         "mvt": "pbf",
         "png": "png",
         "jpeg": "jpg",
         "webp": "webp",
         "avif": "avif",
-    }
-    ext = extensions.get(tile_type, "pbf")
+    }.get(tile_type, "pbf")
     
-    tile_url = f"{base_url}/api/tiles/pmtiles/{tileset_id}/{{z}}/{{x}}/{{y}}.{ext}"
+    # Build tile URL template
+    tile_url = f"{base_url}/api/tiles/pmtiles/{tileset_id}/{{z}}/{{x}}/{{y}}.{format_ext}"
     
     tilejson = {
         "tilejson": "3.0.0",
-        "name": name,
+        "name": tileset_name,
+        "description": description,
+        "version": "1.0.0",
+        "attribution": attribution,
+        "scheme": "xyz",
         "tiles": [tile_url],
-        "minzoom": min_zoom,
-        "maxzoom": max_zoom,
+        "minzoom": metadata.get("min_zoom", 0),
+        "maxzoom": metadata.get("max_zoom", 22),
     }
     
+    # Add bounds if available
+    bounds = metadata.get("bounds")
     if bounds:
         tilejson["bounds"] = bounds
-    else:
-        tilejson["bounds"] = [-180, -85.051129, 180, 85.051129]
     
+    # Add center if available
+    center = metadata.get("center")
     if center:
         tilejson["center"] = center
-    else:
-        # Default center (Tokyo)
-        tilejson["center"] = [139.7, 35.7, 10]
     
-    if description:
-        tilejson["description"] = description
-    
-    if attribution:
-        tilejson["attribution"] = attribution
-    
-    # Add vector_layers for MVT tiles
-    if tile_type == "mvt" and layers:
+    # Add vector layers if available (for MVT)
+    layers = metadata.get("layers", [])
+    if layers and tile_type == "mvt":
         tilejson["vector_layers"] = layers
     
     return tilejson
