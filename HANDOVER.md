@@ -1,12 +1,15 @@
 # geo-base プロジェクト 引き継ぎドキュメント
 
 **作成日**: 2025-12-12  
-**最終更新**: 2025-12-12  
+**最終更新**: 2025-12-13  
 **プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
 **リポジトリ**: https://github.com/mopinfish/geo-base  
-**本番URL**: https://geo-base-puce.vercel.app/  
+**本番URL (API)**: https://geo-base-puce.vercel.app/  
+**本番URL (MCP)**: https://geo-base-mcp.fly.dev/  
+**本番URL (Admin)**: https://geo-base-admin.vercel.app/ （デプロイ後）  
 **APIバージョン**: 0.3.0  
-**MCPバージョン**: 0.1.0
+**MCPバージョン**: 0.2.0  
+**Admin UIバージョン**: 0.1.0
 
 ---
 
@@ -21,6 +24,7 @@
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Admin UI      │     │   MCP Server    │     │   外部クライアント  │
 │   (Next.js)     │     │   (FastMCP)     │     │   (MapLibre等)   │
+│   ✅ Step3.1完了│     │   ✅ Fly.io稼働 │     │                   │
 └────────┬────────┘     └────────┬────────┘     └────────┬────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
@@ -28,7 +32,7 @@
                     ┌────────────▼────────────┐
                     │     Tile Server API     │
                     │   (FastAPI on Vercel)   │
-                    │   ※将来: Fly.io移行予定  │
+                    │   ✅ 本番稼働中         │
                     └────────────┬────────────┘
                                  │
           ┌──────────────────────┼──────────────────────┐
@@ -55,14 +59,25 @@
 | 1.6 | PMTiles対応 | ✅ 完了 |
 | 1.7 | 認証機能（Supabase Auth） | ✅ 完了 |
 
-### フェーズ2: MCPサーバー（進行中）
+### フェーズ2: MCPサーバー（完了）
 
 | Step | 内容 | 状態 |
 |------|------|------|
 | 2.1 | FastMCPサーバー基盤構築 | ✅ 完了 |
 | 2.2 | ローカル動作確認・テスト | ✅ 完了 |
-| 2.3 | Fly.ioデプロイ | 📋 未着手 |
-| 2.4 | Claude Desktop連携確認 | 📋 未着手 |
+| 2.3 | Fly.ioデプロイ | ✅ 完了 |
+| 2.4 | Claude Desktop連携確認 | ✅ 完了 |
+| 2.4-A | ジオコーディングツール追加 | ✅ 完了 |
+| 2.4-B | CRUDツール追加 | ✅ 完了 |
+
+### フェーズ3: 管理画面（進行中）
+
+| Step | 内容 | 状態 |
+|------|------|------|
+| 3.1 | Next.jsプロジェクト設定 | ✅ 完了 |
+| 3.2 | Supabase Auth連携 | 📋 未着手 |
+| 3.3 | タイルセット管理UI | 📋 未着手 |
+| 3.4 | フィーチャー管理UI | 📋 未着手 |
 
 ---
 
@@ -77,6 +92,7 @@ geo-base/
 │   │   ├── config.py            # 設定管理（pydantic-settings）
 │   │   ├── database.py          # DB接続（サーバーレス対応）
 │   │   ├── main.py              # FastAPIアプリ・エンドポイント
+│   │   │                        # ※CRUDエンドポイント追加済み【Step 2.4-B】
 │   │   ├── pmtiles.py           # PMTilesユーティリティ【Step 1.6】
 │   │   ├── raster_tiles.py      # ラスタータイル生成ユーティリティ
 │   │   └── tiles.py             # ベクタータイル生成ユーティリティ
@@ -88,28 +104,78 @@ geo-base/
 │   ├── runtime.txt
 │   ├── .env.example
 │   └── .python-version
-├── mcp/                          # MCPサーバー【Step 2.1】
+├── mcp/                          # MCPサーバー【Step 2完了】
 │   ├── tools/
 │   │   ├── __init__.py
 │   │   ├── tilesets.py          # タイルセット関連ツール
-│   │   └── features.py          # フィーチャー関連ツール
+│   │   ├── features.py          # フィーチャー関連ツール
+│   │   ├── geocoding.py         # ジオコーディングツール【Step 2.4-A】
+│   │   └── crud.py              # CRUD操作ツール【Step 2.4-B】
 │   ├── tests/
 │   │   ├── __init__.py
 │   │   ├── conftest.py
-│   │   ├── test_tools.py        # 単体テスト
+│   │   ├── test_tools.py        # タイルセット・フィーチャーテスト
+│   │   ├── test_geocoding.py    # ジオコーディングテスト【Step 2.4-A】
+│   │   ├── test_crud.py         # CRUDテスト【Step 2.4-B】
 │   │   └── live_test.py         # ライブテストスクリプト
-│   ├── server.py                # FastMCPサーバー本体
+│   ├── server.py                # FastMCPサーバー本体（16ツール）
 │   ├── config.py                # 設定管理
 │   ├── pyproject.toml
 │   ├── uv.lock
-│   ├── Dockerfile               # Fly.io用
-│   ├── fly.toml                 # Fly.io設定
-│   ├── README.md
+│   ├── Dockerfile               # Fly.io用【Step 2.3】
+│   ├── fly.toml                 # Fly.io設定【Step 2.3】
+│   ├── .dockerignore            # Docker除外設定【Step 2.3】
+│   ├── README.md                # 日本語ドキュメント
 │   ├── .env.example
 │   ├── .python-version
 │   └── claude_desktop_config.example.json
-├── app/                          # Next.js管理画面（未実装）
-│   └── src/
+├── app/                          # Next.js管理画面【Step 3.1完了】
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── layout.tsx       # ルートレイアウト
+│   │   │   ├── page.tsx         # ダッシュボード
+│   │   │   ├── globals.css      # グローバルスタイル（shadcn/ui用CSS変数）
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx     # ログインページ（プレースホルダー）
+│   │   │   ├── tilesets/
+│   │   │   │   └── page.tsx     # タイルセット一覧
+│   │   │   ├── features/
+│   │   │   │   └── page.tsx     # フィーチャー一覧
+│   │   │   ├── datasources/
+│   │   │   │   └── page.tsx     # データソース（プレースホルダー）
+│   │   │   └── settings/
+│   │   │       └── page.tsx     # 設定（プレースホルダー）
+│   │   ├── components/
+│   │   │   ├── layout/
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── sidebar.tsx   # サイドバーナビゲーション
+│   │   │   │   └── admin-layout.tsx
+│   │   │   └── ui/              # shadcn/ui コンポーネント
+│   │   │       ├── button.tsx
+│   │   │       ├── card.tsx
+│   │   │       ├── input.tsx
+│   │   │       ├── label.tsx
+│   │   │       ├── table.tsx
+│   │   │       ├── select.tsx
+│   │   │       ├── dialog.tsx
+│   │   │       ├── dropdown-menu.tsx
+│   │   │       ├── badge.tsx
+│   │   │       └── separator.tsx
+│   │   ├── lib/
+│   │   │   ├── api.ts           # APIクライアント
+│   │   │   └── utils.ts         # ユーティリティ（cn関数）
+│   │   ├── hooks/               # カスタムフック（未実装）
+│   │   └── types/
+│   │       └── index.ts         # 型定義
+│   ├── public/                  # 静的ファイル
+│   ├── .env.example             # 環境変数サンプル
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── tsconfig.json
+│   ├── next.config.ts
+│   ├── postcss.config.mjs
+│   ├── components.json          # shadcn/ui設定
+│   └── README.md
 ├── docker/
 │   ├── docker-compose.yml
 │   └── postgis-init/
@@ -121,50 +187,161 @@ geo-base/
 ├── scripts/
 │   ├── setup.sh
 │   └── seed.sh
-├── vercel.json
+├── vercel.json                   # API用（既存のまま）
 ├── DEPLOY.md
+├── TESTING.md                    # 動作確認手順【Step 2.4-B】
+├── LOCAL_DEVELOPMENT.md          # ローカル開発環境ガイド【Step 3.1】
 ├── HANDOVER.md
 └── README.md
 ```
 
 ---
 
-## 4. MCPサーバー詳細【Step 2.1】
+## 4. ローカル開発環境
 
-### 実装されたツール
+### ポート割り当て
 
+| コンポーネント | ポート | ディレクトリ | 説明 |
+|--------------|--------|-------------|------|
+| **Admin UI** | 3000 | `/app` | Next.js 管理画面 |
+| **API** | 8000 | `/api` | FastAPI タイルサーバー |
+| **MCP Server** | 8001 | `/mcp` | Claude Desktop連携（SSEモード） |
+
+### 起動方法（3つのターミナル）
+
+```fish
+# ターミナル1: API (FastAPI)
+cd api
+uv run uvicorn lib.main:app --reload --port 8000
+
+# ターミナル2: MCP Server（必要な場合）
+cd mcp
+set -x TILE_SERVER_URL http://localhost:8000
+uv run python server.py
+
+# ターミナル3: Admin UI (Next.js)
+cd app
+npm run dev
+```
+
+### 環境変数
+
+#### Admin UI (`/app/.env.local`)
+
+```env
+# ローカル開発時
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_MCP_URL=http://localhost:8001
+
+# 本番APIを使う場合
+# NEXT_PUBLIC_API_URL=https://geo-base-puce.vercel.app
+# NEXT_PUBLIC_MCP_URL=https://geo-base-mcp.fly.dev
+```
+
+---
+
+## 5. Vercelデプロイ構成
+
+### 同一リポジトリから2つのVercelプロジェクト
+
+```
+GitHub: mopinfish/geo-base (1リポジトリ)
+    │
+    ├─→ Vercel Project 1: geo-base (既存)
+    │     Root Directory: . (ルート)
+    │     URL: geo-base-puce.vercel.app
+    │     内容: FastAPI タイルサーバー
+    │
+    └─→ Vercel Project 2: geo-base-admin (新規作成)
+          Root Directory: app
+          URL: geo-base-admin.vercel.app
+          内容: Next.js 管理画面
+```
+
+### Admin UIプロジェクト作成手順
+
+1. [Vercel Dashboard](https://vercel.com/dashboard) にログイン
+2. **Add New...** → **Project**
+3. 同じリポジトリ `mopinfish/geo-base` を選択
+4. 設定:
+
+| 設定項目 | 値 |
+|---------|-----|
+| Project Name | `geo-base-admin` |
+| Framework Preset | `Next.js` |
+| **Root Directory** | `app` ← **必須** |
+
+5. 環境変数:
+
+| 変数名 | 値 |
+|--------|-----|
+| `NEXT_PUBLIC_API_URL` | `https://geo-base-puce.vercel.app` |
+| `NEXT_PUBLIC_MCP_URL` | `https://geo-base-mcp.fly.dev` |
+
+6. **Deploy** をクリック
+
+---
+
+## 6. MCPサーバー詳細【Phase 2完了】
+
+### 本番環境
+
+| 項目 | 値 |
+|------|-----|
+| ホスティング | Fly.io |
+| URL | https://geo-base-mcp.fly.dev |
+| SSEエンドポイント | https://geo-base-mcp.fly.dev/sse |
+| リージョン | nrt (東京) |
+| トランスポート | SSE |
+
+### 実装されたツール（16ツール）
+
+#### タイルセットツール
 | ツール名 | 説明 | パラメータ |
 |---------|------|-----------|
 | `tool_list_tilesets` | タイルセット一覧取得 | `type?`, `is_public?` |
 | `tool_get_tileset` | タイルセット詳細取得 | `tileset_id` |
 | `tool_get_tileset_tilejson` | TileJSON取得 | `tileset_id` |
+
+#### フィーチャーツール
+| ツール名 | 説明 | パラメータ |
+|---------|------|-----------|
 | `tool_search_features` | フィーチャー検索 | `bbox?`, `layer?`, `filter?`, `limit?`, `tileset_id?` |
 | `tool_get_feature` | フィーチャー詳細取得 | `feature_id` |
+
+#### ジオコーディングツール【Step 2.4-A】
+| ツール名 | 説明 | パラメータ |
+|---------|------|-----------|
+| `tool_geocode` | 住所→座標変換 | `query`, `limit?`, `country_codes?`, `language?` |
+| `tool_reverse_geocode` | 座標→住所変換 | `latitude`, `longitude`, `zoom?`, `language?` |
+
+#### CRUDツール【Step 2.4-B】（認証必須）
+| ツール名 | 説明 | パラメータ |
+|---------|------|-----------|
+| `tool_create_tileset` | タイルセット作成 | `name`, `type`, `format`, `description?`, ... |
+| `tool_update_tileset` | タイルセット更新 | `tileset_id`, `name?`, `description?`, ... |
+| `tool_delete_tileset` | タイルセット削除 | `tileset_id` |
+| `tool_create_feature` | フィーチャー作成 | `tileset_id`, `geometry`, `properties?`, `layer_name?` |
+| `tool_update_feature` | フィーチャー更新 | `feature_id`, `geometry?`, `properties?`, `layer_name?` |
+| `tool_delete_feature` | フィーチャー削除 | `feature_id` |
+
+#### ユーティリティツール
+| ツール名 | 説明 | パラメータ |
+|---------|------|-----------|
 | `tool_get_tile_url` | タイルURL生成 | `tileset_id`, `z`, `x`, `y`, `format?` |
 | `tool_health_check` | ヘルスチェック | なし |
 | `tool_get_server_info` | サーバー情報取得 | なし |
 
-### 環境変数
-
-| 変数名 | デフォルト | 説明 |
-|--------|-----------|------|
-| `TILE_SERVER_URL` | `http://localhost:3000` | タイルサーバーのURL |
-| `API_TOKEN` | (なし) | 認証用JWTトークン |
-| `SERVER_NAME` | `geo-base` | MCPサーバー名 |
-| `SERVER_VERSION` | `0.1.0` | MCPサーバーバージョン |
-| `HTTP_TIMEOUT` | `30.0` | HTTPタイムアウト（秒） |
-| `ENVIRONMENT` | `development` | 環境識別子 |
-
 ### Claude Desktop設定
 
+#### ローカル接続
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
-    "geo-base": {
-      "command": "uv",
+    "geo-base-local": {
+      "command": "/Users/otsuka/.local/bin/uv",
       "args": [
         "--directory",
         "/path/to/geo-base/mcp",
@@ -180,89 +357,120 @@ geo-base/
 }
 ```
 
-### ローカル起動（fish形式）
+#### リモート接続（Fly.io）
 
-```fish
-cd mcp
-cp .env.example .env
-# .envを編集してTILE_SERVER_URLを設定
-uv sync
-uv run python server.py
-```
-
-### テスト実行（fish形式）
-
-```fish
-cd mcp
-uv sync --extra dev
-
-# 単体テスト
-uv run pytest tests/test_tools.py -v
-
-# ライブテスト（サーバー起動中に実行）
-TILE_SERVER_URL=http://localhost:3000 uv run python tests/live_test.py
+```json
+{
+  "mcpServers": {
+    "geo-base-remote": {
+      "command": "/Users/otsuka/.local/bin/uvx",
+      "args": [
+        "mcp-proxy",
+        "https://geo-base-mcp.fly.dev/sse",
+        "--transport=sse"
+      ]
+    }
+  }
+}
 ```
 
 ---
 
-## 5. 技術スタック
+## 7. 今後の課題と実装方針
+
+### Step 3.2: Supabase Auth連携
+
+#### 実装内容
+- `@supabase/ssr` パッケージを使用したサーバーサイド認証
+- ミドルウェアでセッション管理
+- ログイン/ログアウトUI
+- 認証状態に応じたルーティング
+
+#### 必要なパッケージ
+
+```bash
+npm install @supabase/supabase-js @supabase/ssr
+```
+
+#### ファイル構成（追加予定）
+
+```
+app/src/
+├── lib/
+│   └── supabase/
+│       ├── client.ts      # ブラウザ用クライアント
+│       ├── server.ts      # サーバー用クライアント
+│       └── middleware.ts  # セッション更新ミドルウェア
+├── middleware.ts          # Next.js ミドルウェア
+└── app/
+    ├── login/
+    │   └── page.tsx       # ログインフォーム実装
+    └── auth/
+        └── callback/
+            └── route.ts   # OAuth コールバック
+```
+
+#### 環境変数（追加）
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### Step 3.3: タイルセット管理UI
+
+#### 実装内容
+- タイルセット詳細ページ (`/tilesets/[id]`)
+- タイルセット作成フォーム (`/tilesets/new`)
+- タイルセット編集フォーム (`/tilesets/[id]/edit`)
+- 削除確認ダイアログ
+- MapLibre GL JS によるプレビュー
+
+#### 必要なパッケージ
+
+```bash
+npm install maplibre-gl react-map-gl
+```
+
+### Step 3.4: フィーチャー管理UI
+
+#### 実装内容
+- フィーチャー詳細ページ
+- フィーチャー作成（座標クリック、手動入力）
+- GeoJSON/Shapefileアップロード
+- 属性編集フォーム
+- マップ上での可視化
+
+---
+
+## 8. 技術スタック
 
 | レイヤー | 技術 | バージョン | 備考 |
 |---------|------|-----------|------|
+| Admin UI Framework | Next.js | 16.x | App Router |
+| Admin UI Language | TypeScript | 5.x | |
+| Admin UI Styling | Tailwind CSS | 4.x | |
+| Admin UI Components | shadcn/ui | - | 手動セットアップ |
+| Admin UI Icons | Lucide React | 0.560.x | |
 | API Framework | FastAPI | 0.115.x | |
 | Database | PostgreSQL + PostGIS | 16 + 3.4 | |
 | Database Hosting | Supabase | - | Auth, Storage含む |
-| API Hosting | Vercel Serverless | Python 3.12 | 将来Fly.io移行予定 |
-| MCP Framework | FastMCP | 2.0+ | 【Step 2.1】 |
-| MCP Hosting | ローカル / Fly.io | - | 【Step 2.3予定】 |
-| Package Manager | uv | latest | |
+| API Hosting | Vercel Serverless | Python 3.12 | |
+| MCP Framework | FastMCP | 2.14.0 | |
+| MCP Hosting | Fly.io | - | SSEトランスポート |
+| MCP Proxy | mcp-proxy | 0.10.0 | リモート接続用 |
+| Package Manager (Python) | uv | latest | |
+| Package Manager (Node) | npm | - | |
 | Vector Tiles | PostGIS ST_AsMVT | - | |
 | PMTiles | aiopmtiles | 0.1.0 | ✅ Vercelで動作 |
 | Raster Tiles | rio-tiler | 7.0+ | ⚠️ Vercelでは動作不可 |
 | Authentication | Supabase Auth + PyJWT | - | ✅ JWT検証実装済み |
+| Geocoding | Nominatim API | - | OpenStreetMap |
 | Tile Format | MVT (pbf), PNG, WebP | - | |
 
 ---
 
-## 6. 今後の課題と実装方針
-
-### フェーズ2 残タスク
-
-#### Step 2.3: Fly.ioデプロイ
-
-```fish
-# Fly CLIインストール
-curl -L https://fly.io/install.sh | sh
-
-# ログイン
-fly auth login
-
-# 初回デプロイ
-cd mcp
-fly launch
-
-# シークレット設定
-fly secrets set API_TOKEN=your-jwt-token
-
-# デプロイ
-fly deploy
-```
-
-#### Step 2.4: Claude Desktop連携確認
-
-1. Claude Desktopに設定ファイルを配置
-2. MCPサーバーの接続を確認
-3. 各ツールの動作を確認
-
-### フェーズ3: 管理画面（Next.js）
-
-- タイルセット管理UI
-- フィーチャー管理（GeoJSON/Shapefileアップロード）
-- Supabase Auth連携
-
----
-
-## 7. APIエンドポイント一覧
+## 9. APIエンドポイント一覧
 
 ### 認証エンドポイント
 
@@ -283,45 +491,65 @@ fly deploy
 | メソッド | パス | 認証 | 説明 |
 |---------|------|------|------|
 | GET | `/api/tilesets` | 不要※ | タイルセット一覧 |
+| POST | `/api/tilesets` | 必須 | タイルセット作成 |
 | GET | `/api/tilesets/{id}` | 条件付き | タイルセット詳細 |
+| PATCH | `/api/tilesets/{id}` | 必須 | タイルセット更新 |
+| DELETE | `/api/tilesets/{id}` | 必須 | タイルセット削除 |
 | GET | `/api/tilesets/{id}/tilejson.json` | 条件付き | TileJSON |
 
-### ベクタータイル
+### フィーチャー管理
+
+| メソッド | パス | 認証 | 説明 |
+|---------|------|------|------|
+| GET | `/api/features` | 不要※ | フィーチャー検索 |
+| POST | `/api/features` | 必須 | フィーチャー作成 |
+| GET | `/api/features/{id}` | 条件付き | フィーチャー詳細 |
+| PATCH | `/api/features/{id}` | 必須 | フィーチャー更新 |
+| DELETE | `/api/features/{id}` | 必須 | フィーチャー削除 |
+
+### タイル配信
 
 | メソッド | パス | 認証 | 説明 |
 |---------|------|------|------|
 | GET | `/api/tiles/features/{z}/{x}/{y}.pbf` | 条件付き | フィーチャーMVT |
 | GET | `/api/tiles/dynamic/{layer}/{z}/{x}/{y}.pbf` | 不要 | 動的MVT |
-
-### PMTilesタイル
-
-| メソッド | パス | 認証 | 説明 |
-|---------|------|------|------|
 | GET | `/api/tiles/pmtiles/{tileset_id}/{z}/{x}/{y}.{format}` | 条件付き | PMTilesタイル |
 | GET | `/api/tiles/pmtiles/{tileset_id}/tilejson.json` | 条件付き | TileJSON |
 
 ---
 
-## 8. 参照資料
+## 10. 本番環境URL一覧
+
+| サービス | URL | プラットフォーム | 状態 |
+|---------|-----|----------------|------|
+| Admin UI | https://geo-base-admin.vercel.app | Vercel | 📋 デプロイ予定 |
+| API | https://geo-base-puce.vercel.app | Vercel | ✅ 稼働中 |
+| MCP Server | https://geo-base-mcp.fly.dev | Fly.io | ✅ 稼働中 |
+
+---
+
+## 11. 参照資料
 
 ### プロジェクト内ドキュメント
 - `/mnt/project/geolocation-tech-source.txt` - タイルサーバー実装のサンプルコード
 - `/mnt/project/PROJECT_ROADMAP.md` - プロジェクトロードマップ
 - `/mnt/project/geo-base.txt` - 最新ソースコード
+- `TESTING.md` - 動作確認手順
+- `LOCAL_DEVELOPMENT.md` - ローカル開発環境ガイド
 
 ### 外部ドキュメント
+- [Next.js Documentation](https://nextjs.org/docs)
+- [shadcn/ui Documentation](https://ui.shadcn.com/)
+- [Supabase Auth (SSR)](https://supabase.com/docs/guides/auth/server-side/nextjs)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [FastMCP Documentation](https://github.com/jlowin/fastmcp)
+- [FastMCP Documentation](https://gofastmcp.com/)
 - [MCP Specification](https://modelcontextprotocol.io/)
 - [PostGIS MVT Functions](https://postgis.net/docs/ST_AsMVT.html)
-- [TileJSON Specification](https://github.com/mapbox/tilejson-spec)
-- [PMTiles Specification](https://github.com/protomaps/PMTiles)
-- [Supabase Documentation](https://supabase.com/docs)
-- [Fly.io Documentation](https://fly.io/docs/)
+- [MapLibre GL JS](https://maplibre.org/maplibre-gl-js/docs/)
 
 ---
 
-## 9. 変更履歴
+## 12. 変更履歴
 
 | 日付 | バージョン | 変更内容 |
 |------|-----------|---------|
@@ -329,7 +557,11 @@ fly deploy
 | 2025-12-12 | 0.2.0 | ラスタタイル対応（Step 1.5）、PMTiles対応（Step 1.6）追加 |
 | 2025-12-12 | 0.3.0 | 認証機能（Step 1.7）追加 |
 | 2025-12-12 | 0.4.0 | MCPサーバー基盤構築（Step 2.1）、テスト追加（Step 2.2） |
+| 2025-12-12 | 0.5.0 | Fly.ioデプロイ（Step 2.3）、Claude Desktop連携確認（Step 2.4） |
+| 2025-12-12 | 0.6.0 | ジオコーディングツール追加（Step 2.4-A） |
+| 2025-12-12 | 0.7.0 | CRUDツール追加（Step 2.4-B）、Phase 2完了 |
+| 2025-12-13 | 0.8.0 | Next.js Admin UI基盤構築（Step 3.1完了）、ポート構成標準化、Vercelデプロイ構成追加 |
 
 ---
 
-*このドキュメントは2025-12-12時点の情報です。APIバージョン: 0.3.0 / MCPバージョン: 0.1.0*
+*このドキュメントは2025-12-13時点の情報です。APIバージョン: 0.3.0 / MCPバージョン: 0.2.0 / Admin UIバージョン: 0.1.0*
