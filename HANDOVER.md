@@ -1,7 +1,7 @@
 # geo-base プロジェクト 引き継ぎドキュメント
 
 **作成日**: 2025-12-12  
-**最終更新**: 2025-12-13  
+**最終更新**: 2025-12-14  
 **プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
 **リポジトリ**: https://github.com/mopinfish/geo-base  
 **本番URL (API)**: https://geo-base-puce.vercel.app/  
@@ -9,7 +9,7 @@
 **本番URL (Admin)**: https://geo-base-app.vercel.app/  
 **APIバージョン**: 0.3.0  
 **MCPバージョン**: 0.2.0  
-**Admin UIバージョン**: 0.4.0
+**Admin UIバージョン**: 0.6.0
 
 ---
 
@@ -24,7 +24,7 @@
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Admin UI      │     │   MCP Server    │     │   外部クライアント  │
 │   (Next.js)     │     │   (FastMCP)     │     │   (MapLibre等)   │
-│   ✅ Step3.4完了│     │   ✅ Fly.io稼働 │     │                   │
+│   ✅ Step3.7完了│     │   ✅ Fly.io稼働 │     │                   │
 └────────┬────────┘     └────────┬────────┘     └────────┬────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
@@ -78,8 +78,9 @@
 | 3.2 | Supabase Auth連携 | ✅ 完了 |
 | 3.3 | タイルセット管理UI | ✅ 完了 |
 | 3.4 | フィーチャー管理UI | ✅ 完了 |
-| 3.5 | 設定画面 | 📋 未着手 |
-| 3.6 | データソース管理UI | 📋 未着手 |
+| 3.5 | 設定画面 | ✅ 完了 |
+| 3.7 | GeoJSONインポート機能 | ✅ 完了 |
+| 3.8 | データソース管理UI | 📋 未着手 |
 
 ---
 
@@ -131,11 +132,11 @@ geo-base/
 │   ├── .env.example
 │   ├── .python-version
 │   └── claude_desktop_config.example.json
-├── app/                          # Next.js管理画面【Step 3.4完了】
+├── app/                          # Next.js管理画面【Step 3.7完了】
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── layout.tsx       # ルートレイアウト
-│   │   │   ├── page.tsx         # ダッシュボード
+│   │   │   ├── page.tsx         # ダッシュボード（タイルセット数表示修正済み）
 │   │   │   ├── globals.css      # グローバルスタイル
 │   │   │   ├── login/
 │   │   │   │   └── page.tsx     # ログインページ【Step 3.2】
@@ -147,10 +148,12 @@ geo-base/
 │   │   │   │       ├── page.tsx # タイルセット詳細【Step 3.3】
 │   │   │   │       └── edit/
 │   │   │   │           └── page.tsx # タイルセット編集【Step 3.3】
-│   │   │   ├── features/        # フィーチャー管理【Step 3.4】
-│   │   │   │   ├── page.tsx     # フィーチャー一覧
+│   │   │   ├── features/        # フィーチャー管理【Step 3.4, 3.7】
+│   │   │   │   ├── page.tsx     # フィーチャー一覧（インポートボタン追加）
 │   │   │   │   ├── new/
 │   │   │   │   │   └── page.tsx # フィーチャー新規作成
+│   │   │   │   ├── import/
+│   │   │   │   │   └── page.tsx # GeoJSONインポート【Step 3.7】
 │   │   │   │   └── [id]/
 │   │   │   │       ├── page.tsx # フィーチャー詳細
 │   │   │   │       └── edit/
@@ -158,7 +161,7 @@ geo-base/
 │   │   │   ├── datasources/
 │   │   │   │   └── page.tsx     # データソース（プレースホルダー）
 │   │   │   └── settings/
-│   │   │       └── page.tsx     # 設定（プレースホルダー）
+│   │   │       └── page.tsx     # 設定画面【Step 3.5】
 │   │   ├── components/
 │   │   │   ├── layout/
 │   │   │   │   ├── index.ts
@@ -168,9 +171,15 @@ geo-base/
 │   │   │   │   ├── tileset-form.tsx      # 作成/編集フォーム
 │   │   │   │   ├── delete-tileset-dialog.tsx # 削除確認ダイアログ
 │   │   │   │   └── index.ts
-│   │   │   ├── features/        # フィーチャー関連コンポーネント【Step 3.4】
+│   │   │   ├── features/        # フィーチャー関連コンポーネント【Step 3.4, 3.7】
 │   │   │   │   ├── feature-form.tsx      # 作成/編集フォーム
 │   │   │   │   ├── delete-feature-dialog.tsx # 削除確認ダイアログ
+│   │   │   │   ├── geojson-dropzone.tsx  # ドラッグ&ドロップアップロード【Step 3.7】
+│   │   │   │   ├── geojson-preview.tsx   # 地図プレビュー【Step 3.7】
+│   │   │   │   └── index.ts
+│   │   │   ├── settings/        # 設定関連コンポーネント【Step 3.5】
+│   │   │   │   ├── profile-form.tsx      # プロフィール編集
+│   │   │   │   ├── password-form.tsx     # パスワード変更
 │   │   │   │   └── index.ts
 │   │   │   ├── map/             # 地図コンポーネント【Step 3.4】
 │   │   │   │   ├── map-view.tsx # MapLibre GL JS ラッパー
@@ -204,7 +213,7 @@ geo-base/
 │   ├── middleware.ts            # Next.js認証ミドルウェア【Step 3.2】
 │   ├── public/                  # 静的ファイル
 │   ├── .env.example             # 環境変数サンプル
-│   ├── package.json             # バージョン: 0.4.0, MapLibre GL JS追加
+│   ├── package.json             # バージョン: 0.6.0
 │   ├── package-lock.json
 │   ├── tsconfig.json
 │   ├── next.config.ts
@@ -287,98 +296,118 @@ NEXT_PUBLIC_MCP_URL=http://localhost:8001
 
 ---
 
-## 5. Step 3.4 実装詳細（フィーチャー管理UI）
+## 5. Step 3.5 実装詳細（設定画面）
 
 ### 実装した機能
 
 | 機能 | 説明 |
 |------|------|
-| フィーチャー一覧 | タイルセットフィルター、検索、表示件数選択 |
-| フィーチャー新規作成 | Point/LineString/Polygon対応、地図クリック入力 |
-| フィーチャー詳細 | 地図プレビュー、プロパティ表示、GeoJSONコピー |
-| フィーチャー編集 | ジオメトリ・プロパティ変更 |
-| フィーチャー削除 | 確認ダイアログ付き |
+| プロフィール編集 | 表示名の変更（Supabase Auth user_metadata更新） |
+| パスワード変更 | 新パスワード入力、確認パスワード一致チェック |
+| API情報表示 | API URL、MCP Server URL、SSEエンドポイントの表示・コピー |
+| ログアウト | 確認ダイアログ付きログアウト機能 |
+| システム情報 | Admin UI / API / MCP バージョン表示 |
 
 ### 技術的なポイント
 
-#### 1. GeoJSON FeatureCollection形式への対応
+#### 1. Supabase Auth連携
 
-APIの `/api/features` エンドポイントは GeoJSON FeatureCollection 形式でレスポンスを返す：
+```typescript
+// プロフィール更新
+const { error } = await supabase.auth.updateUser({
+  data: { display_name: formData.displayName },
+});
 
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "id": "xxx",
-      "geometry": {...},
-      "properties": {
-        "name": "xxx",
-        "tileset_id": "xxx",    // properties内に含まれる
-        "layer_name": "xxx",    // properties内に含まれる
-        "created_at": "xxx",
-        "updated_at": "xxx"
-      }
-    }
-  ]
+// パスワード変更
+const { error } = await supabase.auth.updateUser({
+  password: newPassword,
+});
+
+// ログアウト
+await supabase.auth.signOut();
+```
+
+#### 2. ダッシュボードのタイルセット数表示修正
+
+**問題**: タイルセット数が常に0件と表示される  
+**原因**: `useApi`フックを使用せず、認証トークンなしでAPIを呼び出していた  
+**修正**: APIレスポンス形式 `{tilesets: [...], count: N}` に対応
+
+```typescript
+// 修正後のコード
+if (tilesetsData.status === "fulfilled") {
+  const data = tilesetsData.value;
+  if (Array.isArray(data)) {
+    setTilesets(data);
+  } else if (data && Array.isArray(data.tilesets)) {
+    setTilesets(data.tilesets);
+  } else {
+    setTilesets([]);
+  }
 }
 ```
 
-フロントエンドで `convertGeoJsonFeature()` 関数を使って Admin UI の `Feature` 型に変換している。
+---
 
-#### 2. Radix UI Select の互換性問題
+## 6. Step 3.7 実装詳細（GeoJSONインポート機能）
 
-Tailwind CSS v4 + Next.js 16 環境で Radix UI の Select コンポーネントが正常に動作しない問題があったため、フィーチャー一覧ページではネイティブ `<select>` 要素を使用している。
+### 実装した機能
 
-#### 3. MapLibre GL JS の統合
+| 機能 | 説明 |
+|------|------|
+| ファイルアップロード | ドラッグ&ドロップ / クリックで選択（最大10MB） |
+| バリデーション | GeoJSON形式検証、フィーチャー数・ジオメトリタイプ表示 |
+| プレビュー | MapLibre GL JSで地図上にフィーチャーを表示 |
+| タイルセット選択 | vectorタイプのタイルセットのみ選択可能 |
+| バッチインポート | 5件ずつ並列でAPI呼び出し（進捗バー表示） |
+| エラーハンドリング | 個別エラーを表示、部分的成功に対応 |
 
-```typescript
-// MapView コンポーネントの主要機能
-- OpenStreetMapベースマップ
-- GeoJSON表示（Point/LineString/Polygon）
-- クリックイベントで座標取得
-- ドラッグ可能マーカー
-- 自動範囲フィット
+### コンポーネント構成
+
+```
+components/features/
+├── geojson-dropzone.tsx   # ドラッグ&ドロップ対応アップロード
+│   - ParsedGeoJSON型: ファイル情報、フィーチャー数、ジオメトリタイプ
+│   - ファイルサイズ検証（10MB制限）
+│   - GeoJSON形式検証（FeatureCollection/単一Feature）
+│
+├── geojson-preview.tsx    # 地図プレビュー
+│   - MapLibre GL JS統合
+│   - Point/LineString/Polygon表示
+│   - 自動バウンディングボックス計算
+│   - GeometryCollection対応
+│
+└── index.ts               # エクスポート
 ```
 
-### サンプルデータ投入スクリプト
+### 導線
 
-```fish
-# 認証トークンを設定
-set -x AUTH_TOKEN "your-supabase-access-token"
-set -x API_URL "http://localhost:8000"
-
-# スクリプト実行
-fish scripts/seed_sample_data.fish
+```
+フィーチャー一覧 (/features)
+    ↓ [GeoJSONインポート] ボタン
+GeoJSONインポート (/features/import)
+    ↓ ファイル選択 → プレビュー → インポート実行
+フィーチャー一覧 (/features)
 ```
 
-投入されるデータ：
-- **東京ランドマーク** (vector): POI 5件（東京駅、東京タワー等）
-- **東京鉄道路線** (vector): LineString 2件（山手線、中央線）
-- **東京エリア** (vector): Polygon 2件（千代田区、中央区）
+### テスト用サンプルファイル
+
+`sample-tokyo.geojson` を作成済み（8フィーチャー）:
+- Point: 東京駅、新宿駅、東京タワー、東京スカイツリー、皇居
+- LineString: 中央線（東京〜新宿）
+- Polygon: 千代田区エリア、新宿区エリア
 
 ---
 
-## 6. 今後の課題と実装方針
+## 7. 今後の課題と実装方針
 
-### Step 3.5: 設定画面（優先度: 中）
-
-**目的**: ユーザー設定、APIキー管理、プロフィール編集
-
-**実装予定機能**:
-- プロフィール編集（表示名、メールアドレス）
-- パスワード変更
-- APIキー管理（将来的）
-- 通知設定
-
-### Step 3.6: データソース管理UI（優先度: 低）
+### Step 3.8: データソース管理UI（優先度: 低）
 
 **目的**: 外部データソース（PMTiles URL、COG URL等）の管理
 
 **実装予定機能**:
 - データソース一覧
-- 新規データソース登録
+- 新規データソース登録（URL入力、タイプ選択）
 - 接続テスト
 - タイルセットとの紐付け
 
@@ -386,10 +415,10 @@ fish scripts/seed_sample_data.fish
 
 | 機能 | 優先度 | 説明 |
 |------|--------|------|
-| GeoJSONインポート | 高 | ファイルアップロードでフィーチャー一括登録 |
 | バルク操作 | 中 | 複数フィーチャーの一括編集・削除 |
-| 地図スタイルカスタマイズ | 低 | ベースマップ切り替え、スタイル編集 |
 | タイルビューア改善 | 低 | Admin UI内でのタイルプレビュー |
+| 地図スタイルカスタマイズ | 低 | ベースマップ切り替え、スタイル編集 |
+| Phase 3完了 | - | HANDOVER.md最終更新 |
 
 ### 既知の問題
 
@@ -422,11 +451,50 @@ fish scripts/seed_sample_data.fish
 | pmtiles | ❌ 不可 | 静的タイルアーカイブ（読み取り専用） |
 | raster | ❌ 不可 | 静的ラスタデータ |
 
-**対応**: フィーチャー管理UIで `type: 'vector'` のタイルセットのみを対象とする
+**対応**: フィーチャー管理UI・GeoJSONインポートで `type: 'vector'` のタイルセットのみを対象とする
+
+#### 4. Next.js 16 Middleware警告
+
+**症状**: ビルド時に `middleware` ファイル規約が非推奨との警告が表示される
+
+```
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+```
+
+**対応**: 次回メジャーアップデート時に `proxy` への移行を検討
 
 ---
 
-## 7. MCPサーバー詳細【Phase 2完了】
+## 8. 技術スタック
+
+| レイヤー | 技術 | バージョン | 備考 |
+|---------|------|-----------|------|
+| Admin UI Framework | Next.js | 16.x | App Router |
+| Admin UI Language | TypeScript | 5.x | |
+| Admin UI Styling | Tailwind CSS | 4.x | |
+| Admin UI Components | shadcn/ui | - | 手動セットアップ |
+| Admin UI Icons | Lucide React | 0.560.x | |
+| Admin UI Auth | @supabase/ssr | 0.5.x | サーバーサイド認証 |
+| Admin UI Map | MapLibre GL JS | 4.7.x | 地図表示【Step 3.4, 3.7】 |
+| API Framework | FastAPI | 0.115.x | |
+| Database | PostgreSQL + PostGIS | 16 + 3.4 | |
+| Database Hosting | Supabase | - | Auth, Storage含む |
+| API Hosting | Vercel Serverless | Python 3.12 | |
+| MCP Framework | FastMCP | 2.14.0 | |
+| MCP Hosting | Fly.io | - | SSEトランスポート |
+| MCP Proxy | mcp-proxy | 0.10.0 | リモート接続用 |
+| Package Manager (Python) | uv | latest | |
+| Package Manager (Node) | npm | - | |
+| Vector Tiles | PostGIS ST_AsMVT | - | |
+| PMTiles | aiopmtiles | 0.1.0 | ✅ Vercelで動作 |
+| Raster Tiles | rio-tiler | 7.0+ | ⚠️ Vercelでは動作不可 |
+| Authentication | Supabase Auth + PyJWT | - | ✅ JWT検証実装済み |
+| Geocoding | Nominatim API | - | OpenStreetMap |
+| Tile Format | MVT (pbf), PNG, WebP | - | |
+
+---
+
+## 9. MCPサーバー詳細【Phase 2完了】
 
 ### 本番環境
 
@@ -478,36 +546,7 @@ fish scripts/seed_sample_data.fish
 
 ---
 
-## 8. 技術スタック
-
-| レイヤー | 技術 | バージョン | 備考 |
-|---------|------|-----------|------|
-| Admin UI Framework | Next.js | 16.x | App Router |
-| Admin UI Language | TypeScript | 5.x | |
-| Admin UI Styling | Tailwind CSS | 4.x | |
-| Admin UI Components | shadcn/ui | - | 手動セットアップ |
-| Admin UI Icons | Lucide React | 0.560.x | |
-| Admin UI Auth | @supabase/ssr | 0.5.x | サーバーサイド認証 |
-| Admin UI Map | MapLibre GL JS | 4.7.x | 地図表示【Step 3.4】 |
-| API Framework | FastAPI | 0.115.x | |
-| Database | PostgreSQL + PostGIS | 16 + 3.4 | |
-| Database Hosting | Supabase | - | Auth, Storage含む |
-| API Hosting | Vercel Serverless | Python 3.12 | |
-| MCP Framework | FastMCP | 2.14.0 | |
-| MCP Hosting | Fly.io | - | SSEトランスポート |
-| MCP Proxy | mcp-proxy | 0.10.0 | リモート接続用 |
-| Package Manager (Python) | uv | latest | |
-| Package Manager (Node) | npm | - | |
-| Vector Tiles | PostGIS ST_AsMVT | - | |
-| PMTiles | aiopmtiles | 0.1.0 | ✅ Vercelで動作 |
-| Raster Tiles | rio-tiler | 7.0+ | ⚠️ Vercelでは動作不可 |
-| Authentication | Supabase Auth + PyJWT | - | ✅ JWT検証実装済み |
-| Geocoding | Nominatim API | - | OpenStreetMap |
-| Tile Format | MVT (pbf), PNG, WebP | - | |
-
----
-
-## 9. APIエンドポイント一覧
+## 10. APIエンドポイント一覧
 
 ### 認証エンドポイント
 
@@ -557,7 +596,7 @@ fish scripts/seed_sample_data.fish
 
 ---
 
-## 10. 本番環境URL一覧
+## 11. 本番環境URL一覧
 
 | サービス | URL | プラットフォーム | 状態 |
 |---------|-----|----------------|------|
@@ -567,7 +606,7 @@ fish scripts/seed_sample_data.fish
 
 ---
 
-## 11. 参照資料
+## 12. 参照資料
 
 ### プロジェクト内ドキュメント
 - `/mnt/project/geolocation-tech-source.txt` - タイルサーバー実装のサンプルコード
@@ -588,7 +627,7 @@ fish scripts/seed_sample_data.fish
 
 ---
 
-## 12. 変更履歴
+## 13. 変更履歴
 
 | 日付 | バージョン | 変更内容 |
 |------|-----------|---------|
@@ -603,7 +642,9 @@ fish scripts/seed_sample_data.fish
 | 2025-12-13 | 0.9.0 | Supabase Auth連携（Step 3.2完了） |
 | 2025-12-13 | 1.0.0 | タイルセット管理UI（Step 3.3完了）、バグ修正、タイル表示確認 |
 | 2025-12-13 | 1.1.0 | フィーチャー管理UI（Step 3.4完了）、MapLibre GL JS統合、サンプルデータ投入スクリプト追加 |
+| 2025-12-14 | 1.2.0 | 設定画面（Step 3.5完了）、ダッシュボードのタイルセット数表示修正 |
+| 2025-12-14 | 1.3.0 | GeoJSONインポート機能（Step 3.7完了）、フィーチャー一覧にインポートボタン追加 |
 
 ---
 
-*このドキュメントは2025-12-13時点の情報です。APIバージョン: 0.3.0 / MCPバージョン: 0.2.0 / Admin UIバージョン: 0.4.0*
+*このドキュメントは2025-12-14時点の情報です。APIバージョン: 0.3.0 / MCPバージョン: 0.2.0 / Admin UIバージョン: 0.6.0*
