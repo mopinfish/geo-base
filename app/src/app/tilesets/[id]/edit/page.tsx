@@ -18,7 +18,7 @@ interface EditTilesetPageProps {
 export default function EditTilesetPage({ params }: EditTilesetPageProps) {
   const { id } = use(params);
   const router = useRouter();
-  const api = useApi();
+  const { api, isReady } = useApi();
   
   const [tileset, setTileset] = useState<Tileset | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,6 +27,8 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchTileset = async () => {
+    if (!isReady) return;
+    
     setIsLoading(true);
     setFetchError(null);
     try {
@@ -40,15 +42,21 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
   };
 
   useEffect(() => {
-    fetchTileset();
-  }, [id]);
+    if (isReady) {
+      fetchTileset();
+    }
+  }, [id, isReady]);
 
   const handleSubmit = async (data: TilesetCreate | TilesetUpdate) => {
+    if (!isReady) {
+      setError("API が準備できていません。しばらくお待ちください。");
+      return;
+    }
+    
     setIsSubmitting(true);
     setError(null);
     
     try {
-      // 編集時は TilesetUpdate として扱う
       await api.updateTileset(id, data as TilesetUpdate);
       router.push(`/tilesets/${id}`);
     } catch (err) {
@@ -57,7 +65,7 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
     }
   };
 
-  if (isLoading) {
+  if (!isReady || isLoading) {
     return (
       <AdminLayout>
         <div className="flex h-64 items-center justify-center">

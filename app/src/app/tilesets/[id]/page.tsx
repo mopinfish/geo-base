@@ -33,7 +33,7 @@ interface TilesetDetailPageProps {
 export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const { id } = use(params);
   const router = useRouter();
-  const api = useApi();
+  const { api, isReady } = useApi();
   
   const [tileset, setTileset] = useState<Tileset | null>(null);
   const [tileJSON, setTileJSON] = useState<TileJSON | null>(null);
@@ -42,10 +42,13 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   const fetchTileset = async () => {
+    if (!isReady) return;
+    
     setIsLoading(true);
     setError(null);
     try {
       const data = await api.getTileset(id);
+      console.log("Tileset data:", data);
       setTileset(data);
       
       // TileJSONも取得
@@ -63,8 +66,10 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   };
 
   useEffect(() => {
-    fetchTileset();
-  }, [id]);
+    if (isReady) {
+      fetchTileset();
+    }
+  }, [id, isReady]);
 
   const handleDelete = async () => {
     await api.deleteTileset(id);
@@ -87,23 +92,43 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
     });
   };
 
-  // bounds/centerはAPIから文字列の配列として返される場合があるため、
-  // Number()で数値に変換してからtoFixed()を呼び出す
-  const formatBounds = (bounds?: number[] | string[]) => {
-    if (!bounds || bounds.length !== 4) return "-";
-    const nums = bounds.map(Number);
-    if (nums.some(isNaN)) return "-";
+  /**
+   * bounds/centerを安全にパースして配列に変換
+   */
+  const parseCoordinates = (value: unknown): number[] | null => {
+    if (!value) return null;
+    
+    // すでに配列の場合
+    if (Array.isArray(value)) {
+      const nums = value.map(Number);
+      if (nums.some(isNaN)) return null;
+      return nums;
+    }
+    
+    // 文字列の場合（カンマ区切り）
+    if (typeof value === "string") {
+      const parts = value.split(",").map(s => Number(s.trim()));
+      if (parts.some(isNaN)) return null;
+      return parts;
+    }
+    
+    return null;
+  };
+
+  const formatBounds = (bounds: unknown) => {
+    const nums = parseCoordinates(bounds);
+    if (!nums || nums.length !== 4) return "-";
     return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}, ${nums[2].toFixed(4)}, ${nums[3].toFixed(4)}`;
   };
 
-  const formatCenter = (center?: number[] | string[]) => {
-    if (!center || center.length < 2) return "-";
-    const nums = center.map(Number);
-    if (nums.slice(0, 2).some(isNaN)) return "-";
-    return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}${nums[2] !== undefined && !isNaN(nums[2]) ? ` (zoom: ${nums[2]})` : ""}`;
+  const formatCenter = (center: unknown) => {
+    const nums = parseCoordinates(center);
+    if (!nums || nums.length < 2) return "-";
+    const zoomPart = nums[2] !== undefined ? ` (zoom: ${nums[2]})` : "";
+    return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}${zoomPart}`;
   };
 
-  if (isLoading) {
+  if (!isReady || isLoading) {
     return (
       <AdminLayout>
         <div className="flex h-64 items-center justify-center">

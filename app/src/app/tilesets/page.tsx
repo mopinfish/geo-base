@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 
 export default function TilesetsPage() {
-  const api = useApi();
+  const { api, isReady } = useApi();
   
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [filteredTilesets, setFilteredTilesets] = useState<Tileset[]>([]);
@@ -47,26 +47,41 @@ export default function TilesetsPage() {
   const [publicFilter, setPublicFilter] = useState<string>("all");
 
   const fetchTilesets = useCallback(async () => {
+    if (!isReady) {
+      console.log("API not ready yet, skipping fetch");
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     try {
+      console.log("Fetching tilesets...");
       const data = await api.listTilesets();
+      console.log("API Response:", data);
+      console.log("Is Array:", Array.isArray(data));
+      
       // 配列であることを確認
       const tilesetsArray = Array.isArray(data) ? data : [];
+      console.log("Tilesets array:", tilesetsArray);
+      
       setTilesets(tilesetsArray);
       setFilteredTilesets(tilesetsArray);
     } catch (err) {
+      console.error("Fetch error:", err);
       setError(err instanceof Error ? err.message : "タイルセットの取得に失敗しました");
       setTilesets([]);
       setFilteredTilesets([]);
     } finally {
       setIsLoading(false);
     }
-  }, [api]);
+  }, [api, isReady]);
 
+  // isReadyになったらfetch
   useEffect(() => {
-    fetchTilesets();
-  }, [fetchTilesets]);
+    if (isReady) {
+      fetchTilesets();
+    }
+  }, [isReady, fetchTilesets]);
 
   // フィルタリング
   useEffect(() => {
@@ -118,7 +133,7 @@ export default function TilesetsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={fetchTilesets} variant="outline" size="sm">
+            <Button onClick={fetchTilesets} variant="outline" size="sm" disabled={!isReady}>
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               更新
             </Button>
@@ -190,7 +205,7 @@ export default function TilesetsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {!isReady || isLoading ? (
               <div className="flex h-32 items-center justify-center">
                 <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>

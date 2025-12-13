@@ -10,17 +10,21 @@ import { Plus } from "lucide-react";
 
 export default function NewTilesetPage() {
   const router = useRouter();
-  const api = useApi();
+  const { api, isReady } = useApi();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (data: TilesetCreate | TilesetUpdate) => {
+    if (!isReady) {
+      setError("API が準備できていません。しばらくお待ちください。");
+      return;
+    }
+    
     setIsSubmitting(true);
     setError(null);
     
     try {
-      // 新規作成時は TilesetCreate として扱う
       const tileset = await api.createTileset(data as TilesetCreate);
       router.push(`/tilesets/${tileset.id}`);
     } catch (err) {
@@ -48,7 +52,7 @@ export default function NewTilesetPage() {
           <TilesetForm
             mode="create"
             onSubmit={handleSubmit}
-            isSubmitting={isSubmitting}
+            isSubmitting={isSubmitting || !isReady}
             error={error}
           />
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { api } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 
@@ -9,16 +9,29 @@ import { createClient } from "@/lib/supabase/client";
  * 
  * Supabaseのセッションからアクセストークンを取得し、
  * APIクライアントに設定する
+ * 
+ * @returns { api, isReady } - APIクライアントと準備完了状態
  */
 export function useApi() {
+  const [isReady, setIsReady] = useState(false);
+
   const setupToken = useCallback(async () => {
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session?.access_token) {
-      api.setToken(session.access_token);
-    } else {
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.access_token) {
+        api.setToken(session.access_token);
+        console.log("API token set successfully"); // デバッグ
+      } else {
+        api.setToken(null);
+        console.log("No session, token cleared"); // デバッグ
+      }
+    } catch (error) {
+      console.error("Error setting up token:", error);
       api.setToken(null);
+    } finally {
+      setIsReady(true);
     }
   }, []);
 
@@ -41,7 +54,7 @@ export function useApi() {
     return () => subscription.unsubscribe();
   }, [setupToken]);
 
-  return api;
+  return { api, isReady };
 }
 
 /**
