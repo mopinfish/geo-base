@@ -22,7 +22,6 @@ import {
 import { useAuth } from "@/contexts";
 import { createClient } from "@/lib/supabase/client";
 import { 
-  Settings, 
   Key, 
   Bell, 
   Globe, 
@@ -40,7 +39,7 @@ const MCP_URL = "https://geo-base-mcp.fly.dev";
 
 // バージョン情報
 const VERSIONS = {
-  adminUi: "0.4.0",
+  adminUi: "0.5.0",
   api: "0.3.0",
   mcp: "0.2.0",
 };
