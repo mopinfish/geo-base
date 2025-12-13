@@ -87,14 +87,20 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
     });
   };
 
-  const formatBounds = (bounds?: number[]) => {
+  // bounds/centerはAPIから文字列の配列として返される場合があるため、
+  // Number()で数値に変換してからtoFixed()を呼び出す
+  const formatBounds = (bounds?: number[] | string[]) => {
     if (!bounds || bounds.length !== 4) return "-";
-    return `${bounds[0].toFixed(4)}, ${bounds[1].toFixed(4)}, ${bounds[2].toFixed(4)}, ${bounds[3].toFixed(4)}`;
+    const nums = bounds.map(Number);
+    if (nums.some(isNaN)) return "-";
+    return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}, ${nums[2].toFixed(4)}, ${nums[3].toFixed(4)}`;
   };
 
-  const formatCenter = (center?: number[]) => {
+  const formatCenter = (center?: number[] | string[]) => {
     if (!center || center.length < 2) return "-";
-    return `${center[0].toFixed(4)}, ${center[1].toFixed(4)}${center[2] !== undefined ? ` (zoom: ${center[2]})` : ""}`;
+    const nums = center.map(Number);
+    if (nums.slice(0, 2).some(isNaN)) return "-";
+    return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}${nums[2] !== undefined && !isNaN(nums[2]) ? ` (zoom: ${nums[2]})` : ""}`;
   };
 
   if (isLoading) {
