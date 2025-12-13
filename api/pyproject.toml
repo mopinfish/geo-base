@@ -20,6 +20,7 @@ dependencies = [
     "aiopmtiles @ git+https://github.com/developmentseed/aiopmtiles.git",
     "PyJWT>=2.8.0",
     "cryptography>=41.0.0",
+    "mapbox-vector-tile>=2.2.0",
 ]
 
 [project.optional-dependencies]
