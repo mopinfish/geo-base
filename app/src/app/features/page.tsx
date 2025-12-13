@@ -26,6 +26,7 @@ import {
   Pencil,
   MapPin,
   ChevronDown,
+  FileJson,
 } from "lucide-react";
 
 export default function FeaturesPage() {
@@ -167,16 +168,6 @@ export default function FeaturesPage() {
     return tileset?.name || tilesetId.slice(0, 8) + "...";
   };
 
-  const getSelectedTilesetName = (): string => {
-    if (selectedTileset === "all") return "すべてのタイルセット";
-    const tileset = safeTilesets.find((t) => t.id === selectedTileset);
-    return tileset?.name || "タイルセット";
-  };
-
-  const getLimitLabel = (): string => {
-    return `${limit}件`;
-  };
-
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -192,6 +183,13 @@ export default function FeaturesPage() {
             <Button onClick={fetchData} variant="outline" size="sm">
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               更新
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => router.push("/features/import")}
+            >
+              <FileJson className="mr-2 h-4 w-4" />
+              GeoJSONインポート
             </Button>
             <Button onClick={() => router.push("/features/new")}>
               <Plus className="mr-2 h-4 w-4" />
@@ -274,12 +272,21 @@ export default function FeaturesPage() {
               <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
                 <MapPin className="mb-2 h-8 w-8" />
                 <p>フィーチャーがありません</p>
-                <button 
-                  onClick={() => router.push("/features/new")}
-                  className="mt-2 text-primary hover:underline"
-                >
-                  新規フィーチャーを作成
-                </button>
+                <div className="mt-2 flex gap-2">
+                  <button 
+                    onClick={() => router.push("/features/new")}
+                    className="text-primary hover:underline"
+                  >
+                    新規作成
+                  </button>
+                  <span>または</span>
+                  <button 
+                    onClick={() => router.push("/features/import")}
+                    className="text-primary hover:underline"
+                  >
+                    GeoJSONインポート
+                  </button>
+                </div>
               </div>
             ) : (
               <Table>
