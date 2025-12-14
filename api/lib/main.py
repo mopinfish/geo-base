@@ -1504,7 +1504,9 @@ def get_tileset_tilejson(
                 cur.execute(
                     """
                     SELECT t.name, t.description, t.format, t.min_zoom, t.max_zoom,
-                           t.attribution, rs.cog_url
+                           t.attribution, rs.cog_url,
+                           ST_XMin(t.bounds), ST_YMin(t.bounds), ST_XMax(t.bounds), ST_YMax(t.bounds),
+                           ST_X(t.center), ST_Y(t.center)
                     FROM tilesets t
                     LEFT JOIN raster_sources rs ON rs.tileset_id = t.id
                     WHERE t.id = %s
@@ -1516,7 +1518,18 @@ def get_tileset_tilejson(
             if not row:
                 raise HTTPException(status_code=404, detail="Raster source not found")
             
-            name, description, tile_format, min_zoom, max_zoom, attribution, cog_url = row
+            (name, description, tile_format, min_zoom, max_zoom, attribution, cog_url,
+             xmin, ymin, xmax, ymax, center_x, center_y) = row
+            
+            # Build bounds and center arrays
+            bounds = None
+            if xmin is not None and ymin is not None and xmax is not None and ymax is not None:
+                bounds = [xmin, ymin, xmax, ymax]
+            
+            center = None
+            if center_x is not None and center_y is not None:
+                center_zoom = min_zoom if min_zoom else 10
+                center = [center_x, center_y, center_zoom]
             
             return generate_raster_tilejson(
                 tileset_id=tileset_id,
@@ -1525,6 +1538,8 @@ def get_tileset_tilejson(
                 tile_format=tile_format or "png",
                 min_zoom=min_zoom or 0,
                 max_zoom=max_zoom or 22,
+                bounds=bounds,
+                center=center,
                 description=description,
                 attribution=attribution,
             )
@@ -2501,17 +2516,22 @@ async def create_datasource(
                 row = cur.fetchone()
                 
                 # Update parent tileset with bounds/center/zoom if available
+                # Note: tilesets.bounds is GEOMETRY(POLYGON), center is GEOMETRY(POINT)
                 if source_bounds or source_center or source_min_zoom is not None or source_max_zoom is not None:
                     update_parts = []
                     update_values = []
                     
-                    if source_bounds:
-                        update_parts.append("bounds = %s")
-                        update_values.append(json.dumps(source_bounds))
+                    if source_bounds and len(source_bounds) == 4:
+                        # Convert [west, south, east, north] to PostGIS Polygon
+                        west, south, east, north = source_bounds
+                        update_parts.append("bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)")
+                        update_values.extend([west, south, east, north])
                     
-                    if source_center:
-                        update_parts.append("center = %s")
-                        update_values.append(json.dumps(source_center))
+                    if source_center and len(source_center) >= 2:
+                        # Convert [lon, lat, ...] to PostGIS Point
+                        lon, lat = source_center[0], source_center[1]
+                        update_parts.append("center = ST_SetSRID(ST_MakePoint(%s, %s), 4326)")
+                        update_values.extend([lon, lat])
                     
                     if source_min_zoom is not None:
                         update_parts.append("min_zoom = %s")
@@ -2628,17 +2648,22 @@ async def create_datasource(
                 row = cur.fetchone()
                 
                 # Update parent tileset with bounds/center/zoom if available
+                # Note: tilesets.bounds is GEOMETRY(POLYGON), center is GEOMETRY(POINT)
                 if source_bounds or source_center or source_min_zoom is not None or source_max_zoom is not None:
                     update_parts = []
                     update_values = []
                     
-                    if source_bounds:
-                        update_parts.append("bounds = %s")
-                        update_values.append(json.dumps(source_bounds))
+                    if source_bounds and len(source_bounds) == 4:
+                        # Convert [west, south, east, north] to PostGIS Polygon
+                        west, south, east, north = source_bounds
+                        update_parts.append("bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)")
+                        update_values.extend([west, south, east, north])
                     
-                    if source_center:
-                        update_parts.append("center = %s")
-                        update_values.append(json.dumps(source_center))
+                    if source_center and len(source_center) >= 2:
+                        # Convert [lon, lat, ...] to PostGIS Point
+                        lon, lat = source_center[0], source_center[1]
+                        update_parts.append("center = ST_SetSRID(ST_MakePoint(%s, %s), 4326)")
+                        update_values.extend([lon, lat])
                     
                     if source_min_zoom is not None:
                         update_parts.append("min_zoom = %s")
