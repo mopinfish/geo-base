@@ -34,7 +34,7 @@ geo-base MCPサーバーの機能を拡充し、以下を実現する：
 |------|-----|
 | リポジトリ | https://github.com/mopinfish/geo-base |
 | 対象ディレクトリ | `/mcp` |
-| 現行MCPバージョン | 0.2.2 |
+| 現行MCPバージョン | 0.2.3 |
 | 目標バージョン | 1.0.0 |
 | APIバージョン | 0.4.0 |
 
@@ -138,7 +138,7 @@ mcp/
 
 | Step | 内容 | ステータス | 担当 | 備考 |
 |------|------|-----------|------|------|
-| 2.5-E | 入力バリデーション強化 | 🔲 未着手 | - | validators.py作成 |
+| 2.5-E | 入力バリデーション強化 | ✅ 完了 | Claude | validators.py作成、20+関数 |
 | 2.5-F | テストコードの拡充 | 🔲 未着手 | - | カバレッジ80%目標 |
 
 **凡例**: ✅ 完了 | 🔄 進行中 | 🔲 未着手 | ⏸️ 保留
@@ -373,28 +373,106 @@ RETRY_MAX_WAIT=10         # 最大待機時間（秒）
 
 ---
 
-## 9. 次のアクション
+## 9. Step 2.5-E 完了内容
 
-### 9.1 Phase 3: 品質向上
+### 9.1 追加ファイル
 
-1. **Step 2.5-E: 入力バリデーション強化**
-   - [ ] `mcp/validators.py` を作成
-   - [ ] UUID、座標、bbox形式の検証関数
-   - [ ] 既存ツールへの統合
+| ファイル | 内容 |
+|---------|------|
+| `mcp/validators.py` | 入力バリデーションモジュール（20+関数） |
+| `mcp/tests/test_validators.py` | バリデーションテスト（50+テスト） |
 
-2. **Step 2.5-F: テストコードの拡充**
+### 9.2 validators.py の機能
+
+```python
+# ValidationResult データクラス
+@dataclass
+class ValidationResult:
+    valid: bool
+    error: str | None = None
+    code: str | None = None
+    value: Any = None  # パース済み値
+
+# UUID検証
+- validate_uuid(value, field_name) -> ValidationResult
+- is_valid_uuid(value) -> bool
+
+# 座標検証
+- validate_latitude(value, field_name) -> ValidationResult
+- validate_longitude(value, field_name) -> ValidationResult
+- validate_coordinates(lat, lng) -> ValidationResult
+
+# バウンディングボックス検証
+- validate_bbox(bbox, field_name) -> ValidationResult  # 文字列・リスト対応
+- parse_bbox(bbox_str) -> tuple | None  # 後方互換性用
+
+# ズームレベル・タイル座標検証
+- validate_zoom(value, min_zoom, max_zoom, field_name) -> ValidationResult
+- validate_tile_coordinates(z, x, y) -> ValidationResult
+
+# タイルセット設定検証
+- validate_tileset_type(value) -> ValidationResult  # vector, raster, pmtiles
+- validate_tile_format(value) -> ValidationResult   # pbf, png, jpg, webp, geojson
+
+# GeoJSONジオメトリ検証
+- validate_geometry(geometry, field_name) -> ValidationResult
+  - Point, LineString, Polygon, Multi*, GeometryCollection対応
+  - 座標構造の検証
+
+# 文字列・数値検証
+- validate_non_empty_string(value, field_name, max_length, pattern)
+- validate_positive_number(value, field_name, allow_zero)
+- validate_range(value, field_name, min_value, max_value)
+- validate_limit(value, field_name, min_value, max_value)
+
+# フィルター検証
+- validate_filter(filter_str) -> ValidationResult  # "key=value"形式
+```
+
+### 9.3 使用例
+
+```python
+from validators import validate_uuid, validate_bbox, validate_geometry
+
+# UUID検証
+result = validate_uuid(tileset_id, "tileset_id")
+if not result.valid:
+    return result.to_error_response()
+
+# bbox検証（文字列またはリスト）
+result = validate_bbox("139.5,35.5,140.0,36.0")
+if result.valid:
+    min_lng, min_lat, max_lng, max_lat = result.value
+
+# ジオメトリ検証
+result = validate_geometry({"type": "Point", "coordinates": [139.7, 35.6]})
+if not result.valid:
+    return {"error": result.error, "code": result.code}
+```
+
+---
+
+## 10. 次のアクション
+
+### 10.1 Phase 3: 品質向上（残り）
+
+1. **Step 2.5-F: テストコードの拡充**
    - [ ] カバレッジ80%目標
    - [ ] 統合テストの追加
-   - [ ] モックテストの改善
+   - [ ] 既存asyncテストの修正（pytest-asyncio対応）
 
-### 9.2 オプショナル改善
+### 10.2 オプショナル改善
 
-1. **既存ツールへのリトライ機能統合**
+1. **既存ツールへのバリデーション統合**
+   - [ ] tools/crud.py にvalidators適用
+   - [ ] tools/analysis.py にvalidators適用
+   - [ ] tools/stats.py にvalidators適用
+
+2. **既存ツールへのリトライ機能統合**
    - [ ] tilesets.py を retry.py の関数で更新
    - [ ] features.py を retry.py の関数で更新
-   - [ ] crud.py を retry.py の関数で更新
 
-2. **パフォーマンス改善**
+3. **パフォーマンス改善**
    - [ ] キャッシュ機能の追加
    - [ ] バッチ処理の実装
 
@@ -460,3 +538,4 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 | 2025-12-14 | Step 2.5-B完了（エラーハンドリング・リトライ追加） | Claude |
 | 2025-12-14 | Step 2.5-C完了（統計ツール4種追加）バージョン0.2.2 | Claude |
 | 2025-12-14 | Step 2.5-D完了（空間分析ツール4種追加）バージョン0.2.2 | Claude |
+| 2025-12-14 | Step 2.5-E完了（入力バリデーション強化）バージョン0.2.3 | Claude |
