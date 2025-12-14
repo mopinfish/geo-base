@@ -8,6 +8,7 @@ This module tests:
 - RetryableClient class
 """
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 import httpx
@@ -65,309 +66,339 @@ class TestRetryConfiguration:
 class TestFetchWithRetry:
     """Tests for fetch_with_retry function."""
 
-    @pytest.mark.asyncio
-    async def test_successful_fetch(self):
+    def test_successful_fetch(self):
         """fetch_with_retry should return data on success."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"data": "test"}
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
 
-            result = await fetch_with_retry("https://example.com/api")
+                result = await fetch_with_retry("https://example.com/api")
 
-            assert result == {"data": "test"}
-            mock_instance.get.assert_called_once()
+                assert result == {"data": "test"}
+                mock_instance.get.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_fetch_with_params(self):
+        asyncio.run(run_test())
+
+    def test_fetch_with_params(self):
         """fetch_with_retry should pass params to request."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"data": "test"}
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
 
-            await fetch_with_retry(
-                "https://example.com/api",
-                params={"key": "value"},
-            )
-
-            call_args = mock_instance.get.call_args
-            assert call_args[1]["params"] == {"key": "value"}
-
-    @pytest.mark.asyncio
-    async def test_fetch_with_headers(self):
-        """fetch_with_retry should pass headers to request."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = Mock()
-
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
-
-            await fetch_with_retry(
-                "https://example.com/api",
-                headers={"Authorization": "Bearer token"},
-            )
-
-            call_args = mock_instance.get.call_args
-            assert call_args[1]["headers"] == {"Authorization": "Bearer token"}
-
-    @pytest.mark.asyncio
-    async def test_fetch_retries_on_timeout(self):
-        """fetch_with_retry should retry on timeout."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = Mock()
-
-        call_count = 0
-
-        async def mock_get(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count < 2:
-                raise httpx.TimeoutException("Timeout")
-            return mock_response
-
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.side_effect = mock_get
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
-
-            # Reduce wait time for faster tests
-            with patch("retry.RETRY_MIN_WAIT", 0.01), patch("retry.RETRY_MAX_WAIT", 0.02):
-                result = await fetch_with_retry(
+                await fetch_with_retry(
                     "https://example.com/api",
-                    max_attempts=3,
+                    params={"key": "value"},
                 )
 
-            assert result == {"data": "test"}
-            assert call_count == 2
+                call_args = mock_instance.get.call_args
+                assert call_args[1]["params"] == {"key": "value"}
 
-    @pytest.mark.asyncio
-    async def test_fetch_raises_after_max_retries(self):
-        """fetch_with_retry should raise after max retries."""
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.side_effect = httpx.TimeoutException("Timeout")
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+        asyncio.run(run_test())
 
-            with patch("retry.RETRY_MIN_WAIT", 0.01), patch("retry.RETRY_MAX_WAIT", 0.02):
-                with pytest.raises(httpx.TimeoutException):
-                    await fetch_with_retry(
+    def test_fetch_with_headers(self):
+        """fetch_with_retry should pass headers to request."""
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"data": "test"}
+            mock_response.raise_for_status = Mock()
+
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
+
+                await fetch_with_retry(
+                    "https://example.com/api",
+                    headers={"Authorization": "Bearer token"},
+                )
+
+                call_args = mock_instance.get.call_args
+                assert call_args[1]["headers"] == {"Authorization": "Bearer token"}
+
+        asyncio.run(run_test())
+
+    def test_fetch_retries_on_timeout(self):
+        """fetch_with_retry should retry on timeout."""
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"data": "test"}
+            mock_response.raise_for_status = Mock()
+
+            call_count = 0
+
+            async def mock_get(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count < 2:
+                    raise httpx.TimeoutException("Timeout")
+                return mock_response
+
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.side_effect = mock_get
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
+
+                # Reduce wait time for faster tests
+                with patch("retry.RETRY_MIN_WAIT", 0.01), patch("retry.RETRY_MAX_WAIT", 0.02):
+                    result = await fetch_with_retry(
                         "https://example.com/api",
-                        max_attempts=2,
+                        max_attempts=3,
                     )
+
+                assert result == {"data": "test"}
+                assert call_count == 2
+
+        asyncio.run(run_test())
+
+    def test_fetch_raises_after_max_retries(self):
+        """fetch_with_retry should raise after max retries."""
+        async def run_test():
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.side_effect = httpx.TimeoutException("Timeout")
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
+
+                with patch("retry.RETRY_MIN_WAIT", 0.01), patch("retry.RETRY_MAX_WAIT", 0.02):
+                    with pytest.raises(httpx.TimeoutException):
+                        await fetch_with_retry(
+                            "https://example.com/api",
+                            max_attempts=2,
+                        )
+
+        asyncio.run(run_test())
 
 
 class TestPostWithRetry:
     """Tests for post_with_retry function."""
 
-    @pytest.mark.asyncio
-    async def test_successful_post(self):
+    def test_successful_post(self):
         """post_with_retry should return data on success."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"id": "123"}
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"id": "123"}
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.post.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.post.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
 
-            result = await post_with_retry(
-                "https://example.com/api",
-                json={"name": "test"},
-            )
+                result = await post_with_retry(
+                    "https://example.com/api",
+                    json={"name": "test"},
+                )
 
-            assert result == {"id": "123"}
-            mock_instance.post.assert_called_once()
+                assert result == {"id": "123"}
+                mock_instance.post.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_post_with_json(self):
+        asyncio.run(run_test())
+
+    def test_post_with_json(self):
         """post_with_retry should pass json to request."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"id": "123"}
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"id": "123"}
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.post.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.post.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
 
-            await post_with_retry(
-                "https://example.com/api",
-                json={"name": "test"},
-            )
+                await post_with_retry(
+                    "https://example.com/api",
+                    json={"name": "test"},
+                )
 
-            call_args = mock_instance.post.call_args
-            assert call_args[1]["json"] == {"name": "test"}
+                call_args = mock_instance.post.call_args
+                assert call_args[1]["json"] == {"name": "test"}
+
+        asyncio.run(run_test())
 
 
 class TestPutWithRetry:
     """Tests for put_with_retry function."""
 
-    @pytest.mark.asyncio
-    async def test_successful_put(self):
+    def test_successful_put(self):
         """put_with_retry should return data on success."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"updated": True}
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"updated": True}
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.put.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.put.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
 
-            result = await put_with_retry(
-                "https://example.com/api/123",
-                json={"name": "updated"},
-            )
+                result = await put_with_retry(
+                    "https://example.com/api/123",
+                    json={"name": "updated"},
+                )
 
-            assert result == {"updated": True}
+                assert result == {"updated": True}
+
+        asyncio.run(run_test())
 
 
 class TestDeleteWithRetry:
     """Tests for delete_with_retry function."""
 
-    @pytest.mark.asyncio
-    async def test_successful_delete(self):
+    def test_successful_delete(self):
         """delete_with_retry should return data on success."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"deleted": True}
-        mock_response.status_code = 200
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"deleted": True}
+            mock_response.status_code = 200
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.delete.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.delete.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
 
-            result = await delete_with_retry("https://example.com/api/123")
+                result = await delete_with_retry("https://example.com/api/123")
 
-            assert result == {"deleted": True}
+                assert result == {"deleted": True}
 
-    @pytest.mark.asyncio
-    async def test_delete_no_content(self):
+        asyncio.run(run_test())
+
+    def test_delete_no_content(self):
         """delete_with_retry should handle 204 No Content."""
-        mock_response = Mock()
-        mock_response.status_code = 204
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.status_code = 204
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.delete.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.delete.return_value = mock_response
+                mock_instance.__aenter__.return_value = mock_instance
+                mock_instance.__aexit__.return_value = None
+                mock_client.return_value = mock_instance
 
-            result = await delete_with_retry("https://example.com/api/123")
+                result = await delete_with_retry("https://example.com/api/123")
 
-            assert result["success"] is True
+                assert result["success"] is True
+
+        asyncio.run(run_test())
 
 
 class TestRetryableClient:
     """Tests for RetryableClient class."""
 
-    @pytest.mark.asyncio
-    async def test_client_context_manager(self):
+    def test_client_context_manager(self):
         """RetryableClient should work as context manager."""
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_client.return_value = mock_instance
+        async def run_test():
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_client.return_value = mock_instance
 
-            async with RetryableClient() as client:
-                assert client._client is not None
+                async with RetryableClient() as client:
+                    assert client._client is not None
 
-    @pytest.mark.asyncio
-    async def test_client_get(self):
+        asyncio.run(run_test())
+
+    def test_client_get(self):
         """RetryableClient.get should make GET request."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"data": "test"}
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.return_value = mock_response
+                mock_client.return_value = mock_instance
 
-            async with RetryableClient() as client:
-                result = await client.get("https://example.com/api")
+                async with RetryableClient() as client:
+                    result = await client.get("https://example.com/api")
 
-            assert result == {"data": "test"}
+                assert result == {"data": "test"}
 
-    @pytest.mark.asyncio
-    async def test_client_post(self):
+        asyncio.run(run_test())
+
+    def test_client_post(self):
         """RetryableClient.post should make POST request."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"id": "123"}
-        mock_response.raise_for_status = Mock()
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"id": "123"}
+            mock_response.raise_for_status = Mock()
 
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.post.return_value = mock_response
-            mock_client.return_value = mock_instance
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.post.return_value = mock_response
+                mock_client.return_value = mock_instance
 
-            async with RetryableClient() as client:
-                result = await client.post(
-                    "https://example.com/api",
-                    json={"name": "test"},
-                )
+                async with RetryableClient() as client:
+                    result = await client.post(
+                        "https://example.com/api",
+                        json={"name": "test"},
+                    )
 
-            assert result == {"id": "123"}
+                assert result == {"id": "123"}
 
-    @pytest.mark.asyncio
-    async def test_client_not_initialized_error(self):
+        asyncio.run(run_test())
+
+    def test_client_not_initialized_error(self):
         """RetryableClient should raise error when not in context."""
-        client = RetryableClient()
+        async def run_test():
+            client = RetryableClient()
 
-        with pytest.raises(RuntimeError, match="not initialized"):
-            await client.get("https://example.com/api")
-
-    @pytest.mark.asyncio
-    async def test_client_with_default_headers(self):
-        """RetryableClient should use default headers."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = Mock()
-
-        with patch("retry.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
-            mock_client.return_value = mock_instance
-
-            async with RetryableClient(
-                headers={"Authorization": "Bearer token"}
-            ) as client:
+            with pytest.raises(RuntimeError, match="not initialized"):
                 await client.get("https://example.com/api")
 
-            # Check that AsyncClient was called with headers
-            call_kwargs = mock_client.call_args[1]
-            assert call_kwargs["headers"] == {"Authorization": "Bearer token"}
+        asyncio.run(run_test())
+
+    def test_client_with_default_headers(self):
+        """RetryableClient should use default headers."""
+        async def run_test():
+            mock_response = Mock()
+            mock_response.json.return_value = {"data": "test"}
+            mock_response.raise_for_status = Mock()
+
+            with patch("retry.httpx.AsyncClient") as mock_client:
+                mock_instance = AsyncMock()
+                mock_instance.get.return_value = mock_response
+                mock_client.return_value = mock_instance
+
+                async with RetryableClient(
+                    headers={"Authorization": "Bearer token"}
+                ) as client:
+                    await client.get("https://example.com/api")
+
+                # Check that AsyncClient was called with headers
+                call_kwargs = mock_client.call_args[1]
+                assert call_kwargs["headers"] == {"Authorization": "Bearer token"}
+
+        asyncio.run(run_test())

@@ -45,10 +45,11 @@ from tenacity import (
     after_log,
 )
 
-from config import settings
+from config import get_settings
 from logger import get_logger
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 # Configuration from environment variables
 RETRY_MAX_ATTEMPTS = int(os.environ.get("RETRY_MAX_ATTEMPTS", "3"))
