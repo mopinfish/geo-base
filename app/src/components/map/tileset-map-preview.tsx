@@ -20,6 +20,100 @@ export interface TilesetMapPreviewProps {
   pointColor?: string;
   /** ベースマップを非表示にするか */
   hideBaseMap?: boolean;
+  /** 初期表示時にboundsに自動フィットするか（デフォルト: true） */
+  autoFitBounds?: boolean;
+}
+
+/**
+ * boundsが有効な値かどうかをチェック
+ * デフォルト値（全世界）や無効な値を除外
+ */
+function isValidBounds(bounds: number[] | null | undefined): bounds is number[] {
+  if (!bounds || !Array.isArray(bounds) || bounds.length !== 4) {
+    return false;
+  }
+  
+  const [west, south, east, north] = bounds;
+  
+  // NaNや無効な値をチェック
+  if (bounds.some(v => typeof v !== 'number' || isNaN(v))) {
+    return false;
+  }
+  
+  // 全世界を覆うデフォルト値は除外（自動フィットには使わない）
+  // 一般的なデフォルト値のパターンを検出
+  const isWorldDefault = 
+    (west <= -170 && east >= 170) ||  // 経度が世界を覆う
+    (south <= -80 && north >= 80);     // 緯度が世界を覆う
+  
+  if (isWorldDefault) {
+    return false;
+  }
+  
+  // 範囲が妥当かチェック
+  if (west >= east || south >= north) {
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * 文字列またはnumber[]からnumber[]を取得
+ */
+function parseBounds(value: number[] | string | null | undefined): number[] | null {
+  if (!value) return null;
+  
+  if (Array.isArray(value)) {
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    try {
+      // JSON文字列の場合
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // カンマ区切りの場合
+      const parts = value.split(',').map(Number);
+      if (parts.length === 4 && !parts.some(isNaN)) {
+        return parts;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * 文字列またはnumber[]からcenterを取得
+ */
+function parseCenter(value: number[] | string | null | undefined): number[] | null {
+  if (!value) return null;
+  
+  if (Array.isArray(value)) {
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    try {
+      // JSON文字列の場合
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // カンマ区切りの場合
+      const parts = value.split(',').map(Number);
+      if (parts.length >= 2 && !parts.some(isNaN)) {
+        return parts;
+      }
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -38,65 +132,59 @@ export function TilesetMapPreview({
   lineColor = "#2563eb",
   pointColor = "#22c55e",
   hideBaseMap = false,
+  autoFitBounds = true,
 }: TilesetMapPreviewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasFittedBounds, setHasFittedBounds] = useState(false);
+
+  // 有効なboundsを取得
+  const getValidBounds = useCallback((): number[] | null => {
+    // TileJSONのboundsを優先
+    const tileJSONBounds = parseBounds(tileJSON?.bounds);
+    if (isValidBounds(tileJSONBounds)) {
+      return tileJSONBounds;
+    }
+    
+    // タイルセットのboundsを使用
+    const tilesetBounds = parseBounds(tileset.bounds as number[] | string | undefined);
+    if (isValidBounds(tilesetBounds)) {
+      return tilesetBounds;
+    }
+    
+    return null;
+  }, [tileset, tileJSON]);
 
   // 初期の中心座標とズームを計算
   const getInitialView = useCallback(() => {
-    // TileJSONから取得
-    if (tileJSON?.center && tileJSON.center.length >= 2) {
+    // TileJSONのcenterから取得
+    const tileJSONCenter = parseCenter(tileJSON?.center);
+    if (tileJSONCenter && tileJSONCenter.length >= 2) {
       return {
-        center: [tileJSON.center[0], tileJSON.center[1]] as [number, number],
-        zoom: tileJSON.center[2] ?? 10,
+        center: [tileJSONCenter[0], tileJSONCenter[1]] as [number, number],
+        zoom: tileJSONCenter[2] ?? 10,
       };
     }
 
     // タイルセットのcenterから取得
-    if (tileset.center) {
-      // centerは number[] または string の可能性がある（APIレスポンスによる）
-      const centerValue = tileset.center as number[] | string;
-      const center = Array.isArray(centerValue)
-        ? centerValue
-        : typeof centerValue === "string"
-          ? centerValue.split(",").map(Number)
-          : null;
-
-      if (center && center.length >= 2) {
-        return {
-          center: [center[0], center[1]] as [number, number],
-          zoom: center[2] ?? 10,
-        };
-      }
+    const tilesetCenter = parseCenter(tileset.center as number[] | string | undefined);
+    if (tilesetCenter && tilesetCenter.length >= 2) {
+      return {
+        center: [tilesetCenter[0], tilesetCenter[1]] as [number, number],
+        zoom: tilesetCenter[2] ?? 10,
+      };
     }
 
     // boundsから中心を計算
-    if (tileJSON?.bounds && tileJSON.bounds.length === 4) {
-      const [west, south, east, north] = tileJSON.bounds;
+    const bounds = getValidBounds();
+    if (bounds) {
+      const [west, south, east, north] = bounds;
       return {
         center: [(west + east) / 2, (south + north) / 2] as [number, number],
         zoom: 8,
       };
-    }
-
-    if (tileset.bounds) {
-      // boundsは number[] または string の可能性がある（APIレスポンスによる）
-      const boundsValue = tileset.bounds as number[] | string;
-      const bounds = Array.isArray(boundsValue)
-        ? boundsValue
-        : typeof boundsValue === "string"
-          ? boundsValue.split(",").map(Number)
-          : null;
-
-      if (bounds && bounds.length === 4) {
-        const [west, south, east, north] = bounds;
-        return {
-          center: [(west + east) / 2, (south + north) / 2] as [number, number],
-          zoom: 8,
-        };
-      }
     }
 
     // デフォルト（日本）
@@ -104,7 +192,7 @@ export function TilesetMapPreview({
       center: [139.7671, 35.6812] as [number, number],
       zoom: 5,
     };
-  }, [tileset, tileJSON]);
+  }, [tileset, tileJSON, getValidBounds]);
 
   // タイルURLを取得
   const getTileUrl = useCallback(() => {
@@ -128,6 +216,22 @@ export function TilesetMapPreview({
         return null;
     }
   }, [tileset, tileJSON]);
+
+  // boundsにフィット
+  const fitToBounds = useCallback(() => {
+    if (!map.current || !isLoaded) return;
+
+    const bounds = getValidBounds();
+    if (bounds) {
+      map.current.fitBounds(
+        [
+          [bounds[0], bounds[1]],
+          [bounds[2], bounds[3]],
+        ],
+        { padding: 50, duration: 500 }
+      );
+    }
+  }, [getValidBounds, isLoaded]);
 
   // 地図の初期化
   useEffect(() => {
@@ -347,30 +451,29 @@ export function TilesetMapPreview({
     hideBaseMap,
   ]);
 
-  // boundsにフィット
-  const fitToBounds = useCallback(() => {
-    if (!map.current || !isLoaded) return;
+  // 地図ロード後に自動的にboundsにフィット
+  useEffect(() => {
+    if (!isLoaded || !autoFitBounds || hasFittedBounds) return;
 
-    // boundsは number[] または string の可能性がある（APIレスポンスによる）
-    const boundsValue = tileset.bounds as number[] | string | undefined;
-    const bounds =
-      tileJSON?.bounds ||
-      (Array.isArray(boundsValue)
-        ? boundsValue
-        : typeof boundsValue === "string"
-          ? boundsValue.split(",").map(Number)
-          : null);
+    const bounds = getValidBounds();
+    if (bounds && map.current) {
+      // 少し遅延してフィット（地図の準備が完了するのを待つ）
+      const timer = setTimeout(() => {
+        if (map.current) {
+          map.current.fitBounds(
+            [
+              [bounds[0], bounds[1]],
+              [bounds[2], bounds[3]],
+            ],
+            { padding: 50, duration: 1000 }
+          );
+          setHasFittedBounds(true);
+        }
+      }, 100);
 
-    if (bounds && bounds.length === 4) {
-      map.current.fitBounds(
-        [
-          [bounds[0], bounds[1]],
-          [bounds[2], bounds[3]],
-        ],
-        { padding: 50 }
-      );
+      return () => clearTimeout(timer);
     }
-  }, [tileset, tileJSON, isLoaded]);
+  }, [isLoaded, autoFitBounds, hasFittedBounds, getValidBounds]);
 
   if (error) {
     return (
@@ -386,6 +489,9 @@ export function TilesetMapPreview({
     );
   }
 
+  const validBounds = getValidBounds();
+  const hasBounds = validBounds !== null;
+
   return (
     <div className="relative">
       <div
@@ -399,8 +505,13 @@ export function TilesetMapPreview({
         <div className="absolute bottom-4 right-4 flex gap-2">
           <button
             onClick={fitToBounds}
-            className="rounded bg-white px-2 py-1 text-xs shadow hover:bg-gray-100"
-            title="範囲にフィット"
+            disabled={!hasBounds}
+            className={`rounded px-2 py-1 text-xs shadow ${
+              hasBounds 
+                ? "bg-white hover:bg-gray-100 cursor-pointer" 
+                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            }`}
+            title={hasBounds ? "データ範囲にフィット" : "boundsが設定されていません"}
           >
             範囲にフィット
           </button>

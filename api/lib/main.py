@@ -74,17 +74,17 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="geo-base Tile Server",
-    description="åœ°ç†ç©ºé–“ã‚¿ã‚¤ãƒ«é…ä¿¡API",
+    description="Ã¥Å“Â°Ã§Ââ€ Ã§Â©ÂºÃ©â€“â€œÃ£â€šÂ¿Ã£â€šÂ¤Ã£Æ’Â«Ã©â€¦ÂÃ¤Â¿Â¡API",
     version="0.4.0",
     lifespan=lifespan,
 )
 
-# CORS middleware - 全オリジンを許可（開発・本番共通）
+# CORS middleware - å…¨ã‚ªãƒªã‚¸ãƒ³ã‚’è¨±å¯ï¼ˆé–‹ç™ºãƒ»æœ¬ç•ªå…±é€šï¼‰
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 全オリジンを許可
-    allow_credentials=False,  # "*"の場合はFalseが必要
+    allow_origins=["*"],  # å…¨ã‚ªãƒªã‚¸ãƒ³ã‚’è¨±å¯
+    allow_credentials=False,  # "*"ã®å ´åˆã¯FalseãŒå¿…è¦
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -2388,7 +2388,7 @@ def get_datasource(
 
 
 @app.post("/api/datasources", status_code=201)
-def create_datasource(
+async def create_datasource(
     datasource: DatasourceCreate,
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
@@ -2397,6 +2397,8 @@ def create_datasource(
     Create a new datasource.
     
     Requires authentication and ownership of the parent tileset.
+    Automatically fetches metadata (bounds, center, zoom levels) from the data source
+    and updates both the datasource record and the parent tileset.
     """
     try:
         with conn.cursor() as cur:
@@ -2441,22 +2443,91 @@ def create_datasource(
                         detail="Datasource already exists for this tileset"
                     )
                 
+                # Fetch PMTiles metadata
+                pmtiles_meta = None
+                source_bounds = None
+                source_center = None
+                source_min_zoom = None
+                source_max_zoom = None
+                tile_type = None
+                tile_compression = None
+                layers_json = None
+                
+                if is_pmtiles_available():
+                    try:
+                        pmtiles_meta = await get_pmtiles_metadata(datasource.url)
+                        if pmtiles_meta:
+                            source_bounds = pmtiles_meta.get("bounds")
+                            source_center = pmtiles_meta.get("center")
+                            source_min_zoom = pmtiles_meta.get("min_zoom")
+                            source_max_zoom = pmtiles_meta.get("max_zoom")
+                            tile_type = pmtiles_meta.get("tile_type")
+                            tile_compression = pmtiles_meta.get("tile_compression")
+                            layers = pmtiles_meta.get("layers", [])
+                            if layers:
+                                layers_json = json.dumps(layers)
+                    except Exception as meta_error:
+                        # Log but don't fail - metadata is optional
+                        print(f"Warning: Could not fetch PMTiles metadata: {meta_error}")
+                
+                # Insert with metadata
                 cur.execute(
                     """
-                    INSERT INTO pmtiles_sources (tileset_id, pmtiles_url, storage_provider, metadata)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO pmtiles_sources (
+                        tileset_id, pmtiles_url, storage_provider, metadata,
+                        tile_type, tile_compression, min_zoom, max_zoom,
+                        bounds, center, layers
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, tileset_id, pmtiles_url, storage_provider, metadata,
-                              created_at, updated_at
+                              created_at, updated_at, tile_type, tile_compression,
+                              min_zoom, max_zoom, bounds, center, layers
                     """,
                     (
                         datasource.tileset_id,
                         datasource.url,
                         datasource.storage_provider.value,
                         metadata_json,
+                        tile_type,
+                        tile_compression,
+                        source_min_zoom,
+                        source_max_zoom,
+                        json.dumps(source_bounds) if source_bounds else None,
+                        json.dumps(source_center) if source_center else None,
+                        layers_json,
                     ),
                 )
                 
                 row = cur.fetchone()
+                
+                # Update parent tileset with bounds/center/zoom if available
+                if source_bounds or source_center or source_min_zoom is not None or source_max_zoom is not None:
+                    update_parts = []
+                    update_values = []
+                    
+                    if source_bounds:
+                        update_parts.append("bounds = %s")
+                        update_values.append(json.dumps(source_bounds))
+                    
+                    if source_center:
+                        update_parts.append("center = %s")
+                        update_values.append(json.dumps(source_center))
+                    
+                    if source_min_zoom is not None:
+                        update_parts.append("min_zoom = %s")
+                        update_values.append(source_min_zoom)
+                    
+                    if source_max_zoom is not None:
+                        update_parts.append("max_zoom = %s")
+                        update_values.append(source_max_zoom)
+                    
+                    if update_parts:
+                        update_values.append(datasource.tileset_id)
+                        cur.execute(
+                            f"UPDATE tilesets SET {', '.join(update_parts)} WHERE id = %s",
+                            update_values,
+                        )
+                
                 conn.commit()
                 
                 return {
@@ -2468,6 +2539,13 @@ def create_datasource(
                     "metadata": row[4],
                     "created_at": row[5].isoformat() if row[5] else None,
                     "updated_at": row[6].isoformat() if row[6] else None,
+                    "tile_type": row[7],
+                    "tile_compression": row[8],
+                    "min_zoom": row[9],
+                    "max_zoom": row[10],
+                    "bounds": row[11],
+                    "center": row[12],
+                    "layers": row[13],
                 }
             
             else:  # COG
@@ -2482,22 +2560,101 @@ def create_datasource(
                         detail="Datasource already exists for this tileset"
                     )
                 
+                # Fetch COG metadata
+                cog_info = None
+                source_bounds = None
+                source_center = None
+                source_min_zoom = None
+                source_max_zoom = None
+                band_count = None
+                band_descriptions_json = None
+                native_crs = None
+                
+                if is_rasterio_available():
+                    try:
+                        cog_info = get_cog_info(datasource.url)
+                        if cog_info:
+                            # COG bounds are in [west, south, east, north] format
+                            cog_bounds = cog_info.get("bounds")
+                            if cog_bounds:
+                                source_bounds = list(cog_bounds)
+                                # Calculate center from bounds
+                                source_center = [
+                                    (cog_bounds[0] + cog_bounds[2]) / 2,  # lon
+                                    (cog_bounds[1] + cog_bounds[3]) / 2,  # lat
+                                    10  # default zoom
+                                ]
+                            source_min_zoom = cog_info.get("minzoom")
+                            source_max_zoom = cog_info.get("maxzoom")
+                            band_count = cog_info.get("count")
+                            band_descriptions = cog_info.get("band_descriptions", [])
+                            if band_descriptions:
+                                band_descriptions_json = json.dumps(band_descriptions)
+                            native_crs = cog_info.get("crs")
+                    except Exception as meta_error:
+                        # Log but don't fail - metadata is optional
+                        print(f"Warning: Could not fetch COG info: {meta_error}")
+                
+                # Insert with metadata
                 cur.execute(
                     """
-                    INSERT INTO raster_sources (tileset_id, cog_url, storage_provider, metadata)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO raster_sources (
+                        tileset_id, cog_url, storage_provider, metadata,
+                        band_count, band_descriptions, native_crs,
+                        recommended_min_zoom, recommended_max_zoom,
+                        bounds, center
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, tileset_id, cog_url, storage_provider, metadata,
-                              created_at, updated_at
+                              created_at, updated_at, band_count, band_descriptions,
+                              native_crs, recommended_min_zoom, recommended_max_zoom,
+                              bounds, center
                     """,
                     (
                         datasource.tileset_id,
                         datasource.url,
                         datasource.storage_provider.value,
                         metadata_json,
+                        band_count,
+                        band_descriptions_json,
+                        native_crs,
+                        source_min_zoom,
+                        source_max_zoom,
+                        json.dumps(source_bounds) if source_bounds else None,
+                        json.dumps(source_center) if source_center else None,
                     ),
                 )
                 
                 row = cur.fetchone()
+                
+                # Update parent tileset with bounds/center/zoom if available
+                if source_bounds or source_center or source_min_zoom is not None or source_max_zoom is not None:
+                    update_parts = []
+                    update_values = []
+                    
+                    if source_bounds:
+                        update_parts.append("bounds = %s")
+                        update_values.append(json.dumps(source_bounds))
+                    
+                    if source_center:
+                        update_parts.append("center = %s")
+                        update_values.append(json.dumps(source_center))
+                    
+                    if source_min_zoom is not None:
+                        update_parts.append("min_zoom = %s")
+                        update_values.append(source_min_zoom)
+                    
+                    if source_max_zoom is not None:
+                        update_parts.append("max_zoom = %s")
+                        update_values.append(source_max_zoom)
+                    
+                    if update_parts:
+                        update_values.append(datasource.tileset_id)
+                        cur.execute(
+                            f"UPDATE tilesets SET {', '.join(update_parts)} WHERE id = %s",
+                            update_values,
+                        )
+                
                 conn.commit()
                 
                 return {
@@ -2509,6 +2666,13 @@ def create_datasource(
                     "metadata": row[4],
                     "created_at": row[5].isoformat() if row[5] else None,
                     "updated_at": row[6].isoformat() if row[6] else None,
+                    "band_count": row[7],
+                    "band_descriptions": row[8],
+                    "native_crs": row[9],
+                    "min_zoom": row[10],
+                    "max_zoom": row[11],
+                    "bounds": row[12],
+                    "center": row[13],
                 }
             
     except HTTPException:
@@ -2742,12 +2906,12 @@ PREVIEW_HTML = """
             .then(response => response.json())
             .then(data => {
                 const el = document.getElementById('db-status');
-                el.textContent = data.status === 'ok' ? 'âœ” Connected' : 'âœ– ' + data.database;
+                el.textContent = data.status === 'ok' ? 'Ã¢Å“â€ Connected' : 'Ã¢Å“â€“ ' + data.database;
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('db-status');
-                el.textContent = 'âœ– Error';
+                el.textContent = 'Ã¢Å“â€“ Error';
                 el.className = 'status error';
             });
 
@@ -2835,4 +2999,5 @@ PREVIEW_HTML = """
 def preview_page():
     """Tile preview page with MapLibre GL JS."""
     return PREVIEW_HTML
+
 
