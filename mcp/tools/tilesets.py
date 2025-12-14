@@ -11,6 +11,7 @@ import httpx
 
 from config import get_settings
 from logger import get_logger, ToolCallLogger
+from validators import validate_uuid, validate_tileset_type
 
 # Initialize logger and settings
 logger = get_logger(__name__)
@@ -40,6 +41,18 @@ async def list_tilesets(
         Dictionary containing list of tilesets
     """
     with ToolCallLogger(logger, "list_tilesets", type=type, is_public=is_public) as log:
+        # Validate type if provided
+        if type is not None:
+            type_result = validate_tileset_type(type)
+            if not type_result.valid:
+                result = type_result.to_error_response(
+                    tilesets=[],
+                    count=0,
+                )
+                log.set_result(result)
+                return result
+            type = type_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         url = f"{tile_server_url}/api/tilesets"
 
@@ -123,10 +136,18 @@ async def get_tileset(tileset_id: str) -> dict[str, Any]:
         Dictionary containing tileset details
     """
     with ToolCallLogger(logger, "get_tileset", tileset_id=tileset_id) as log:
+        # Validate tileset_id
+        uuid_result = validate_uuid(tileset_id, "tileset_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(tileset_id=tileset_id)
+            log.set_result(result)
+            return result
+        validated_tileset_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
-        url = f"{tile_server_url}/api/tilesets/{tileset_id}"
+        url = f"{tile_server_url}/api/tilesets/{validated_tileset_id}"
 
-        logger.debug(f"Fetching tileset {tileset_id} from {url}")
+        logger.debug(f"Fetching tileset {validated_tileset_id} from {url}")
 
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
@@ -186,43 +207,43 @@ async def get_tileset(tileset_id: str) -> dict[str, Any]:
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
                 logger.warning(
-                    f"HTTP error getting tileset {tileset_id}: {status_code}",
-                    extra={"tileset_id": tileset_id, "status_code": status_code},
+                    f"HTTP error getting tileset {validated_tileset_id}: {status_code}",
+                    extra={"tileset_id": validated_tileset_id, "status_code": status_code},
                 )
                 
                 if status_code == 404:
                     result = {
                         "error": "Tileset not found",
-                        "tileset_id": tileset_id,
+                        "tileset_id": validated_tileset_id,
                     }
                 elif status_code == 401:
                     result = {
                         "error": "Authentication required",
-                        "tileset_id": tileset_id,
+                        "tileset_id": validated_tileset_id,
                         "hint": "This tileset may be private. Configure API_TOKEN in environment.",
                     }
                 elif status_code == 403:
                     result = {
                         "error": "Access denied",
-                        "tileset_id": tileset_id,
+                        "tileset_id": validated_tileset_id,
                         "hint": "You don't have permission to access this tileset.",
                     }
                 else:
                     result = {
                         "error": f"HTTP error: {status_code}",
                         "detail": e.response.text,
-                        "tileset_id": tileset_id,
+                        "tileset_id": validated_tileset_id,
                     }
                 log.set_result(result)
                 return result
             except httpx.RequestError as e:
                 logger.error(
-                    f"Request error getting tileset {tileset_id}: {e}",
-                    extra={"tileset_id": tileset_id},
+                    f"Request error getting tileset {validated_tileset_id}: {e}",
+                    extra={"tileset_id": validated_tileset_id},
                 )
                 result = {
                     "error": f"Request error: {str(e)}",
-                    "tileset_id": tileset_id,
+                    "tileset_id": validated_tileset_id,
                 }
                 log.set_result(result)
                 return result
@@ -239,10 +260,18 @@ async def get_tileset_tilejson(tileset_id: str) -> dict[str, Any]:
         TileJSON object
     """
     with ToolCallLogger(logger, "get_tileset_tilejson", tileset_id=tileset_id) as log:
+        # Validate tileset_id
+        uuid_result = validate_uuid(tileset_id, "tileset_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(tileset_id=tileset_id)
+            log.set_result(result)
+            return result
+        validated_tileset_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
-        url = f"{tile_server_url}/api/tilesets/{tileset_id}/tilejson.json"
+        url = f"{tile_server_url}/api/tilesets/{validated_tileset_id}/tilejson.json"
 
-        logger.debug(f"Fetching TileJSON for {tileset_id} from {url}")
+        logger.debug(f"Fetching TileJSON for {validated_tileset_id} from {url}")
 
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
@@ -273,32 +302,32 @@ async def get_tileset_tilejson(tileset_id: str) -> dict[str, Any]:
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
                 logger.warning(
-                    f"HTTP error getting TileJSON for {tileset_id}: {status_code}",
-                    extra={"tileset_id": tileset_id, "status_code": status_code},
+                    f"HTTP error getting TileJSON for {validated_tileset_id}: {status_code}",
+                    extra={"tileset_id": validated_tileset_id, "status_code": status_code},
                 )
                 
                 if status_code == 404:
                     result = {
                         "error": "TileJSON not found",
-                        "tileset_id": tileset_id,
+                        "tileset_id": validated_tileset_id,
                         "hint": "The tileset may not exist or may not support TileJSON.",
                     }
                 else:
                     result = {
                         "error": f"HTTP error: {status_code}",
                         "detail": e.response.text,
-                        "tileset_id": tileset_id,
+                        "tileset_id": validated_tileset_id,
                     }
                 log.set_result(result)
                 return result
             except httpx.RequestError as e:
                 logger.error(
-                    f"Request error getting TileJSON for {tileset_id}: {e}",
-                    extra={"tileset_id": tileset_id},
+                    f"Request error getting TileJSON for {validated_tileset_id}: {e}",
+                    extra={"tileset_id": validated_tileset_id},
                 )
                 result = {
                     "error": f"Request error: {str(e)}",
-                    "tileset_id": tileset_id,
+                    "tileset_id": validated_tileset_id,
                 }
                 log.set_result(result)
                 return result

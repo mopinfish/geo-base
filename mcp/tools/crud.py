@@ -10,6 +10,14 @@ import httpx
 
 from config import get_settings
 from logger import get_logger, ToolCallLogger
+from validators import (
+    validate_uuid,
+    validate_tileset_type,
+    validate_tile_format,
+    validate_geometry,
+    validate_range,
+    validate_non_empty_string,
+)
 
 # Initialize logger and settings
 logger = get_logger(__name__)
@@ -67,14 +75,58 @@ async def create_tileset(
         logger, "create_tileset",
         name=name, type=type, format=format, is_public=is_public
     ) as log:
+        # Validate name
+        name_result = validate_non_empty_string(name, "name")
+        if not name_result.valid:
+            result = name_result.to_error_response()
+            log.set_result(result)
+            return result
+        
+        # Validate type
+        type_result = validate_tileset_type(type)
+        if not type_result.valid:
+            result = type_result.to_error_response()
+            log.set_result(result)
+            return result
+        validated_type = type_result.value
+        
+        # Validate format
+        format_result = validate_tile_format(format)
+        if not format_result.valid:
+            result = format_result.to_error_response()
+            log.set_result(result)
+            return result
+        validated_format = format_result.value
+        
+        # Validate zoom levels
+        min_zoom_result = validate_range(min_zoom, "min_zoom", min_value=0, max_value=22)
+        if not min_zoom_result.valid:
+            result = min_zoom_result.to_error_response()
+            log.set_result(result)
+            return result
+        validated_min_zoom = min_zoom_result.value
+        
+        max_zoom_result = validate_range(max_zoom, "max_zoom", min_value=0, max_value=22)
+        if not max_zoom_result.valid:
+            result = max_zoom_result.to_error_response()
+            log.set_result(result)
+            return result
+        validated_max_zoom = max_zoom_result.value
+        
+        # Check min_zoom <= max_zoom
+        if validated_min_zoom > validated_max_zoom:
+            result = {"error": f"min_zoom ({validated_min_zoom}) must be <= max_zoom ({validated_max_zoom})"}
+            log.set_result(result)
+            return result
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         
         payload = {
             "name": name,
-            "type": type,
-            "format": format,
-            "min_zoom": min_zoom,
-            "max_zoom": max_zoom,
+            "type": validated_type,
+            "format": validated_format,
+            "min_zoom": validated_min_zoom,
+            "max_zoom": validated_max_zoom,
             "is_public": is_public,
         }
         
@@ -89,7 +141,7 @@ async def create_tileset(
         if metadata:
             payload["metadata"] = metadata
         
-        logger.debug(f"Creating tileset '{name}' of type '{type}'")
+        logger.debug(f"Creating tileset '{name}' of type '{validated_type}'")
         
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
@@ -107,7 +159,7 @@ async def create_tileset(
                 
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"Created tileset: {result.get('id')}", extra={"name": name})
+                logger.info(f"Created tileset: {result.get('id')}", extra={"tileset_name": name})
                 log.set_result(result)
                 return result
                 
@@ -115,7 +167,7 @@ async def create_tileset(
                 error_detail = e.response.text if e.response else str(e)
                 logger.error(
                     f"HTTP error creating tileset: {e.response.status_code}",
-                    extra={"name": name, "status_code": e.response.status_code},
+                    extra={"tileset_name": name, "status_code": e.response.status_code},
                 )
                 result = {
                     "error": f"HTTP error {e.response.status_code}: {error_detail}",
@@ -123,7 +175,7 @@ async def create_tileset(
                 log.set_result(result)
                 return result
             except httpx.HTTPError as e:
-                logger.error(f"Network error creating tileset: {e}", extra={"name": name})
+                logger.error(f"Network error creating tileset: {e}", extra={"tileset_name": name})
                 result = {"error": f"Network error: {str(e)}"}
                 log.set_result(result)
                 return result
@@ -160,6 +212,14 @@ async def update_tileset(
         Updated tileset object
     """
     with ToolCallLogger(logger, "update_tileset", tileset_id=tileset_id) as log:
+        # Validate tileset_id
+        uuid_result = validate_uuid(tileset_id, "tileset_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(tileset_id=tileset_id)
+            log.set_result(result)
+            return result
+        validated_tileset_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         
         payload = {}
@@ -169,9 +229,19 @@ async def update_tileset(
         if description is not None:
             payload["description"] = description
         if min_zoom is not None:
-            payload["min_zoom"] = min_zoom
+            min_zoom_result = validate_range(min_zoom, "min_zoom", min_value=0, max_value=22)
+            if not min_zoom_result.valid:
+                result = min_zoom_result.to_error_response()
+                log.set_result(result)
+                return result
+            payload["min_zoom"] = min_zoom_result.value
         if max_zoom is not None:
-            payload["max_zoom"] = max_zoom
+            max_zoom_result = validate_range(max_zoom, "max_zoom", min_value=0, max_value=22)
+            if not max_zoom_result.valid:
+                result = max_zoom_result.to_error_response()
+                log.set_result(result)
+                return result
+            payload["max_zoom"] = max_zoom_result.value
         if bounds is not None:
             payload["bounds"] = bounds
         if center is not None:
@@ -184,20 +254,20 @@ async def update_tileset(
             payload["metadata"] = metadata
         
         if not payload:
-            logger.warning(f"No fields to update for tileset {tileset_id}")
+            logger.warning(f"No fields to update for tileset {validated_tileset_id}")
             result = {"error": "No fields to update"}
             log.set_result(result)
             return result
         
         logger.debug(
-            f"Updating tileset {tileset_id}",
+            f"Updating tileset {validated_tileset_id}",
             extra={"fields": list(payload.keys())},
         )
         
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
                 response = await client.patch(
-                    f"{tile_server_url}/api/tilesets/{tileset_id}",
+                    f"{tile_server_url}/api/tilesets/{validated_tileset_id}",
                     json=payload,
                     headers=_get_headers(),
                 )
@@ -208,27 +278,27 @@ async def update_tileset(
                     log.set_result(result)
                     return result
                 if response.status_code == 403:
-                    logger.warning(f"Not authorized to update tileset {tileset_id}")
+                    logger.warning(f"Not authorized to update tileset {validated_tileset_id}")
                     result = {"error": "Not authorized to update this tileset."}
                     log.set_result(result)
                     return result
                 if response.status_code == 404:
-                    logger.warning(f"Tileset {tileset_id} not found")
-                    result = {"error": f"Tileset {tileset_id} not found."}
+                    logger.warning(f"Tileset {validated_tileset_id} not found")
+                    result = {"error": f"Tileset {validated_tileset_id} not found."}
                     log.set_result(result)
                     return result
                 
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"Updated tileset: {tileset_id}")
+                logger.info(f"Updated tileset: {validated_tileset_id}")
                 log.set_result(result)
                 return result
                 
             except httpx.HTTPStatusError as e:
                 error_detail = e.response.text if e.response else str(e)
                 logger.error(
-                    f"HTTP error updating tileset {tileset_id}: {e.response.status_code}",
-                    extra={"tileset_id": tileset_id, "status_code": e.response.status_code},
+                    f"HTTP error updating tileset {validated_tileset_id}: {e.response.status_code}",
+                    extra={"tileset_id": validated_tileset_id, "status_code": e.response.status_code},
                 )
                 result = {
                     "error": f"HTTP error {e.response.status_code}: {error_detail}",
@@ -237,8 +307,8 @@ async def update_tileset(
                 return result
             except httpx.HTTPError as e:
                 logger.error(
-                    f"Network error updating tileset {tileset_id}: {e}",
-                    extra={"tileset_id": tileset_id},
+                    f"Network error updating tileset {validated_tileset_id}: {e}",
+                    extra={"tileset_id": validated_tileset_id},
                 )
                 result = {"error": f"Network error: {str(e)}"}
                 log.set_result(result)
@@ -256,14 +326,22 @@ async def delete_tileset(tileset_id: str) -> dict:
         Success or error message
     """
     with ToolCallLogger(logger, "delete_tileset", tileset_id=tileset_id) as log:
+        # Validate tileset_id
+        uuid_result = validate_uuid(tileset_id, "tileset_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(tileset_id=tileset_id)
+            log.set_result(result)
+            return result
+        validated_tileset_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         
-        logger.debug(f"Deleting tileset {tileset_id}")
+        logger.debug(f"Deleting tileset {validated_tileset_id}")
         
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
                 response = await client.delete(
-                    f"{tile_server_url}/api/tilesets/{tileset_id}",
+                    f"{tile_server_url}/api/tilesets/{validated_tileset_id}",
                     headers=_get_headers(),
                 )
                 
@@ -273,18 +351,18 @@ async def delete_tileset(tileset_id: str) -> dict:
                     log.set_result(result)
                     return result
                 if response.status_code == 403:
-                    logger.warning(f"Not authorized to delete tileset {tileset_id}")
+                    logger.warning(f"Not authorized to delete tileset {validated_tileset_id}")
                     result = {"error": "Not authorized to delete this tileset."}
                     log.set_result(result)
                     return result
                 if response.status_code == 404:
-                    logger.warning(f"Tileset {tileset_id} not found")
-                    result = {"error": f"Tileset {tileset_id} not found."}
+                    logger.warning(f"Tileset {validated_tileset_id} not found")
+                    result = {"error": f"Tileset {validated_tileset_id} not found."}
                     log.set_result(result)
                     return result
                 if response.status_code == 204:
-                    logger.info(f"Deleted tileset: {tileset_id}")
-                    result = {"success": True, "message": f"Tileset {tileset_id} deleted successfully."}
+                    logger.info(f"Deleted tileset: {validated_tileset_id}")
+                    result = {"success": True, "message": f"Tileset {validated_tileset_id} deleted successfully."}
                     log.set_result(result)
                     return result
                 
@@ -296,8 +374,8 @@ async def delete_tileset(tileset_id: str) -> dict:
             except httpx.HTTPStatusError as e:
                 error_detail = e.response.text if e.response else str(e)
                 logger.error(
-                    f"HTTP error deleting tileset {tileset_id}: {e.response.status_code}",
-                    extra={"tileset_id": tileset_id, "status_code": e.response.status_code},
+                    f"HTTP error deleting tileset {validated_tileset_id}: {e.response.status_code}",
+                    extra={"tileset_id": validated_tileset_id, "status_code": e.response.status_code},
                 )
                 result = {
                     "error": f"HTTP error {e.response.status_code}: {error_detail}",
@@ -306,8 +384,8 @@ async def delete_tileset(tileset_id: str) -> dict:
                 return result
             except httpx.HTTPError as e:
                 logger.error(
-                    f"Network error deleting tileset {tileset_id}: {e}",
-                    extra={"tileset_id": tileset_id},
+                    f"Network error deleting tileset {validated_tileset_id}: {e}",
+                    extra={"tileset_id": validated_tileset_id},
                 )
                 result = {"error": f"Network error: {str(e)}"}
                 log.set_result(result)
@@ -342,12 +420,27 @@ async def create_feature(
     """
     with ToolCallLogger(
         logger, "create_feature",
-        tileset_id=tileset_id, layer_name=layer_name, geometry_type=geometry.get("type")
+        tileset_id=tileset_id, layer_name=layer_name, geometry_type=geometry.get("type") if geometry else None
     ) as log:
+        # Validate tileset_id
+        uuid_result = validate_uuid(tileset_id, "tileset_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(tileset_id=tileset_id)
+            log.set_result(result)
+            return result
+        validated_tileset_id = uuid_result.value
+        
+        # Validate geometry
+        geom_result = validate_geometry(geometry)
+        if not geom_result.valid:
+            result = geom_result.to_error_response()
+            log.set_result(result)
+            return result
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         
         payload = {
-            "tileset_id": tileset_id,
+            "tileset_id": validated_tileset_id,
             "geometry": geometry,
             "layer_name": layer_name,
         }
@@ -356,7 +449,7 @@ async def create_feature(
             payload["properties"] = properties
         
         logger.debug(
-            f"Creating feature in tileset {tileset_id}",
+            f"Creating feature in tileset {validated_tileset_id}",
             extra={"geometry_type": geometry.get("type"), "layer": layer_name},
         )
         
@@ -374,13 +467,13 @@ async def create_feature(
                     log.set_result(result)
                     return result
                 if response.status_code == 403:
-                    logger.warning(f"Not authorized to add features to tileset {tileset_id}")
+                    logger.warning(f"Not authorized to add features to tileset {validated_tileset_id}")
                     result = {"error": "Not authorized to add features to this tileset."}
                     log.set_result(result)
                     return result
                 if response.status_code == 404:
-                    logger.warning(f"Tileset {tileset_id} not found")
-                    result = {"error": f"Tileset {tileset_id} not found."}
+                    logger.warning(f"Tileset {validated_tileset_id} not found")
+                    result = {"error": f"Tileset {validated_tileset_id} not found."}
                     log.set_result(result)
                     return result
                 
@@ -388,7 +481,7 @@ async def create_feature(
                 result = response.json()
                 logger.info(
                     f"Created feature: {result.get('id')}",
-                    extra={"tileset_id": tileset_id},
+                    extra={"tileset_id": validated_tileset_id},
                 )
                 log.set_result(result)
                 return result
@@ -397,7 +490,7 @@ async def create_feature(
                 error_detail = e.response.text if e.response else str(e)
                 logger.error(
                     f"HTTP error creating feature: {e.response.status_code}",
-                    extra={"tileset_id": tileset_id, "status_code": e.response.status_code},
+                    extra={"tileset_id": validated_tileset_id, "status_code": e.response.status_code},
                 )
                 result = {
                     "error": f"HTTP error {e.response.status_code}: {error_detail}",
@@ -407,7 +500,7 @@ async def create_feature(
             except httpx.HTTPError as e:
                 logger.error(
                     f"Network error creating feature: {e}",
-                    extra={"tileset_id": tileset_id},
+                    extra={"tileset_id": validated_tileset_id},
                 )
                 result = {"error": f"Network error: {str(e)}"}
                 log.set_result(result)
@@ -433,11 +526,25 @@ async def update_feature(
         Updated feature as GeoJSON object
     """
     with ToolCallLogger(logger, "update_feature", feature_id=feature_id) as log:
+        # Validate feature_id
+        uuid_result = validate_uuid(feature_id, "feature_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(feature_id=feature_id)
+            log.set_result(result)
+            return result
+        validated_feature_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         
         payload = {}
         
         if geometry is not None:
+            # Validate geometry
+            geom_result = validate_geometry(geometry)
+            if not geom_result.valid:
+                result = geom_result.to_error_response()
+                log.set_result(result)
+                return result
             payload["geometry"] = geometry
         if properties is not None:
             payload["properties"] = properties
@@ -445,20 +552,20 @@ async def update_feature(
             payload["layer_name"] = layer_name
         
         if not payload:
-            logger.warning(f"No fields to update for feature {feature_id}")
+            logger.warning(f"No fields to update for feature {validated_feature_id}")
             result = {"error": "No fields to update"}
             log.set_result(result)
             return result
         
         logger.debug(
-            f"Updating feature {feature_id}",
+            f"Updating feature {validated_feature_id}",
             extra={"fields": list(payload.keys())},
         )
         
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
                 response = await client.patch(
-                    f"{tile_server_url}/api/features/{feature_id}",
+                    f"{tile_server_url}/api/features/{validated_feature_id}",
                     json=payload,
                     headers=_get_headers(),
                 )
@@ -469,27 +576,27 @@ async def update_feature(
                     log.set_result(result)
                     return result
                 if response.status_code == 403:
-                    logger.warning(f"Not authorized to update feature {feature_id}")
+                    logger.warning(f"Not authorized to update feature {validated_feature_id}")
                     result = {"error": "Not authorized to update this feature."}
                     log.set_result(result)
                     return result
                 if response.status_code == 404:
-                    logger.warning(f"Feature {feature_id} not found")
-                    result = {"error": f"Feature {feature_id} not found."}
+                    logger.warning(f"Feature {validated_feature_id} not found")
+                    result = {"error": f"Feature {validated_feature_id} not found."}
                     log.set_result(result)
                     return result
                 
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"Updated feature: {feature_id}")
+                logger.info(f"Updated feature: {validated_feature_id}")
                 log.set_result(result)
                 return result
                 
             except httpx.HTTPStatusError as e:
                 error_detail = e.response.text if e.response else str(e)
                 logger.error(
-                    f"HTTP error updating feature {feature_id}: {e.response.status_code}",
-                    extra={"feature_id": feature_id, "status_code": e.response.status_code},
+                    f"HTTP error updating feature {validated_feature_id}: {e.response.status_code}",
+                    extra={"feature_id": validated_feature_id, "status_code": e.response.status_code},
                 )
                 result = {
                     "error": f"HTTP error {e.response.status_code}: {error_detail}",
@@ -498,8 +605,8 @@ async def update_feature(
                 return result
             except httpx.HTTPError as e:
                 logger.error(
-                    f"Network error updating feature {feature_id}: {e}",
-                    extra={"feature_id": feature_id},
+                    f"Network error updating feature {validated_feature_id}: {e}",
+                    extra={"feature_id": validated_feature_id},
                 )
                 result = {"error": f"Network error: {str(e)}"}
                 log.set_result(result)
@@ -517,14 +624,22 @@ async def delete_feature(feature_id: str) -> dict:
         Success or error message
     """
     with ToolCallLogger(logger, "delete_feature", feature_id=feature_id) as log:
+        # Validate feature_id
+        uuid_result = validate_uuid(feature_id, "feature_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(feature_id=feature_id)
+            log.set_result(result)
+            return result
+        validated_feature_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         
-        logger.debug(f"Deleting feature {feature_id}")
+        logger.debug(f"Deleting feature {validated_feature_id}")
         
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
                 response = await client.delete(
-                    f"{tile_server_url}/api/features/{feature_id}",
+                    f"{tile_server_url}/api/features/{validated_feature_id}",
                     headers=_get_headers(),
                 )
                 
@@ -534,18 +649,18 @@ async def delete_feature(feature_id: str) -> dict:
                     log.set_result(result)
                     return result
                 if response.status_code == 403:
-                    logger.warning(f"Not authorized to delete feature {feature_id}")
+                    logger.warning(f"Not authorized to delete feature {validated_feature_id}")
                     result = {"error": "Not authorized to delete this feature."}
                     log.set_result(result)
                     return result
                 if response.status_code == 404:
-                    logger.warning(f"Feature {feature_id} not found")
-                    result = {"error": f"Feature {feature_id} not found."}
+                    logger.warning(f"Feature {validated_feature_id} not found")
+                    result = {"error": f"Feature {validated_feature_id} not found."}
                     log.set_result(result)
                     return result
                 if response.status_code == 204:
-                    logger.info(f"Deleted feature: {feature_id}")
-                    result = {"success": True, "message": f"Feature {feature_id} deleted successfully."}
+                    logger.info(f"Deleted feature: {validated_feature_id}")
+                    result = {"success": True, "message": f"Feature {validated_feature_id} deleted successfully."}
                     log.set_result(result)
                     return result
                 
@@ -557,8 +672,8 @@ async def delete_feature(feature_id: str) -> dict:
             except httpx.HTTPStatusError as e:
                 error_detail = e.response.text if e.response else str(e)
                 logger.error(
-                    f"HTTP error deleting feature {feature_id}: {e.response.status_code}",
-                    extra={"feature_id": feature_id, "status_code": e.response.status_code},
+                    f"HTTP error deleting feature {validated_feature_id}: {e.response.status_code}",
+                    extra={"feature_id": validated_feature_id, "status_code": e.response.status_code},
                 )
                 result = {
                     "error": f"HTTP error {e.response.status_code}: {error_detail}",
@@ -567,8 +682,8 @@ async def delete_feature(feature_id: str) -> dict:
                 return result
             except httpx.HTTPError as e:
                 logger.error(
-                    f"Network error deleting feature {feature_id}: {e}",
-                    extra={"feature_id": feature_id},
+                    f"Network error deleting feature {validated_feature_id}: {e}",
+                    extra={"feature_id": validated_feature_id},
                 )
                 result = {"error": f"Network error: {str(e)}"}
                 log.set_result(result)

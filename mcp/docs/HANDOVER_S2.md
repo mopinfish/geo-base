@@ -34,7 +34,7 @@ geo-base MCPサーバーの機能を拡充し、以下を実現する：
 |------|-----|
 | リポジトリ | https://github.com/mopinfish/geo-base |
 | 対象ディレクトリ | `/mcp` |
-| 現行MCPバージョン | 0.2.2 |
+| 現行MCPバージョン | 0.2.5 |
 | 目標バージョン | 1.0.0 |
 | APIバージョン | 0.4.0 |
 
@@ -138,8 +138,8 @@ mcp/
 
 | Step | 内容 | ステータス | 担当 | 備考 |
 |------|------|-----------|------|------|
-| 2.5-E | 入力バリデーション強化 | 🔲 未着手 | - | validators.py作成 |
-| 2.5-F | テストコードの拡充 | 🔲 未着手 | - | カバレッジ80%目標 |
+| 2.5-E | 入力バリデーション強化 | ✅ 完了 | Claude | validators.py作成、20+関数 |
+| 2.5-F | テストコードの拡充 | ✅ 完了 | Claude | カバレッジ85%達成 |
 
 **凡例**: ✅ 完了 | 🔄 進行中 | 🔲 未着手 | ⏸️ 保留
 
@@ -373,30 +373,192 @@ RETRY_MAX_WAIT=10         # 最大待機時間（秒）
 
 ---
 
-## 9. 次のアクション
+## 9. Step 2.5-E 完了内容
 
-### 9.1 Phase 3: 品質向上
+### 9.1 追加ファイル
 
-1. **Step 2.5-E: 入力バリデーション強化**
-   - [ ] `mcp/validators.py` を作成
-   - [ ] UUID、座標、bbox形式の検証関数
-   - [ ] 既存ツールへの統合
+| ファイル | 内容 |
+|---------|------|
+| `mcp/validators.py` | 入力バリデーションモジュール（20+関数） |
+| `mcp/tests/test_validators.py` | バリデーションテスト（50+テスト） |
 
-2. **Step 2.5-F: テストコードの拡充**
-   - [ ] カバレッジ80%目標
-   - [ ] 統合テストの追加
-   - [ ] モックテストの改善
+### 9.2 validators.py の機能
 
-### 9.2 オプショナル改善
+```python
+# ValidationResult データクラス
+@dataclass
+class ValidationResult:
+    valid: bool
+    error: str | None = None
+    code: str | None = None
+    value: Any = None  # パース済み値
 
-1. **既存ツールへのリトライ機能統合**
+# UUID検証
+- validate_uuid(value, field_name) -> ValidationResult
+- is_valid_uuid(value) -> bool
+
+# 座標検証
+- validate_latitude(value, field_name) -> ValidationResult
+- validate_longitude(value, field_name) -> ValidationResult
+- validate_coordinates(lat, lng) -> ValidationResult
+
+# バウンディングボックス検証
+- validate_bbox(bbox, field_name) -> ValidationResult  # 文字列・リスト対応
+- parse_bbox(bbox_str) -> tuple | None  # 後方互換性用
+
+# ズームレベル・タイル座標検証
+- validate_zoom(value, min_zoom, max_zoom, field_name) -> ValidationResult
+- validate_tile_coordinates(z, x, y) -> ValidationResult
+
+# タイルセット設定検証
+- validate_tileset_type(value) -> ValidationResult  # vector, raster, pmtiles
+- validate_tile_format(value) -> ValidationResult   # pbf, png, jpg, webp, geojson
+
+# GeoJSONジオメトリ検証
+- validate_geometry(geometry, field_name) -> ValidationResult
+  - Point, LineString, Polygon, Multi*, GeometryCollection対応
+  - 座標構造の検証
+
+# 文字列・数値検証
+- validate_non_empty_string(value, field_name, max_length, pattern)
+- validate_positive_number(value, field_name, allow_zero)
+- validate_range(value, field_name, min_value, max_value)
+- validate_limit(value, field_name, min_value, max_value)
+
+# フィルター検証
+- validate_filter(filter_str) -> ValidationResult  # "key=value"形式
+```
+
+### 9.3 使用例
+
+```python
+from validators import validate_uuid, validate_bbox, validate_geometry
+
+# UUID検証
+result = validate_uuid(tileset_id, "tileset_id")
+if not result.valid:
+    return result.to_error_response()
+
+# bbox検証（文字列またはリスト）
+result = validate_bbox("139.5,35.5,140.0,36.0")
+if result.valid:
+    min_lng, min_lat, max_lng, max_lat = result.value
+
+# ジオメトリ検証
+result = validate_geometry({"type": "Point", "coordinates": [139.7, 35.6]})
+if not result.valid:
+    return {"error": result.error, "code": result.code}
+```
+
+---
+
+## 10. Step 2.5-F 完了内容
+
+### 10.1 追加テストファイル
+
+| ファイル | テスト数 | 内容 |
+|---------|---------|------|
+| `tests/test_crud.py` | 16 | CRUD操作（タイルセット・フィーチャー）テスト |
+| `tests/test_geocoding.py` | 14 | ジオコーディング・逆ジオコーディングテスト |
+| `tests/test_tools.py` | 20 | タイルセット・フィーチャー検索ツールテスト |
+| `tests/test_integration.py` | 16 | 統合テスト（バリデータ+ツール連携） |
+
+### 10.2 テストカバレッジ
+
+```
+Name                        Stmts   Miss  Cover
+---------------------------------------------------------
+config.py                      17      0   100%
+errors.py                     121      7    94%
+logger.py                      89     15    83%
+retry.py                      115     27    77%
+validators.py                 219     41    81%
+tools/__init__.py               7      0   100%
+tools/analysis.py             298     58    81%
+tools/crud.py                 287    120    58%
+tools/features.py             143     27    81%
+tools/geocoding.py             95     19    80%
+tools/stats.py                239     49    79%
+tools/tilesets.py             111     31    72%
+---------------------------------------------------------
+TOTAL                        4023    598    85%
+```
+
+### 10.3 テスト実行結果
+
+- **総テスト数**: 253
+- **パス**: 250
+- **スキップ**: 3（複雑なasyncモック設定が必要なテスト）
+- **カバレッジ**: 85%（目標80%達成）
+
+### 10.4 その他の修正
+
+- `tools/crud.py`: ログのextraフィールド名を`name`から`tileset_name`に変更（LogRecord予約フィールド衝突回避）
+
+---
+
+## 12. Step 2.5-G 完了内容
+
+### 12.1 バリデーション統合対象ツール
+
+| ファイル | 追加バリデーション | 内容 |
+|---------|-------------------|------|
+| `tools/geocoding.py` | ✅ | latitude, longitude, query, limit, zoom |
+| `tools/tilesets.py` | ✅ | tileset_id (UUID), tileset_type |
+| `tools/features.py` | ✅ | feature_id (UUID), tileset_id, bbox, limit, filter |
+| `tools/crud.py` | ✅ | UUID, type, format, geometry, zoom, name |
+
+### 12.2 バリデーション統合によるエラーハンドリング改善
+
+**改善前:**
+```json
+{
+  "error": "HTTP error: 500",
+  "detail": "invalid input syntax for type uuid: \"invalid-uuid\""
+}
+```
+
+**改善後:**
+```json
+{
+  "error": "Invalid tileset_id format. Expected UUID (e.g., '550e8400-e29b-41d4-a716-446655440000')",
+  "code": "VALIDATION_ERROR"
+}
+```
+
+### 12.3 テスト修正
+
+- テストのモックIDをUUID形式に変更
+- 全250テストがパス（3スキップ）
+
+---
+
+## 11. 次のアクション
+
+### 11.1 Phase 3完了
+
+Phase 3（品質向上）は全ステップ完了しました。
+
+### 11.2 オプショナル改善
+
+1. **既存ツールへのバリデーション統合** ✅ 完了
+   - [x] tools/geocoding.py にvalidators適用
+   - [x] tools/tilesets.py にvalidators適用
+   - [x] tools/features.py にvalidators適用
+   - [x] tools/crud.py にvalidators適用
+   - [ ] tools/analysis.py にvalidators適用（部分的）
+   - [ ] tools/stats.py にvalidators適用（部分的）
+
+2. **既存ツールへのリトライ機能統合**
    - [ ] tilesets.py を retry.py の関数で更新
    - [ ] features.py を retry.py の関数で更新
-   - [ ] crud.py を retry.py の関数で更新
 
-2. **パフォーマンス改善**
+3. **パフォーマンス改善**
    - [ ] キャッシュ機能の追加
    - [ ] バッチ処理の実装
+
+4. **スキップされたテストの修正**
+   - [ ] 複雑なasyncモック設定のリファクタリング
 
 ---
 
@@ -460,3 +622,6 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 | 2025-12-14 | Step 2.5-B完了（エラーハンドリング・リトライ追加） | Claude |
 | 2025-12-14 | Step 2.5-C完了（統計ツール4種追加）バージョン0.2.2 | Claude |
 | 2025-12-14 | Step 2.5-D完了（空間分析ツール4種追加）バージョン0.2.2 | Claude |
+| 2025-12-14 | Step 2.5-E完了（入力バリデーション強化）バージョン0.2.3 | Claude |
+| 2025-12-14 | Step 2.5-F完了（テストコード拡充、カバレッジ85%）バージョン0.2.4 | Claude |
+| 2025-12-14 | Step 2.5-G完了（既存ツールへのバリデーション統合）バージョン0.2.5 | Claude |

@@ -9,6 +9,12 @@ from typing import Optional
 import httpx
 
 from logger import get_logger, ToolCallLogger
+from validators import (
+    validate_latitude,
+    validate_longitude,
+    validate_non_empty_string,
+    validate_range,
+)
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -46,10 +52,33 @@ async def geocode(
         logger, "geocode",
         query=query, limit=limit, country_codes=country_codes, language=language
     ) as log:
+        # Validate query
+        query_result = validate_non_empty_string(query, "query")
+        if not query_result.valid:
+            result = query_result.to_error_response(
+                results=[],
+                count=0,
+                query=query,
+            )
+            log.set_result(result)
+            return result
+        
+        # Validate limit
+        limit_result = validate_range(limit, "limit", min_value=1, max_value=50)
+        if not limit_result.valid:
+            result = limit_result.to_error_response(
+                results=[],
+                count=0,
+                query=query,
+            )
+            log.set_result(result)
+            return result
+        validated_limit = limit_result.value
+        
         params = {
             "q": query,
             "format": "jsonv2",
-            "limit": min(max(1, limit), 50),  # Clamp between 1 and 50
+            "limit": validated_limit,
             "addressdetails": 1,
             "accept-language": language,
         }
@@ -172,8 +201,8 @@ async def reverse_geocode(
     Convert coordinates to address (reverse geocoding).
     
     Args:
-        latitude: Latitude in decimal degrees (WGS84)
-        longitude: Longitude in decimal degrees (WGS84)
+        latitude: Latitude in decimal degrees (WGS84), must be between -90 and 90
+        longitude: Longitude in decimal degrees (WGS84), must be between -180 and 180
         zoom: Level of detail for the address (0-18, default: 18)
               0 = country, 10 = city, 14 = suburb, 16 = street, 18 = building
         language: Preferred language for results (default: "ja" for Japanese)
@@ -189,12 +218,48 @@ async def reverse_geocode(
         logger, "reverse_geocode",
         latitude=latitude, longitude=longitude, zoom=zoom, language=language
     ) as log:
+        # Validate latitude
+        lat_result = validate_latitude(latitude, "latitude")
+        if not lat_result.valid:
+            result = lat_result.to_error_response(
+                address=None,
+                display_name=None,
+                coordinates={"latitude": latitude, "longitude": longitude},
+            )
+            log.set_result(result)
+            return result
+        validated_lat = lat_result.value
+        
+        # Validate longitude
+        lng_result = validate_longitude(longitude, "longitude")
+        if not lng_result.valid:
+            result = lng_result.to_error_response(
+                address=None,
+                display_name=None,
+                coordinates={"latitude": latitude, "longitude": longitude},
+            )
+            log.set_result(result)
+            return result
+        validated_lng = lng_result.value
+        
+        # Validate zoom
+        zoom_result = validate_range(zoom, "zoom", min_value=0, max_value=18)
+        if not zoom_result.valid:
+            result = zoom_result.to_error_response(
+                address=None,
+                display_name=None,
+                coordinates={"latitude": latitude, "longitude": longitude},
+            )
+            log.set_result(result)
+            return result
+        validated_zoom = zoom_result.value
+        
         params = {
-            "lat": latitude,
-            "lon": longitude,
+            "lat": validated_lat,
+            "lon": validated_lng,
             "format": "jsonv2",
             "addressdetails": 1,
-            "zoom": min(max(0, zoom), 18),  # Clamp between 0 and 18
+            "zoom": validated_zoom,
             "accept-language": language,
         }
         
@@ -203,8 +268,8 @@ async def reverse_geocode(
         }
         
         logger.debug(
-            f"Reverse geocoding: lat={latitude}, lon={longitude}",
-            extra={"latitude": latitude, "longitude": longitude, "zoom": zoom},
+            f"Reverse geocoding: lat={validated_lat}, lon={validated_lng}",
+            extra={"latitude": validated_lat, "longitude": validated_lng, "zoom": validated_zoom},
         )
         
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -220,14 +285,14 @@ async def reverse_geocode(
                 if "error" in data:
                     logger.warning(
                         f"Nominatim returned error for reverse geocoding: {data['error']}",
-                        extra={"latitude": latitude, "longitude": longitude},
+                        extra={"latitude": validated_lat, "longitude": validated_lng},
                     )
                     result = {
                         "address": None,
                         "display_name": None,
                         "coordinates": {
-                            "latitude": latitude,
-                            "longitude": longitude,
+                            "latitude": validated_lat,
+                            "longitude": validated_lng,
                         },
                         "error": data["error"],
                     }
@@ -236,14 +301,14 @@ async def reverse_geocode(
                 
                 logger.debug(
                     f"Reverse geocoding successful: {data.get('display_name', '')[:50]}...",
-                    extra={"latitude": latitude, "longitude": longitude},
+                    extra={"latitude": validated_lat, "longitude": validated_lng},
                 )
                 
                 result = {
                     "display_name": data.get("display_name", ""),
                     "coordinates": {
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "latitude": validated_lat,
+                        "longitude": validated_lng,
                     },
                     "type": data.get("type", ""),
                     "category": data.get("category", ""),
@@ -272,14 +337,14 @@ async def reverse_geocode(
             except httpx.ProxyError as e:
                 logger.warning(
                     f"Proxy error during reverse geocoding: {e}",
-                    extra={"latitude": latitude, "longitude": longitude},
+                    extra={"latitude": validated_lat, "longitude": validated_lng},
                 )
                 result = {
                     "address": None,
                     "display_name": None,
                     "coordinates": {
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "latitude": validated_lat,
+                        "longitude": validated_lng,
                     },
                     "error": f"Proxy error: {str(e)}. This may be due to network restrictions.",
                 }
@@ -289,8 +354,8 @@ async def reverse_geocode(
                 logger.warning(
                     f"HTTP error during reverse geocoding: {e.response.status_code}",
                     extra={
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "latitude": validated_lat,
+                        "longitude": validated_lng,
                         "status_code": e.response.status_code,
                     },
                 )
@@ -298,8 +363,8 @@ async def reverse_geocode(
                     "address": None,
                     "display_name": None,
                     "coordinates": {
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "latitude": validated_lat,
+                        "longitude": validated_lng,
                     },
                     "error": f"HTTP error {e.response.status_code}: {str(e)}",
                 }
@@ -308,14 +373,14 @@ async def reverse_geocode(
             except httpx.HTTPError as e:
                 logger.error(
                     f"Network error during reverse geocoding: {e}",
-                    extra={"latitude": latitude, "longitude": longitude},
+                    extra={"latitude": validated_lat, "longitude": validated_lng},
                 )
                 result = {
                     "address": None,
                     "display_name": None,
                     "coordinates": {
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "latitude": validated_lat,
+                        "longitude": validated_lng,
                     },
                     "error": f"Network error: {str(e)}",
                 }
@@ -324,15 +389,15 @@ async def reverse_geocode(
             except Exception as e:
                 logger.error(
                     f"Unexpected error during reverse geocoding: {type(e).__name__}: {e}",
-                    extra={"latitude": latitude, "longitude": longitude},
+                    extra={"latitude": validated_lat, "longitude": validated_lng},
                     exc_info=True,
                 )
                 result = {
                     "address": None,
                     "display_name": None,
                     "coordinates": {
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "latitude": validated_lat,
+                        "longitude": validated_lng,
                     },
                     "error": f"Unexpected error: {type(e).__name__}: {str(e)}",
                 }
