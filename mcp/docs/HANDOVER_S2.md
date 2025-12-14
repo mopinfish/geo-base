@@ -34,7 +34,7 @@ geo-base MCPサーバーの機能を拡充し、以下を実現する：
 |------|-----|
 | リポジトリ | https://github.com/mopinfish/geo-base |
 | 対象ディレクトリ | `/mcp` |
-| 現行MCPバージョン | 0.2.4 |
+| 現行MCPバージョン | 0.2.5 |
 | 目標バージョン | 1.0.0 |
 | APIバージョン | 0.4.0 |
 
@@ -497,6 +497,42 @@ TOTAL                        4023    598    85%
 
 ---
 
+## 12. Step 2.5-G 完了内容
+
+### 12.1 バリデーション統合対象ツール
+
+| ファイル | 追加バリデーション | 内容 |
+|---------|-------------------|------|
+| `tools/geocoding.py` | ✅ | latitude, longitude, query, limit, zoom |
+| `tools/tilesets.py` | ✅ | tileset_id (UUID), tileset_type |
+| `tools/features.py` | ✅ | feature_id (UUID), tileset_id, bbox, limit, filter |
+| `tools/crud.py` | ✅ | UUID, type, format, geometry, zoom, name |
+
+### 12.2 バリデーション統合によるエラーハンドリング改善
+
+**改善前:**
+```json
+{
+  "error": "HTTP error: 500",
+  "detail": "invalid input syntax for type uuid: \"invalid-uuid\""
+}
+```
+
+**改善後:**
+```json
+{
+  "error": "Invalid tileset_id format. Expected UUID (e.g., '550e8400-e29b-41d4-a716-446655440000')",
+  "code": "VALIDATION_ERROR"
+}
+```
+
+### 12.3 テスト修正
+
+- テストのモックIDをUUID形式に変更
+- 全250テストがパス（3スキップ）
+
+---
+
 ## 11. 次のアクション
 
 ### 11.1 Phase 3完了
@@ -505,10 +541,13 @@ Phase 3（品質向上）は全ステップ完了しました。
 
 ### 11.2 オプショナル改善
 
-1. **既存ツールへのバリデーション統合**
-   - [ ] tools/crud.py にvalidators適用
-   - [ ] tools/analysis.py にvalidators適用
-   - [ ] tools/stats.py にvalidators適用
+1. **既存ツールへのバリデーション統合** ✅ 完了
+   - [x] tools/geocoding.py にvalidators適用
+   - [x] tools/tilesets.py にvalidators適用
+   - [x] tools/features.py にvalidators適用
+   - [x] tools/crud.py にvalidators適用
+   - [ ] tools/analysis.py にvalidators適用（部分的）
+   - [ ] tools/stats.py にvalidators適用（部分的）
 
 2. **既存ツールへのリトライ機能統合**
    - [ ] tilesets.py を retry.py の関数で更新
@@ -585,3 +624,4 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 | 2025-12-14 | Step 2.5-D完了（空間分析ツール4種追加）バージョン0.2.2 | Claude |
 | 2025-12-14 | Step 2.5-E完了（入力バリデーション強化）バージョン0.2.3 | Claude |
 | 2025-12-14 | Step 2.5-F完了（テストコード拡充、カバレッジ85%）バージョン0.2.4 | Claude |
+| 2025-12-14 | Step 2.5-G完了（既存ツールへのバリデーション統合）バージョン0.2.5 | Claude |

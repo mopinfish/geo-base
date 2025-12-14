@@ -12,6 +12,13 @@ import httpx
 
 from config import get_settings
 from logger import get_logger, ToolCallLogger
+from validators import (
+    validate_uuid,
+    validate_bbox,
+    validate_limit,
+    validate_range,
+    validate_filter,
+)
 
 # Initialize logger and settings
 logger = get_logger(__name__)
@@ -24,17 +31,6 @@ def _get_auth_headers() -> dict[str, str]:
     if settings.api_token:
         headers["Authorization"] = f"Bearer {settings.api_token}"
     return headers
-
-
-def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
-    """Parse bbox string to tuple of floats."""
-    try:
-        parts = [float(x.strip()) for x in bbox_str.split(",")]
-        if len(parts) == 4:
-            return (parts[0], parts[1], parts[2], parts[3])
-    except (ValueError, AttributeError):
-        pass
-    return None
 
 
 def _format_geometry(geom: dict) -> dict:
@@ -74,7 +70,7 @@ async def search_features(
         bbox: Bounding box in format "minx,miny,maxx,maxy" (WGS84)
         layer: Filter by layer name
         filter: Property filter in format "key=value"
-        limit: Maximum number of features to return
+        limit: Maximum number of features to return (1-1000)
         tileset_id: Limit search to a specific tileset
 
     Returns:
@@ -84,12 +80,59 @@ async def search_features(
         logger, "search_features",
         bbox=bbox, layer=layer, filter=filter, limit=limit, tileset_id=tileset_id
     ) as log:
+        # Validate bbox if provided
+        bbox_parsed = None
+        if bbox:
+            bbox_result = validate_bbox(bbox)
+            if not bbox_result.valid:
+                result = bbox_result.to_error_response(
+                    features=[],
+                    count=0,
+                )
+                log.set_result(result)
+                return result
+            bbox_parsed = bbox_result.value
+        
+        # Validate limit
+        limit_result = validate_limit(limit, max_value=1000)
+        if not limit_result.valid:
+            result = limit_result.to_error_response(
+                features=[],
+                count=0,
+            )
+            log.set_result(result)
+            return result
+        validated_limit = limit_result.value
+        
+        # Validate filter if provided
+        if filter:
+            filter_result = validate_filter(filter)
+            if not filter_result.valid:
+                result = filter_result.to_error_response(
+                    features=[],
+                    count=0,
+                )
+                log.set_result(result)
+                return result
+        
+        # Validate tileset_id if provided
+        if tileset_id:
+            uuid_result = validate_uuid(tileset_id, "tileset_id")
+            if not uuid_result.valid:
+                result = uuid_result.to_error_response(
+                    features=[],
+                    count=0,
+                )
+                log.set_result(result)
+                return result
+            tileset_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
         url = f"{tile_server_url}/api/features"
 
         # Build query parameters
         params: dict[str, str | int] = {
-            "limit": min(limit, 1000),  # Cap at 1000
+            "limit": validated_limit,
         }
         if bbox:
             params["bbox"] = bbox
@@ -146,7 +189,7 @@ async def search_features(
                         "layer": layer,
                         "filter": filter,
                         "tileset_id": tileset_id,
-                        "limit": limit,
+                        "limit": validated_limit,
                     },
                 }
 
@@ -155,15 +198,13 @@ async def search_features(
                     result["total"] = data["total"]
 
                 # Add bbox summary if provided
-                if bbox:
-                    parsed = _parse_bbox(bbox)
-                    if parsed:
-                        result["bbox_parsed"] = {
-                            "min_lng": parsed[0],
-                            "min_lat": parsed[1],
-                            "max_lng": parsed[2],
-                            "max_lat": parsed[3],
-                        }
+                if bbox_parsed:
+                    result["bbox_parsed"] = {
+                        "min_lng": bbox_parsed[0],
+                        "min_lat": bbox_parsed[1],
+                        "max_lng": bbox_parsed[2],
+                        "max_lat": bbox_parsed[3],
+                    }
 
                 log.set_result(result)
                 return result
@@ -208,10 +249,18 @@ async def get_feature(feature_id: str) -> dict[str, Any]:
         GeoJSON feature object with geometry and properties
     """
     with ToolCallLogger(logger, "get_feature", feature_id=feature_id) as log:
+        # Validate feature_id
+        uuid_result = validate_uuid(feature_id, "feature_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(feature_id=feature_id)
+            log.set_result(result)
+            return result
+        validated_feature_id = uuid_result.value
+        
         tile_server_url = settings.tile_server_url.rstrip("/")
-        url = f"{tile_server_url}/api/features/{feature_id}"
+        url = f"{tile_server_url}/api/features/{validated_feature_id}"
 
-        logger.debug(f"Fetching feature {feature_id} from {url}")
+        logger.debug(f"Fetching feature {validated_feature_id} from {url}")
 
         async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
             try:
@@ -253,37 +302,37 @@ async def get_feature(feature_id: str) -> dict[str, Any]:
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
                 logger.warning(
-                    f"HTTP error getting feature {feature_id}: {status_code}",
-                    extra={"feature_id": feature_id, "status_code": status_code},
+                    f"HTTP error getting feature {validated_feature_id}: {status_code}",
+                    extra={"feature_id": validated_feature_id, "status_code": status_code},
                 )
                 
                 if status_code == 404:
                     result = {
                         "error": "Feature not found",
-                        "feature_id": feature_id,
+                        "feature_id": validated_feature_id,
                     }
                 elif status_code == 401:
                     result = {
                         "error": "Authentication required",
-                        "feature_id": feature_id,
+                        "feature_id": validated_feature_id,
                         "hint": "This feature may belong to a private tileset. Configure API_TOKEN.",
                     }
                 else:
                     result = {
                         "error": f"HTTP error: {status_code}",
                         "detail": e.response.text,
-                        "feature_id": feature_id,
+                        "feature_id": validated_feature_id,
                     }
                 log.set_result(result)
                 return result
             except httpx.RequestError as e:
                 logger.error(
-                    f"Request error getting feature {feature_id}: {e}",
-                    extra={"feature_id": feature_id},
+                    f"Request error getting feature {validated_feature_id}: {e}",
+                    extra={"feature_id": validated_feature_id},
                 )
                 result = {
                     "error": f"Request error: {str(e)}",
-                    "feature_id": feature_id,
+                    "feature_id": validated_feature_id,
                 }
                 log.set_result(result)
                 return result
@@ -304,7 +353,7 @@ async def get_features_in_tile(
 
     Args:
         tileset_id: UUID of the tileset
-        z: Zoom level
+        z: Zoom level (0-22)
         x: Tile X coordinate
         y: Tile Y coordinate
         layer: Optional layer name filter
@@ -316,16 +365,65 @@ async def get_features_in_tile(
         logger, "get_features_in_tile",
         tileset_id=tileset_id, z=z, x=x, y=y, layer=layer
     ) as log:
-        logger.debug(f"Getting features in tile z={z}, x={x}, y={y} for tileset {tileset_id}")
+        # Validate tileset_id
+        uuid_result = validate_uuid(tileset_id, "tileset_id")
+        if not uuid_result.valid:
+            result = uuid_result.to_error_response(
+                features=[],
+                count=0,
+                tile={"z": z, "x": x, "y": y, "tileset_id": tileset_id},
+            )
+            log.set_result(result)
+            return result
+        validated_tileset_id = uuid_result.value
+        
+        # Validate zoom level
+        zoom_result = validate_range(z, "z", min_value=0, max_value=22)
+        if not zoom_result.valid:
+            result = zoom_result.to_error_response(
+                features=[],
+                count=0,
+                tile={"z": z, "x": x, "y": y, "tileset_id": tileset_id},
+            )
+            log.set_result(result)
+            return result
+        validated_z = zoom_result.value
+        
+        # Validate x coordinate (must be 0 to 2^z - 1)
+        max_tile = (2 ** validated_z) - 1
+        x_result = validate_range(x, "x", min_value=0, max_value=max_tile)
+        if not x_result.valid:
+            result = x_result.to_error_response(
+                features=[],
+                count=0,
+                tile={"z": z, "x": x, "y": y, "tileset_id": tileset_id},
+            )
+            log.set_result(result)
+            return result
+        validated_x = x_result.value
+        
+        # Validate y coordinate (must be 0 to 2^z - 1)
+        y_result = validate_range(y, "y", min_value=0, max_value=max_tile)
+        if not y_result.valid:
+            result = y_result.to_error_response(
+                features=[],
+                count=0,
+                tile={"z": z, "x": x, "y": y, "tileset_id": tileset_id},
+            )
+            log.set_result(result)
+            return result
+        validated_y = y_result.value
+        
+        logger.debug(f"Getting features in tile z={validated_z}, x={validated_x}, y={validated_y} for tileset {validated_tileset_id}")
 
         # Convert tile coordinates to bbox using Web Mercator tile math
-        n = 2.0 ** z
+        n = 2.0 ** validated_z
 
         # Calculate bbox from tile coordinates
-        min_lng = x / n * 360.0 - 180.0
-        max_lng = (x + 1) / n * 360.0 - 180.0
-        min_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n))))
-        max_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
+        min_lng = validated_x / n * 360.0 - 180.0
+        max_lng = (validated_x + 1) / n * 360.0 - 180.0
+        min_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (validated_y + 1) / n))))
+        max_lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * validated_y / n))))
 
         bbox = f"{min_lng},{min_lat},{max_lng},{max_lat}"
 
@@ -335,16 +433,16 @@ async def get_features_in_tile(
         result = await search_features(
             bbox=bbox,
             layer=layer,
-            tileset_id=tileset_id,
+            tileset_id=validated_tileset_id,
             limit=1000,
         )
 
         # Add tile info to result
         result["tile"] = {
-            "z": z,
-            "x": x,
-            "y": y,
-            "tileset_id": tileset_id,
+            "z": validated_z,
+            "x": validated_x,
+            "y": validated_y,
+            "tileset_id": validated_tileset_id,
         }
 
         log.set_result(result)

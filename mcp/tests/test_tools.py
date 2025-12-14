@@ -125,7 +125,7 @@ class TestGetTileset:
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
-                "id": "test-id",
+                "id": "550e8400-e29b-41d4-a716-446655440099",
                 "name": "Test Tileset",
                 "type": "vector",
                 "format": "pbf",
@@ -142,9 +142,9 @@ class TestGetTileset:
                 mock_instance.__aexit__.return_value = None
                 mock_client.return_value = mock_instance
 
-                result = await get_tileset("test-id")
+                result = await get_tileset("550e8400-e29b-41d4-a716-446655440099")
 
-                assert result["id"] == "test-id"
+                assert result["id"] == "550e8400-e29b-41d4-a716-446655440099"
                 assert result["name"] == "Test Tileset"
 
         asyncio.run(run_test())
@@ -196,7 +196,7 @@ class TestGetTilesetTilejson:
                 mock_instance.__aexit__.return_value = None
                 mock_client.return_value = mock_instance
 
-                result = await get_tileset_tilejson("test-id")
+                result = await get_tileset_tilejson("550e8400-e29b-41d4-a716-446655440099")
 
                 assert "tiles" in result or "tilejson" in result
 
@@ -213,12 +213,12 @@ class TestSearchFeatures:
             mock_response.json.return_value = {
                 "features": [
                     {
-                        "id": "f1",
+                        "id": "550e8400-e29b-41d4-a716-446655440004",
                         "geometry": {"type": "Point", "coordinates": [139.7, 35.6]},
                         "properties": {"name": "Point 1"},
                     },
                     {
-                        "id": "f2",
+                        "id": "550e8400-e29b-41d4-a716-446655440005",
                         "geometry": {"type": "Point", "coordinates": [139.8, 35.7]},
                         "properties": {"name": "Point 2"},
                     },
@@ -275,9 +275,9 @@ class TestSearchFeatures:
                 mock_instance.__aexit__.return_value = None
                 mock_client.return_value = mock_instance
 
-                result = await search_features(tileset_id="test-tileset")
+                result = await search_features(tileset_id="550e8400-e29b-41d4-a716-446655440097")
 
-                assert result["query"]["tileset_id"] == "test-tileset"
+                assert result["query"]["tileset_id"] == "550e8400-e29b-41d4-a716-446655440097"
 
         asyncio.run(run_test())
 
@@ -350,7 +350,7 @@ class TestGetFeature:
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
-                "id": "feat-id",
+                "id": "550e8400-e29b-41d4-a716-446655440098",
                 "type": "Feature",
                 "geometry": {"type": "Point", "coordinates": [139.7, 35.6]},
                 "properties": {"name": "Test Point"},
@@ -366,9 +366,9 @@ class TestGetFeature:
                 mock_instance.__aexit__.return_value = None
                 mock_client.return_value = mock_instance
 
-                result = await get_feature("feat-id")
+                result = await get_feature("550e8400-e29b-41d4-a716-446655440098")
 
-                assert result["id"] == "feat-id"
+                assert result["id"] == "550e8400-e29b-41d4-a716-446655440098"
                 assert "geometry" in result
                 assert "properties" in result
 
@@ -407,7 +407,7 @@ class TestGetFeaturesInTile:
             mock_response = Mock()
             mock_response.json.return_value = {
                 "features": [
-                    {"id": "f1", "geometry": {"type": "Point", "coordinates": [139.76, 35.68]}},
+                    {"id": "550e8400-e29b-41d4-a716-446655440004", "geometry": {"type": "Point", "coordinates": [139.76, 35.68]}},
                 ]
             }
             mock_response.raise_for_status = Mock()
@@ -420,7 +420,7 @@ class TestGetFeaturesInTile:
                 mock_client.return_value = mock_instance
 
                 result = await get_features_in_tile(
-                    tileset_id="test-tileset",
+                    tileset_id="550e8400-e29b-41d4-a716-446655440097",
                     z=14,
                     x=14546,
                     y=6454,
@@ -449,7 +449,7 @@ class TestGetFeaturesInTile:
                 mock_client.return_value = mock_instance
 
                 result = await get_features_in_tile(
-                    tileset_id="test-tileset",
+                    tileset_id="550e8400-e29b-41d4-a716-446655440097",
                     z=10,
                     x=906,
                     y=404,
@@ -537,7 +537,7 @@ class TestIntegration:
             features_response = Mock()
             features_response.json = Mock(return_value={
                 "features": [
-                    {"id": "f1", "geometry": {"type": "Point", "coordinates": [139.7, 35.6]}}
+                    {"id": "550e8400-e29b-41d4-a716-446655440004", "geometry": {"type": "Point", "coordinates": [139.7, 35.6]}}
                 ]
             })
             features_response.raise_for_status = Mock()

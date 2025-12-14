@@ -87,7 +87,7 @@ class TestCreateTileset:
         """create_tileset should handle all parameters."""
         async def run_test():
             mock_response = Mock()
-            mock_response.json = Mock(return_value={"id": "test-id", "name": "Full Test"})
+            mock_response.json = Mock(return_value={"id": "550e8400-e29b-41d4-a716-446655440010", "name": "Full Test"})
             mock_response.raise_for_status = Mock()
             mock_response.status_code = 201
 
@@ -125,7 +125,7 @@ class TestUpdateTileset:
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
-                "id": "test-id",
+                "id": "550e8400-e29b-41d4-a716-446655440010",
                 "name": "Updated Name",
             }
             mock_response.raise_for_status = Mock()
@@ -138,7 +138,7 @@ class TestUpdateTileset:
                 mock_client.return_value = mock_instance
 
                 result = await update_tileset(
-                    tileset_id="test-id",
+                    tileset_id="550e8400-e29b-41d4-a716-446655440010",
                     name="Updated Name",
                 )
 
@@ -175,7 +175,7 @@ class TestUpdateTileset:
     def test_update_tileset_no_fields(self):
         """update_tileset with no fields should return error."""
         async def run_test():
-            result = await update_tileset(tileset_id="test-id")
+            result = await update_tileset(tileset_id="550e8400-e29b-41d4-a716-446655440010")
             assert "error" in result
             assert "No fields" in result["error"] or "no update" in result["error"].lower()
 
@@ -199,7 +199,7 @@ class TestDeleteTileset:
                 mock_instance.__aexit__.return_value = None
                 mock_client.return_value = mock_instance
 
-                result = await delete_tileset(tileset_id="test-id")
+                result = await delete_tileset(tileset_id="550e8400-e29b-41d4-a716-446655440010")
 
                 assert "success" in result or "deleted" in str(result).lower()
 
@@ -292,7 +292,7 @@ class TestCreateFeature:
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
-                "id": "feat-id",
+                "id": "550e8400-e29b-41d4-a716-446655440095",
                 "layer_name": "custom_layer",
             }
             mock_response.raise_for_status = Mock()
@@ -305,7 +305,7 @@ class TestCreateFeature:
                 mock_client.return_value = mock_instance
 
                 result = await create_feature(
-                    tileset_id="test-id",
+                    tileset_id="550e8400-e29b-41d4-a716-446655440010",
                     geometry={"type": "Point", "coordinates": [0, 0]},
                     layer_name="custom_layer",
                 )
@@ -323,7 +323,7 @@ class TestUpdateFeature:
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
-                "id": "feat-id",
+                "id": "550e8400-e29b-41d4-a716-446655440095",
                 "properties": {"name": "Updated"},
             }
             mock_response.raise_for_status = Mock()
@@ -336,7 +336,7 @@ class TestUpdateFeature:
                 mock_client.return_value = mock_instance
 
                 result = await update_feature(
-                    feature_id="feat-id",
+                    feature_id="550e8400-e29b-41d4-a716-446655440095",
                     properties={"name": "Updated"},
                 )
 
@@ -349,7 +349,7 @@ class TestUpdateFeature:
         async def run_test():
             new_geom = {"type": "Point", "coordinates": [140.0, 36.0]}
             mock_response = Mock()
-            mock_response.json.return_value = {"id": "feat-id", "geometry": new_geom}
+            mock_response.json.return_value = {"id": "550e8400-e29b-41d4-a716-446655440095", "geometry": new_geom}
             mock_response.raise_for_status = Mock()
 
             with patch("tools.crud.httpx.AsyncClient") as mock_client:
@@ -360,7 +360,7 @@ class TestUpdateFeature:
                 mock_client.return_value = mock_instance
 
                 result = await update_feature(
-                    feature_id="feat-id",
+                    feature_id="550e8400-e29b-41d4-a716-446655440095",
                     geometry=new_geom,
                 )
 
@@ -371,7 +371,7 @@ class TestUpdateFeature:
     def test_update_feature_no_fields(self):
         """update_feature with no fields should return error."""
         async def run_test():
-            result = await update_feature(feature_id="feat-id")
+            result = await update_feature(feature_id="550e8400-e29b-41d4-a716-446655440095")
             assert "error" in result
 
         asyncio.run(run_test())
@@ -394,7 +394,7 @@ class TestDeleteFeature:
                 mock_instance.__aexit__.return_value = None
                 mock_client.return_value = mock_instance
 
-                result = await delete_feature(feature_id="feat-id")
+                result = await delete_feature(feature_id="550e8400-e29b-41d4-a716-446655440095")
 
                 assert "success" in result or "deleted" in str(result).lower()
 

@@ -170,7 +170,7 @@ class TestFullWorkflows:
             feature_response.json.return_value = {
                 "features": [
                     {
-                        "id": "f1",
+                        "id": "550e8400-e29b-41d4-a716-446655440022",
                         "geometry": {"type": "Point", "coordinates": [139.7, 35.65]},
                         "layer_name": "points",
                     },
@@ -241,7 +241,7 @@ class TestFullWorkflows:
             features_response.json = Mock(return_value={
                 "features": [
                     {
-                        "id": "f1",
+                        "id": "550e8400-e29b-41d4-a716-446655440022",
                         "geometry": {"type": "Point", "coordinates": [139.768, 35.682]},
                         "properties": {"name": "Nearby POI"},
                     }
