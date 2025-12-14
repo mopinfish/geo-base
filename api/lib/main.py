@@ -1574,6 +1574,66 @@ def get_tileset_tilejson(
             (name, description, min_zoom, max_zoom, attribution,
              xmin, ymin, xmax, ymax, center_x, center_y) = row
             
+            # Get vector_layers information from features
+            vector_layers = []
+            with conn.cursor() as cur:
+                # Get distinct layer names for this tileset
+                cur.execute(
+                    """
+                    SELECT DISTINCT layer_name
+                    FROM features
+                    WHERE tileset_id = %s
+                    ORDER BY layer_name
+                    """,
+                    (tileset_id,),
+                )
+                layer_names = [row[0] for row in cur.fetchall()]
+                
+                # For each layer, get field information from properties
+                for layer_name in layer_names:
+                    cur.execute(
+                        """
+                        SELECT properties
+                        FROM features
+                        WHERE tileset_id = %s AND layer_name = %s
+                        LIMIT 1
+                        """,
+                        (tileset_id, layer_name),
+                    )
+                    props_row = cur.fetchone()
+                    
+                    fields = {}
+                    if props_row and props_row[0]:
+                        # Extract field names and infer types from properties
+                        properties = props_row[0]
+                        for key, value in properties.items():
+                            if isinstance(value, bool):
+                                fields[key] = "Boolean"
+                            elif isinstance(value, int):
+                                fields[key] = "Number"
+                            elif isinstance(value, float):
+                                fields[key] = "Number"
+                            else:
+                                fields[key] = "String"
+                    
+                    vector_layers.append({
+                        "id": layer_name,
+                        "fields": fields,
+                        "minzoom": min_zoom or 0,
+                        "maxzoom": max_zoom or 22,
+                        "description": ""
+                    })
+            
+            # If no layers found, add a default layer
+            if not vector_layers:
+                vector_layers.append({
+                    "id": "default",
+                    "fields": {},
+                    "minzoom": min_zoom or 0,
+                    "maxzoom": max_zoom or 22,
+                    "description": ""
+                })
+            
             # Build TileJSON response
             tilejson = {
                 "tilejson": "3.0.0",
@@ -1581,6 +1641,7 @@ def get_tileset_tilejson(
                 "tiles": [f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"],
                 "minzoom": min_zoom or 0,
                 "maxzoom": max_zoom or 22,
+                "vector_layers": vector_layers,
             }
             
             # Add bounds if available
