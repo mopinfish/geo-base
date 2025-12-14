@@ -26,6 +26,15 @@ export interface TilesetMapPreviewProps {
   refreshKey?: number | string;
 }
 
+// レイヤーごとの色パレット
+const LAYER_COLORS = [
+  { fill: "#3b82f6", line: "#2563eb", point: "#22c55e" }, // blue/green
+  { fill: "#f59e0b", line: "#d97706", point: "#ef4444" }, // amber/red
+  { fill: "#8b5cf6", line: "#7c3aed", point: "#ec4899" }, // violet/pink
+  { fill: "#06b6d4", line: "#0891b2", point: "#84cc16" }, // cyan/lime
+  { fill: "#f43f5e", line: "#e11d48", point: "#6366f1" }, // rose/indigo
+];
+
 /**
  * boundsが有効な値かどうかをチェック
  * デフォルト値（全世界）や無効な値を除外
@@ -43,10 +52,9 @@ function isValidBounds(bounds: number[] | null | undefined): bounds is number[] 
   }
   
   // 全世界を覆うデフォルト値は除外（自動フィットには使わない）
-  // 一般的なデフォルト値のパターンを検出
   const isWorldDefault = 
-    (west <= -170 && east >= 170) ||  // 経度が世界を覆う
-    (south <= -80 && north >= 80);     // 緯度が世界を覆う
+    (west <= -170 && east >= 170) ||
+    (south <= -80 && north >= 80);
   
   if (isWorldDefault) {
     return false;
@@ -72,13 +80,11 @@ function parseBounds(value: number[] | string | null | undefined): number[] | nu
   
   if (typeof value === 'string') {
     try {
-      // JSON文字列の場合
       const parsed = JSON.parse(value);
       if (Array.isArray(parsed)) {
         return parsed;
       }
     } catch {
-      // カンマ区切りの場合
       const parts = value.split(',').map(Number);
       if (parts.length === 4 && !parts.some(isNaN)) {
         return parts;
@@ -101,13 +107,11 @@ function parseCenter(value: number[] | string | null | undefined): number[] | nu
   
   if (typeof value === 'string') {
     try {
-      // JSON文字列の場合
       const parsed = JSON.parse(value);
       if (Array.isArray(parsed)) {
         return parsed;
       }
     } catch {
-      // カンマ区切りの場合
       const parts = value.split(',').map(Number);
       if (parts.length >= 2 && !parts.some(isNaN)) {
         return parts;
@@ -118,11 +122,24 @@ function parseCenter(value: number[] | string | null | undefined): number[] | nu
   return null;
 }
 
+// TileJSON with vector_layers の型定義
+interface VectorLayer {
+  id: string;
+  fields?: Record<string, string>;
+  minzoom?: number;
+  maxzoom?: number;
+  description?: string;
+}
+
+interface TileJSONWithLayers extends TileJSON {
+  vector_layers?: VectorLayer[];
+}
+
 /**
  * タイルセットのプレビュー表示用マップコンポーネント
  *
  * タイルセットのタイプに応じて適切な表示を行う：
- * - vector: PostGISベースのMVTタイルを表示
+ * - vector: PostGISベースのMVTタイルを表示（レイヤー別スタイリング対応）
  * - pmtiles: PMTilesファイルからタイルを表示
  * - raster: COGベースのラスタータイルを表示
  */
@@ -145,13 +162,11 @@ export function TilesetMapPreview({
 
   // 有効なboundsを取得
   const getValidBounds = useCallback((): number[] | null => {
-    // TileJSONのboundsを優先
     const tileJSONBounds = parseBounds(tileJSON?.bounds);
     if (isValidBounds(tileJSONBounds)) {
       return tileJSONBounds;
     }
     
-    // タイルセットのboundsを使用
     const tilesetBounds = parseBounds(tileset.bounds as number[] | string | undefined);
     if (isValidBounds(tilesetBounds)) {
       return tilesetBounds;
@@ -162,7 +177,6 @@ export function TilesetMapPreview({
 
   // 初期の中心座標とズームを計算
   const getInitialView = useCallback(() => {
-    // TileJSONのcenterから取得
     const tileJSONCenter = parseCenter(tileJSON?.center);
     if (tileJSONCenter && tileJSONCenter.length >= 2) {
       return {
@@ -171,7 +185,6 @@ export function TilesetMapPreview({
       };
     }
 
-    // タイルセットのcenterから取得
     const tilesetCenter = parseCenter(tileset.center as number[] | string | undefined);
     if (tilesetCenter && tilesetCenter.length >= 2) {
       return {
@@ -180,7 +193,6 @@ export function TilesetMapPreview({
       };
     }
 
-    // boundsから中心を計算
     const bounds = getValidBounds();
     if (bounds) {
       const [west, south, east, north] = bounds;
@@ -190,31 +202,52 @@ export function TilesetMapPreview({
       };
     }
 
-    // デフォルト（日本）
     return {
       center: [139.7671, 35.6812] as [number, number],
       zoom: 5,
     };
   }, [tileset, tileJSON, getValidBounds]);
 
-  // タイルURLを取得（キャッシュバスティング対応）
+  /**
+   * vector_layersを取得
+   * TileJSONから取得できない場合はデフォルト値を返す
+   */
+  const getVectorLayers = useCallback((): VectorLayer[] => {
+    const tileJSONWithLayers = tileJSON as TileJSONWithLayers | null;
+    
+    if (tileJSONWithLayers?.vector_layers && tileJSONWithLayers.vector_layers.length > 0) {
+      return tileJSONWithLayers.vector_layers;
+    }
+    
+    // デフォルト：単一レイヤー
+    return [{ id: "default" }];
+  }, [tileJSON]);
+
+  /**
+   * タイルURLを生成
+   * 
+   * vectorタイプの場合：
+   * - layerパラメータなしの場合、全フィーチャーが "features" レイヤーにまとめられる
+   * - layerパラメータありの場合、そのレイヤー名でMVTが生成される
+   * 
+   * マッププレビューでは全フィーチャーを表示するため、layerパラメータなしで取得し
+   * source-layer: "features" を使用する
+   */
   const getTileUrl = useCallback((cacheBuster?: number | string) => {
     const apiBaseUrl =
       process.env.NEXT_PUBLIC_API_URL || "https://geo-base-puce.vercel.app";
 
-    // キャッシュバスティング用のクエリパラメータ
     const bustParam = cacheBuster ? `&_t=${cacheBuster}` : "";
 
-    // TileJSONからタイルURLを取得（キャッシュバスティングを追加）
     if (tileJSON?.tiles && tileJSON.tiles.length > 0) {
       const baseUrl = tileJSON.tiles[0];
       const separator = baseUrl.includes("?") ? "&" : "?";
       return cacheBuster ? `${baseUrl}${separator}_t=${cacheBuster}` : baseUrl;
     }
 
-    // タイルセットタイプに応じてURLを生成
     switch (tileset.type) {
       case "vector":
+        // layerパラメータなし → 全フィーチャーが "features" レイヤーに
         return `${apiBaseUrl}/api/tiles/features/{z}/{x}/{y}.pbf?tileset_id=${tileset.id}${bustParam}`;
       case "pmtiles":
         return `${apiBaseUrl}/api/tiles/pmtiles/${tileset.id}/{z}/{x}/{y}.pbf${cacheBuster ? `?_t=${cacheBuster}` : ""}`;
@@ -224,6 +257,32 @@ export function TilesetMapPreview({
         return null;
     }
   }, [tileset, tileJSON]);
+
+  /**
+   * ソースレイヤー名を決定
+   * 
+   * vectorタイプ:
+   *   - タイルURLに layer パラメータがない場合、MVT内のレイヤー名は常に "features"
+   *   - マッププレビューでは全フィーチャーを表示するため "features" を使用
+   * 
+   * pmtiles:
+   *   - TileJSONのvector_layersから取得（PMTilesに含まれるレイヤー名）
+   */
+  const getSourceLayerName = useCallback((): string => {
+    if (tileset.type === "vector") {
+      // vectorタイプでlayerパラメータなしの場合、MVTレイヤー名は "features"
+      return "features";
+    }
+    
+    if (tileset.type === "pmtiles") {
+      const vectorLayers = getVectorLayers();
+      if (vectorLayers.length > 0 && vectorLayers[0].id) {
+        return vectorLayers[0].id;
+      }
+    }
+    
+    return "default";
+  }, [tileset.type, getVectorLayers]);
 
   // boundsにフィット
   const fitToBounds = useCallback(() => {
@@ -241,9 +300,8 @@ export function TilesetMapPreview({
     }
   }, [getValidBounds, isLoaded]);
 
-  // 地図の初期化（refreshKeyが変わったら再初期化）
+  // 地図の初期化
   useEffect(() => {
-    // 既存の地図をクリーンアップ
     if (map.current) {
       map.current.remove();
       map.current = null;
@@ -262,14 +320,12 @@ export function TilesetMapPreview({
     const { center, zoom } = getInitialView();
 
     try {
-      // ベースマップのスタイル設定
       const baseStyle: maplibregl.StyleSpecification = {
         version: 8,
         sources: {},
         layers: [],
       };
 
-      // ベースマップを追加（オプション）
       if (!hideBaseMap) {
         baseStyle.sources.osm = {
           type: "raster",
@@ -284,7 +340,6 @@ export function TilesetMapPreview({
           source: "osm",
         });
       } else {
-        // ベースマップなしの場合は背景色を設定
         baseStyle.layers.push({
           id: "background",
           type: "background",
@@ -309,7 +364,6 @@ export function TilesetMapPreview({
       map.current.on("load", () => {
         if (!map.current) return;
 
-        // タイルセットタイプに応じてソースとレイヤーを追加
         if (tileset.type === "raster") {
           // ラスタータイル
           map.current.addSource("tileset", {
@@ -338,11 +392,19 @@ export function TilesetMapPreview({
           });
 
           // ソースレイヤー名を決定
-          // TileJSONのvector_layersから取得、またはデフォルト値を使用
-          // vector_layersはTileJSON仕様にはあるが、型定義に含まれていない場合がある
-          const tileJSONWithLayers = tileJSON as (typeof tileJSON & { vector_layers?: Array<{ id: string }> }) | null;
-          const sourceLayer =
-            tileJSONWithLayers?.vector_layers?.[0]?.id || "features" || "default";
+          const sourceLayer = getSourceLayerName();
+          
+          // デバッグログ
+          console.log(`[TilesetMapPreview] tileset.type: ${tileset.type}`);
+          console.log(`[TilesetMapPreview] source-layer: "${sourceLayer}"`);
+          console.log(`[TilesetMapPreview] tileUrl: ${tileUrl}`);
+
+          // 使用する色（propsまたはデフォルト）
+          const colors = {
+            fill: fillColor,
+            line: lineColor,
+            point: pointColor,
+          };
 
           // ポリゴンレイヤー
           map.current.addLayer({
@@ -352,7 +414,7 @@ export function TilesetMapPreview({
             "source-layer": sourceLayer,
             filter: ["==", ["geometry-type"], "Polygon"],
             paint: {
-              "fill-color": fillColor,
+              "fill-color": colors.fill,
               "fill-opacity": 0.4,
             },
           });
@@ -365,7 +427,7 @@ export function TilesetMapPreview({
             "source-layer": sourceLayer,
             filter: ["==", ["geometry-type"], "Polygon"],
             paint: {
-              "line-color": lineColor,
+              "line-color": colors.line,
               "line-width": 1.5,
             },
           });
@@ -378,7 +440,7 @@ export function TilesetMapPreview({
             "source-layer": sourceLayer,
             filter: ["==", ["geometry-type"], "LineString"],
             paint: {
-              "line-color": lineColor,
+              "line-color": colors.line,
               "line-width": 2,
             },
           });
@@ -392,7 +454,7 @@ export function TilesetMapPreview({
             filter: ["==", ["geometry-type"], "Point"],
             paint: {
               "circle-radius": 6,
-              "circle-color": pointColor,
+              "circle-color": colors.point,
               "circle-stroke-width": 2,
               "circle-stroke-color": "#ffffff",
             },
@@ -406,11 +468,19 @@ export function TilesetMapPreview({
             const props = feature.properties || {};
 
             let content = "<div class='p-2'>";
+            
+            // layer_nameがあれば表示
+            if (props.layer_name) {
+              content += `<span class='text-xs bg-gray-200 rounded px-1'>${props.layer_name}</span><br/>`;
+            }
+            
             if (props.name) {
               content += `<strong>${props.name}</strong><br/>`;
             }
+            
             // その他のプロパティを表示（最大5件）
-            const keys = Object.keys(props).filter((k) => k !== "name");
+            const excludeKeys = ["name", "layer_name", "feature_id"];
+            const keys = Object.keys(props).filter((k) => !excludeKeys.includes(k));
             keys.slice(0, 5).forEach((key) => {
               content += `<span class='text-sm text-gray-600'>${key}: ${props[key]}</span><br/>`;
             });
@@ -462,11 +532,12 @@ export function TilesetMapPreview({
     tileJSON,
     getTileUrl,
     getInitialView,
+    getSourceLayerName,
     fillColor,
     lineColor,
     pointColor,
     hideBaseMap,
-    refreshKey, // refreshKeyを依存配列に追加
+    refreshKey,
   ]);
 
   // 地図ロード後に自動的にboundsにフィット
@@ -475,7 +546,6 @@ export function TilesetMapPreview({
 
     const bounds = getValidBounds();
     if (bounds && map.current) {
-      // 少し遅延してフィット（地図の準備が完了するのを待つ）
       const timer = setTimeout(() => {
         if (map.current) {
           map.current.fitBounds(
@@ -509,6 +579,7 @@ export function TilesetMapPreview({
 
   const validBounds = getValidBounds();
   const hasBounds = validBounds !== null;
+  const vectorLayers = getVectorLayers();
 
   return (
     <div className="relative">
@@ -517,6 +588,22 @@ export function TilesetMapPreview({
         className="w-full rounded-md border"
         style={{ height }}
       />
+
+      {/* レイヤー情報（vectorタイプの場合） */}
+      {isLoaded && tileset.type === "vector" && vectorLayers.length > 0 && (
+        <div className="absolute top-2 left-2 bg-white/90 rounded px-2 py-1 text-xs shadow max-w-[200px]">
+          <div className="font-medium mb-1">レイヤー:</div>
+          {vectorLayers.map((layer, idx) => (
+            <div key={layer.id} className="flex items-center gap-1">
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].point }}
+              />
+              <span className="truncate">{layer.id}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* コントロールボタン */}
       {isLoaded && (
