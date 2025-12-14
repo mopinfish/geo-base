@@ -163,6 +163,53 @@ export interface CalculateBoundsResult {
 }
 
 // ============================
+// 統計API 型定義
+// ============================
+
+export interface SystemStats {
+  tilesets: {
+    total: number;
+    by_type: Record<string, number>;
+    public: number;
+    private: number;
+  };
+  features: {
+    total: number;
+    by_geometry_type: {
+      Point: number;
+      LineString: number;
+      Polygon: number;
+    };
+  };
+  datasources: {
+    pmtiles: number;
+    raster: number;
+    total: number;
+  };
+  top_tilesets_by_features: Array<{
+    id: string;
+    name: string;
+    type: string;
+    feature_count: number;
+  }>;
+}
+
+export interface TilesetStats {
+  tileset_id: string;
+  tileset_name: string;
+  tileset_type: string;
+  feature_count: number;
+  geometry_types: {
+    Point: number;
+    LineString: number;
+    Polygon: number;
+  };
+  bounds: number[] | null;
+  latest_update: string | null;
+  message?: string;
+}
+
+// ============================
 // API クライアント
 // ============================
 
@@ -251,6 +298,18 @@ class ApiClient {
 
   async getHealthDb(): Promise<HealthStatus> {
     return this.request<HealthStatus>('/api/health/db');
+  }
+
+  // ============================
+  // 統計 API
+  // ============================
+
+  async getSystemStats(): Promise<SystemStats> {
+    return this.request<SystemStats>('/api/stats');
+  }
+
+  async getTilesetStats(id: string): Promise<TilesetStats> {
+    return this.request<TilesetStats>(`/api/tilesets/${id}/stats`);
   }
 
   // ============================

@@ -22,6 +22,8 @@ export interface TilesetMapPreviewProps {
   hideBaseMap?: boolean;
   /** 初期表示時にboundsに自動フィットするか（デフォルト: true） */
   autoFitBounds?: boolean;
+  /** 強制リフレッシュ用のキー（変更するとタイルを再読み込み） */
+  refreshKey?: number | string;
 }
 
 /**
@@ -133,6 +135,7 @@ export function TilesetMapPreview({
   pointColor = "#22c55e",
   hideBaseMap = false,
   autoFitBounds = true,
+  refreshKey,
 }: TilesetMapPreviewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -194,24 +197,29 @@ export function TilesetMapPreview({
     };
   }, [tileset, tileJSON, getValidBounds]);
 
-  // タイルURLを取得
-  const getTileUrl = useCallback(() => {
-    // TileJSONからタイルURLを取得
-    if (tileJSON?.tiles && tileJSON.tiles.length > 0) {
-      return tileJSON.tiles[0];
-    }
-
-    // タイルセットタイプに応じてURLを生成
+  // タイルURLを取得（キャッシュバスティング対応）
+  const getTileUrl = useCallback((cacheBuster?: number | string) => {
     const apiBaseUrl =
       process.env.NEXT_PUBLIC_API_URL || "https://geo-base-puce.vercel.app";
 
+    // キャッシュバスティング用のクエリパラメータ
+    const bustParam = cacheBuster ? `&_t=${cacheBuster}` : "";
+
+    // TileJSONからタイルURLを取得（キャッシュバスティングを追加）
+    if (tileJSON?.tiles && tileJSON.tiles.length > 0) {
+      const baseUrl = tileJSON.tiles[0];
+      const separator = baseUrl.includes("?") ? "&" : "?";
+      return cacheBuster ? `${baseUrl}${separator}_t=${cacheBuster}` : baseUrl;
+    }
+
+    // タイルセットタイプに応じてURLを生成
     switch (tileset.type) {
       case "vector":
-        return `${apiBaseUrl}/api/tiles/features/{z}/{x}/{y}.pbf?tileset_id=${tileset.id}`;
+        return `${apiBaseUrl}/api/tiles/features/{z}/{x}/{y}.pbf?tileset_id=${tileset.id}${bustParam}`;
       case "pmtiles":
-        return `${apiBaseUrl}/api/tiles/pmtiles/${tileset.id}/{z}/{x}/{y}.pbf`;
+        return `${apiBaseUrl}/api/tiles/pmtiles/${tileset.id}/{z}/{x}/{y}.pbf${cacheBuster ? `?_t=${cacheBuster}` : ""}`;
       case "raster":
-        return `${apiBaseUrl}/api/tiles/raster/${tileset.id}/{z}/{x}/{y}.${tileset.format || "png"}`;
+        return `${apiBaseUrl}/api/tiles/raster/${tileset.id}/{z}/{x}/{y}.${tileset.format || "png"}${cacheBuster ? `?_t=${cacheBuster}` : ""}`;
       default:
         return null;
     }
@@ -233,11 +241,19 @@ export function TilesetMapPreview({
     }
   }, [getValidBounds, isLoaded]);
 
-  // 地図の初期化
+  // 地図の初期化（refreshKeyが変わったら再初期化）
   useEffect(() => {
-    if (!mapContainer.current || map.current) return;
+    // 既存の地図をクリーンアップ
+    if (map.current) {
+      map.current.remove();
+      map.current = null;
+      setIsLoaded(false);
+      setHasFittedBounds(false);
+    }
 
-    const tileUrl = getTileUrl();
+    if (!mapContainer.current) return;
+
+    const tileUrl = getTileUrl(refreshKey);
     if (!tileUrl) {
       setError("タイルURLが設定されていません");
       return;
@@ -421,6 +437,7 @@ export function TilesetMapPreview({
         }
 
         setIsLoaded(true);
+        setError(null);
       });
 
       map.current.on("error", (e) => {
@@ -449,6 +466,7 @@ export function TilesetMapPreview({
     lineColor,
     pointColor,
     hideBaseMap,
+    refreshKey, // refreshKeyを依存配列に追加
   ]);
 
   // 地図ロード後に自動的にboundsにフィット

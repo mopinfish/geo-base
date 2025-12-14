@@ -15,6 +15,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useApi } from "@/hooks/use-api";
 import type { Feature, Tileset } from "@/lib/api";
 import { 
@@ -27,6 +37,8 @@ import {
   MapPin,
   ChevronDown,
   FileJson,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 
 export default function FeaturesPage() {
@@ -39,6 +51,13 @@ export default function FeaturesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTileset, setSelectedTileset] = useState<string>("all");
   const [limit, setLimit] = useState(50);
+  
+  // 選択状態の管理
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  // 一括削除ダイアログの状態
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // GeoJSON Feature を Admin UI の Feature 型に変換
   const convertGeoJsonFeature = (geoJsonFeature: {
@@ -122,6 +141,9 @@ export default function FeaturesPage() {
       } else {
         setTilesets([]);
       }
+      
+      // 選択状態をクリア
+      setSelectedIds(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : "データの取得に失敗しました");
       setFeatures([]);
@@ -166,6 +188,58 @@ export default function FeaturesPage() {
     if (!tilesetId) return "(未設定)";
     const tileset = safeTilesets.find((t) => t.id === tilesetId);
     return tileset?.name || tilesetId.slice(0, 8) + "...";
+  };
+
+  // 選択状態の切り替え
+  const toggleSelection = (id: string) => {
+    const newSelection = new Set(selectedIds);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedIds(newSelection);
+  };
+
+  // 全選択/全解除
+  const toggleAllSelection = () => {
+    if (selectedIds.size === filteredFeatures.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredFeatures.map(f => f.id)));
+    }
+  };
+
+  // 一括削除の実行
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    setIsDeleting(true);
+    setError(null);
+    
+    try {
+      // 並列で削除を実行
+      const deletePromises = Array.from(selectedIds).map(id => 
+        api.deleteFeature(id).catch(err => ({ id, error: err }))
+      );
+      
+      const results = await Promise.all(deletePromises);
+      
+      // エラーがあったものをチェック
+      const errors = results.filter(r => r && typeof r === 'object' && 'error' in r);
+      
+      if (errors.length > 0) {
+        setError(`${errors.length}件の削除に失敗しました`);
+      }
+      
+      // データを再取得
+      await fetchData();
+      setBulkDeleteDialogOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "削除に失敗しました");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -252,6 +326,36 @@ export default function FeaturesPage() {
           </Card>
         )}
 
+        {/* 一括操作バー */}
+        {selectedIds.size > 0 && (
+          <Card className="bg-muted/50">
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {selectedIds.size}件を選択中
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    選択解除
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    一括削除
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* フィーチャー一覧 */}
         <Card>
           <CardHeader>
@@ -292,6 +396,14 @@ export default function FeaturesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.size === filteredFeatures.length && filteredFeatures.length > 0}
+                        onChange={toggleAllSelection}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                    </TableHead>
                     <TableHead>ID</TableHead>
                     <TableHead>タイルセット</TableHead>
                     <TableHead>レイヤー</TableHead>
@@ -303,7 +415,18 @@ export default function FeaturesPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredFeatures.map((feature) => (
-                    <TableRow key={feature.id}>
+                    <TableRow 
+                      key={feature.id}
+                      className={selectedIds.has(feature.id) ? "bg-muted/50" : ""}
+                    >
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(feature.id)}
+                          onChange={() => toggleSelection(feature.id)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </TableCell>
                       <TableCell>
                         <button 
                           onClick={() => router.push(`/features/${feature.id}`)}
@@ -368,6 +491,39 @@ export default function FeaturesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 一括削除確認ダイアログ */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>フィーチャーを一括削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              選択した {selectedIds.size} 件のフィーチャーを削除します。
+              この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  削除中...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {selectedIds.size}件を削除
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }
