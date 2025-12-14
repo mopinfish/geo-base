@@ -34,7 +34,7 @@ geo-base MCPサーバーの機能を拡充し、以下を実現する：
 |------|-----|
 | リポジトリ | https://github.com/mopinfish/geo-base |
 | 対象ディレクトリ | `/mcp` |
-| 現行MCPバージョン | 0.2.0 |
+| 現行MCPバージョン | 0.2.1 |
 | 目標バージョン | 1.0.0 |
 | APIバージョン | 0.4.0 |
 
@@ -82,30 +82,37 @@ CRUD操作（6ツール）
 └── tool_delete_feature     - フィーチャー削除
 ```
 
-### 2.3 現在のファイル構成（Step 2.5-A完了後）
+### 2.3 現在のファイル構成（Step 2.5-B完了後）
 
 ```
 mcp/
 ├── server.py              # FastMCPサーバー本体
 ├── config.py              # 設定管理（LOG_LEVEL追加）
-├── logger.py              # 🆕 ロギング基盤
+├── logger.py              # ロギング基盤
+├── errors.py              # 🆕 カスタム例外・エラーハンドリング
+├── retry.py               # 🆕 リトライ機能（tenacity）
 ├── tools/
-│   ├── __init__.py        # 更新: エクスポート整理
-│   ├── tilesets.py        # 更新: ロギング追加
-│   ├── features.py        # 更新: ロギング追加
-│   ├── geocoding.py       # 更新: ロギング追加
-│   └── crud.py            # 更新: ロギング追加
+│   ├── __init__.py        # エクスポート整理
+│   ├── tilesets.py        # ロギング追加済み
+│   ├── features.py        # ロギング追加済み
+│   ├── geocoding.py       # ロギング追加済み
+│   └── crud.py            # ロギング追加済み
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py
-│   ├── test_logger.py     # 🆕 ロギングテスト
+│   ├── test_logger.py     # ロギングテスト
+│   ├── test_errors.py     # 🆕 エラーハンドリングテスト
+│   ├── test_retry.py      # 🆕 リトライテスト
 │   ├── test_tools.py
 │   ├── test_geocoding.py
 │   ├── test_crud.py
 │   └── live_test.py
+├── docs/
+│   ├── HANDOVER_S2.md     # 引き継ぎドキュメント
+│   └── MCP_BEST_PRACTICES.md
 ├── Dockerfile
 ├── fly.toml
-├── pyproject.toml         # 更新: version 0.2.0, logger.py追加
+├── pyproject.toml         # 更新: version 0.2.1, tenacity追加
 └── uv.lock
 ```
 
@@ -118,7 +125,7 @@ mcp/
 | Step | 内容 | ステータス | 担当 | 備考 |
 |------|------|-----------|------|------|
 | 2.5-A | ロギング基盤の追加 | ✅ 完了 | Claude | logger.py作成、全ツールにロギング追加 |
-| 2.5-B | エラーハンドリング・リトライ | 🔲 未着手 | - | errors.py, retry.py作成 |
+| 2.5-B | エラーハンドリング・リトライ | ✅ 完了 | Claude | errors.py, retry.py作成、tenacity導入 |
 
 ### Phase 2: 機能拡充
 
@@ -184,37 +191,134 @@ LOG_LEVEL=INFO            # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 ---
 
-## 5. 次のアクション
+## 5. Step 2.5-B 完了内容
 
-### 5.1 即座に着手可能なタスク
+### 5.1 追加・更新ファイル
 
-1. **Step 2.5-B: エラーハンドリング強化**
-   - [ ] `mcp/errors.py` を作成（カスタム例外）
-   - [ ] `mcp/retry.py` を作成（tenacity導入）
-   - [ ] pyproject.toml に tenacity を追加
-   - [ ] 各ツールにリトライ処理を追加
+| ファイル | 内容 |
+|---------|------|
+| `mcp/errors.py` | カスタム例外クラス、エラーハンドリング関数 |
+| `mcp/retry.py` | tenacityベースのリトライ機能 |
+| `mcp/config.py` | バージョン0.2.1に更新 |
+| `mcp/pyproject.toml` | tenacity依存関係追加、バージョン0.2.1 |
+| `mcp/tests/test_errors.py` | エラーハンドリングテスト（19テスト） |
+| `mcp/tests/test_retry.py` | リトライ機能テスト |
 
-### 5.2 依存関係の追加予定
+### 5.2 errors.py の機能
 
-```toml
-# pyproject.toml に追加予定
-dependencies = [
-    # 既存
-    "fastmcp>=2.0.0",
-    "httpx>=0.26.0",
-    "python-dotenv>=1.0.0",
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0",
-    # 新規追加
-    "tenacity>=8.0.0",
-]
+```python
+# カスタム例外クラス
+- MCPError: 基底例外クラス
+- ValidationError: 入力バリデーションエラー
+- APIError: 外部API呼び出しエラー
+- AuthenticationError: 認証エラー
+- NotFoundError: リソース未発見エラー
+- NetworkError: ネットワークエラー
+
+# エラーコード（ErrorCode Enum）
+- VALIDATION_ERROR, AUTH_REQUIRED, FORBIDDEN, NOT_FOUND
+- NETWORK_ERROR, TIMEOUT, SERVER_ERROR, UNKNOWN_ERROR
+
+# ユーティリティ関数
+- handle_api_error(e, context): 例外を標準化レスポンスに変換
+- create_error_response(message, code, **kwargs): エラーレスポンス作成
+
+# 使用例
+from errors import handle_api_error, ValidationError, ErrorCode
+
+try:
+    response = await client.get(url)
+    response.raise_for_status()
+except Exception as e:
+    return handle_api_error(e, {"url": url})
+```
+
+### 5.3 retry.py の機能
+
+```python
+# リトライ付きHTTP関数
+- fetch_with_retry(url, params, headers, timeout, max_attempts)
+- post_with_retry(url, json, headers, timeout, max_attempts)
+- put_with_retry(url, json, headers, timeout, max_attempts)
+- delete_with_retry(url, headers, timeout, max_attempts)
+
+# RetryableClient: コンテキストマネージャー付きクライアント
+async with RetryableClient(headers=auth_headers) as client:
+    data = await client.get("https://api.example.com/data")
+    result = await client.post("https://api.example.com/create", json={...})
+
+# リトライ設定（環境変数で設定可能）
+- RETRY_MAX_ATTEMPTS=3    # 最大リトライ回数
+- RETRY_MIN_WAIT=1        # 最小待機時間（秒）
+- RETRY_MAX_WAIT=10       # 最大待機時間（秒）
+
+# リトライ対象例外
+- httpx.TimeoutException
+- httpx.NetworkError
+- httpx.ConnectError
+```
+
+### 5.4 環境変数
+
+```bash
+# 追加された環境変数
+RETRY_MAX_ATTEMPTS=3      # リトライ最大回数
+RETRY_MIN_WAIT=1          # 最小待機時間（秒）
+RETRY_MAX_WAIT=10         # 最大待機時間（秒）
 ```
 
 ---
 
-## 6. 既知の問題・注意点
+## 6. 次のアクション
 
-### 6.1 制限事項
+## 6. 次のアクション
+
+### 6.1 即座に着手可能なタスク
+
+1. **Step 2.5-C: 統計ツールの追加**
+   - [ ] `mcp/tools/stats.py` を作成
+   - [ ] タイルセット統計（フィーチャー数、ジオメトリタイプ分布など）
+   - [ ] エリア統計（密度計算など）
+   - [ ] テストコードの追加
+
+2. **既存ツールへのリトライ機能統合（オプション）**
+   - [ ] tilesets.py を retry.py の関数で更新
+   - [ ] features.py を retry.py の関数で更新
+   - [ ] crud.py を retry.py の関数で更新
+
+### 6.2 今後の実装予定
+
+```python
+# Step 2.5-C: 統計ツール (tools/stats.py)
+@mcp.tool()
+async def tool_get_tileset_stats(tileset_id: str) -> dict:
+    """タイルセットの統計情報を取得"""
+    pass
+
+@mcp.tool()
+async def tool_get_feature_distribution(
+    tileset_id: str | None = None,
+    bbox: str | None = None,
+) -> dict:
+    """フィーチャーのジオメトリタイプ分布を取得"""
+    pass
+
+# Step 2.5-D: 空間分析ツール (tools/analysis.py) - 最重要ゴール
+@mcp.tool()
+async def tool_analyze_area(
+    bbox: str,
+    tileset_id: str | None = None,
+    analysis_type: str = "summary",
+) -> dict:
+    """指定範囲の空間分析を実行"""
+    pass
+```
+
+---
+
+## 7. 既知の問題・注意点
+
+### 7.1 制限事項
 
 | 項目 | 詳細 |
 |------|------|
@@ -222,7 +326,7 @@ dependencies = [
 | PMTiles | 読み取りのみ対応（書き込み未対応） |
 | 認証 | API_TOKENが必須のCRUD操作あり |
 
-### 6.2 環境変数
+### 7.2 環境変数
 
 ```bash
 # 必須
@@ -238,9 +342,9 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 
 ---
 
-## 7. 参考資料
+## 8. 参考資料
 
-### 7.1 サンプルコード（プロジェクト添付）
+### 8.1 サンプルコード（プロジェクト添付）
 
 | ファイル | 内容 |
 |---------|------|
@@ -249,7 +353,7 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 | chillax-mcp-server.txt | 過ごし方提案MCPサーバー |
 | documentor.txt | 社内ドキュメント検索MCPサーバー |
 
-### 7.2 外部ドキュメント
+### 8.2 外部ドキュメント
 
 - [FastMCP GitHub](https://github.com/jlowin/fastmcp)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
@@ -257,7 +361,7 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 
 ---
 
-## 8. 連絡先・質問
+## 9. 連絡先・質問
 
 作業を再開する際は、このドキュメントと [MCP_ROADMAP_S2.md](./MCP_ROADMAP_S2.md) を参照してください。
 
@@ -269,3 +373,4 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 |------|------|------|
 | 2025-12-14 | 初版作成（セカンドシーズン準備） | Claude |
 | 2025-12-14 | Step 2.5-A完了（ロギング基盤追加） | Claude |
+| 2025-12-14 | Step 2.5-B完了（エラーハンドリング・リトライ追加） | Claude |

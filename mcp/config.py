@@ -39,7 +39,7 @@ class Settings(BaseSettings):
         description="MCP server name",
     )
     server_version: str = Field(
-        default="0.2.0",
+        default="0.2.1",
         description="MCP server version",
     )
 
