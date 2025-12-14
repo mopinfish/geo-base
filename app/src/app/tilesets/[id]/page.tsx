@@ -45,12 +45,19 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [showMapPreview, setShowMapPreview] = useState(true);
+  // マップリフレッシュ用のキー（更新ボタン押下時にインクリメント）
+  const [mapRefreshKey, setMapRefreshKey] = useState<number>(Date.now());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchTileset = async () => {
+  const fetchTileset = async (refreshMap = false) => {
     if (!isReady) return;
 
     setIsLoading(true);
     setError(null);
+    if (refreshMap) {
+      setIsRefreshing(true);
+    }
+    
     try {
       const data = await api.getTileset(id);
       console.log("Tileset data:", data);
@@ -64,20 +71,30 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
         // TileJSONの取得に失敗しても詳細は表示
         console.warn("TileJSON fetch failed, but continuing without it");
       }
+
+      // マップをリフレッシュ（キャッシュバスティング）
+      if (refreshMap) {
+        setMapRefreshKey(Date.now());
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "タイルセットの取得に失敗しました"
       );
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     if (isReady) {
-      fetchTileset();
+      fetchTileset(false);
     }
   }, [id, isReady]);
+
+  const handleRefresh = () => {
+    fetchTileset(true);
+  };
 
   const handleDelete = async () => {
     await api.deleteTileset(id);
@@ -209,8 +226,13 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button onClick={fetchTileset} variant="outline" size="sm">
-              <RefreshCw className="mr-2 h-4 w-4" />
+            <Button 
+              onClick={handleRefresh} 
+              variant="outline" 
+              size="sm"
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               更新
             </Button>
             <Link href={`/tilesets/${id}/edit`}>
@@ -259,9 +281,11 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 tileset={tileset}
                 tileJSON={tileJSON}
                 height="400px"
+                refreshKey={mapRefreshKey}
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                ※ データソースが登録されていない場合、タイルは表示されません
+                ※ データソースが登録されていない場合、タイルは表示されません。
+                フィーチャーを編集した場合は「更新」ボタンを押してください。
               </p>
             </CardContent>
           )}
