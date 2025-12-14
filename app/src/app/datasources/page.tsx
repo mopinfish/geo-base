@@ -65,6 +65,13 @@ export default function DatasourcesPage() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { status: 'ok' | 'error'; message?: string }>>({});
 
+  // 選択状態の管理
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  // 一括削除ダイアログの状態
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
   const fetchDatasources = async () => {
     if (!isReady || !api) return;
 
@@ -83,6 +90,9 @@ export default function DatasourcesPage() {
       } else {
         setDatasources([]);
       }
+      
+      // 選択状態をクリア
+      setSelectedIds(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : "データソースの取得に失敗しました");
       setDatasources([]);
@@ -186,6 +196,58 @@ export default function DatasourcesPage() {
     return url.substring(0, maxLength) + "...";
   };
 
+  // 選択状態の切り替え
+  const toggleSelection = (id: string) => {
+    const newSelection = new Set(selectedIds);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedIds(newSelection);
+  };
+
+  // 全選択/全解除
+  const toggleAllSelection = () => {
+    if (selectedIds.size === datasources.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(datasources.map(ds => ds.id)));
+    }
+  };
+
+  // 一括削除の実行
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0 || !api) return;
+
+    setIsBulkDeleting(true);
+    setError(null);
+    
+    try {
+      // 並列で削除を実行
+      const deletePromises = Array.from(selectedIds).map(id => 
+        api.deleteDatasource(id).catch(err => ({ id, error: err }))
+      );
+      
+      const results = await Promise.all(deletePromises);
+      
+      // エラーがあったものをチェック
+      const errors = results.filter(r => r && typeof r === 'object' && 'error' in r);
+      
+      if (errors.length > 0) {
+        setError(`${errors.length}件の削除に失敗しました`);
+      }
+      
+      // データを再取得
+      await fetchDatasources();
+      setBulkDeleteDialogOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "削除に失敗しました");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -270,6 +332,36 @@ export default function DatasourcesPage() {
           </Card>
         )}
 
+        {/* 一括操作バー */}
+        {selectedIds.size > 0 && (
+          <Card className="bg-muted/50">
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {selectedIds.size}件を選択中
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    選択解除
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    一括削除
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* データソース一覧 */}
         <Card>
           <CardHeader>
@@ -310,6 +402,14 @@ export default function DatasourcesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.size === datasources.length && datasources.length > 0}
+                          onChange={toggleAllSelection}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </TableHead>
                       <TableHead>タイプ</TableHead>
                       <TableHead>タイルセット</TableHead>
                       <TableHead>URL</TableHead>
@@ -322,7 +422,18 @@ export default function DatasourcesPage() {
                   </TableHeader>
                   <TableBody>
                     {datasources.map((ds) => (
-                      <TableRow key={ds.id}>
+                      <TableRow 
+                        key={ds.id}
+                        className={selectedIds.has(ds.id) ? "bg-muted/50" : ""}
+                      >
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(ds.id)}
+                            onChange={() => toggleSelection(ds.id)}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                        </TableCell>
                         <TableCell>
                           <Badge variant={getTypeBadgeVariant(ds.type)}>
                             {getTypeIcon(ds.type)}
@@ -471,7 +582,7 @@ export default function DatasourcesPage() {
         </div>
       </div>
 
-      {/* 削除確認ダイアログ */}
+      {/* 単一削除確認ダイアログ */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -494,6 +605,39 @@ export default function DatasourcesPage() {
                 </>
               ) : (
                 "削除する"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 一括削除確認ダイアログ */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>データソースを一括削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              選択した {selectedIds.size} 件のデータソースを削除します。
+              この操作は取り消せません。タイルセットは削除されません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  削除中...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {selectedIds.size}件を削除
+                </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

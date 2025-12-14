@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -16,8 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, Trash2 } from "lucide-react";
-import { CoordinatePicker } from "@/components/map";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Plus, Trash2, MapPin, ChevronDown, ChevronUp } from "lucide-react";
+import { GeometryEditor } from "@/components/map";
 import type { Tileset, FeatureCreate, FeatureUpdate } from "@/lib/api";
 
 // ジオメトリタイプ
@@ -89,26 +89,21 @@ export function FeatureForm({
     (initialData?.geometry?.type as GeometryType) || "Point"
   );
 
-  // 座標の状態
-  const [pointCoords, setPointCoords] = useState<[number, number] | null>(
-    initialData?.geometry?.type === "Point"
-      ? (initialData.geometry.coordinates as [number, number])
-      : null
-  );
-
-  // LineStringの座標
-  const [lineCoords, setLineCoords] = useState<[number, number][]>(
-    initialData?.geometry?.type === "LineString"
-      ? (initialData.geometry.coordinates as [number, number][])
-      : []
-  );
-
-  // Polygonの座標（外周のみ）
-  const [polygonCoords, setPolygonCoords] = useState<[number, number][]>(
-    initialData?.geometry?.type === "Polygon"
-      ? (initialData.geometry.coordinates[0] as [number, number][])
-      : []
-  );
+  // 座標の状態（統一形式）
+  const [coordinates, setCoordinates] = useState<[number, number][] | [number, number] | null>(() => {
+    if (!initialData?.geometry) return null;
+    
+    switch (initialData.geometry.type) {
+      case "Point":
+        return initialData.geometry.coordinates as [number, number];
+      case "LineString":
+        return initialData.geometry.coordinates as [number, number][];
+      case "Polygon":
+        return initialData.geometry.coordinates[0] as [number, number][];
+      default:
+        return null;
+    }
+  });
 
   // プロパティの状態
   const [properties, setProperties] = useState<PropertyItem[]>(() => {
@@ -120,6 +115,9 @@ export function FeatureForm({
     }
     return [];
   });
+
+  // 座標入力の展開状態
+  const [showCoordInputs, setShowCoordInputs] = useState(false);
 
   // プロパティを追加
   const addProperty = () => {
@@ -142,75 +140,39 @@ export function FeatureForm({
     setProperties(updated);
   };
 
-  // LineStringの座標を追加
-  const addLineCoord = () => {
-    setLineCoords([...lineCoords, [139.7671, 35.6812]]);
+  // ジオメトリタイプが変更されたとき
+  const handleGeometryTypeChange = (newType: GeometryType) => {
+    setGeometryType(newType);
+    // 座標をリセット
+    setCoordinates(null);
   };
 
-  // LineStringの座標を削除
-  const removeLineCoord = (index: number) => {
-    setLineCoords(lineCoords.filter((_, i) => i !== index));
-  };
-
-  // LineStringの座標を更新
-  const updateLineCoord = (
-    index: number,
-    axis: "lng" | "lat",
-    value: number
-  ) => {
-    const updated = [...lineCoords];
-    if (axis === "lng") {
-      updated[index] = [value, updated[index][1]];
-    } else {
-      updated[index] = [updated[index][0], value];
-    }
-    setLineCoords(updated);
-  };
-
-  // Polygonの座標を追加
-  const addPolygonCoord = () => {
-    setPolygonCoords([...polygonCoords, [139.7671, 35.6812]]);
-  };
-
-  // Polygonの座標を削除
-  const removePolygonCoord = (index: number) => {
-    setPolygonCoords(polygonCoords.filter((_, i) => i !== index));
-  };
-
-  // Polygonの座標を更新
-  const updatePolygonCoord = (
-    index: number,
-    axis: "lng" | "lat",
-    value: number
-  ) => {
-    const updated = [...polygonCoords];
-    if (axis === "lng") {
-      updated[index] = [value, updated[index][1]];
-    } else {
-      updated[index] = [updated[index][0], value];
-    }
-    setPolygonCoords(updated);
-  };
+  // 座標が変更されたとき
+  const handleCoordinatesChange = useCallback((newCoords: [number, number][] | [number, number] | null) => {
+    setCoordinates(newCoords);
+  }, []);
 
   // ジオメトリを構築
   const buildGeometry = (): GeoJSON.Geometry | null => {
+    if (!coordinates) return null;
+
     switch (geometryType) {
       case "Point":
-        if (!pointCoords) return null;
+        if (!Array.isArray(coordinates) || typeof coordinates[0] !== "number") return null;
         return {
           type: "Point",
-          coordinates: pointCoords,
+          coordinates: coordinates as [number, number],
         };
       case "LineString":
-        if (lineCoords.length < 2) return null;
+        if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
         return {
           type: "LineString",
-          coordinates: lineCoords,
+          coordinates: coordinates as [number, number][],
         };
       case "Polygon":
-        if (polygonCoords.length < 3) return null;
+        if (!Array.isArray(coordinates) || coordinates.length < 3) return null;
         // ポリゴンは閉じた環である必要がある
-        const ring = [...polygonCoords];
+        const ring = [...(coordinates as [number, number][])];
         if (
           ring[0][0] !== ring[ring.length - 1][0] ||
           ring[0][1] !== ring[ring.length - 1][1]
@@ -240,6 +202,60 @@ export function FeatureForm({
       }
     });
     return result;
+  };
+
+  // 座標を配列形式で取得（表示用）
+  const getCoordinatesArray = (): [number, number][] => {
+    if (!coordinates) return [];
+    if (geometryType === "Point") {
+      return Array.isArray(coordinates) && typeof coordinates[0] === "number"
+        ? [coordinates as [number, number]]
+        : [];
+    }
+    return coordinates as [number, number][];
+  };
+
+  // 座標を手動で更新
+  const updateCoordinate = (index: number, axis: "lng" | "lat", value: number) => {
+    const coordsArray = getCoordinatesArray();
+    if (index >= coordsArray.length) return;
+
+    const newCoords = [...coordsArray];
+    if (axis === "lng") {
+      newCoords[index] = [value, newCoords[index][1]];
+    } else {
+      newCoords[index] = [newCoords[index][0], value];
+    }
+
+    if (geometryType === "Point") {
+      setCoordinates(newCoords[0]);
+    } else {
+      setCoordinates(newCoords);
+    }
+  };
+
+  // 座標を手動で追加
+  const addCoordinate = () => {
+    const coordsArray = getCoordinatesArray();
+    const lastCoord = coordsArray.length > 0 ? coordsArray[coordsArray.length - 1] : [139.7671, 35.6812];
+    const newCoord: [number, number] = [lastCoord[0] + 0.001, lastCoord[1] + 0.001];
+    
+    if (geometryType === "Point") {
+      setCoordinates(newCoord);
+    } else {
+      setCoordinates([...coordsArray, newCoord]);
+    }
+  };
+
+  // 座標を手動で削除
+  const removeCoordinate = (index: number) => {
+    const coordsArray = getCoordinatesArray();
+    if (geometryType === "Point") {
+      setCoordinates(null);
+    } else {
+      const newCoords = coordsArray.filter((_, i) => i !== index);
+      setCoordinates(newCoords.length > 0 ? newCoords : null);
+    }
   };
 
   // フォーム送信
@@ -272,6 +288,10 @@ export function FeatureForm({
       await onSubmit(createData);
     }
   };
+
+  const coordsArray = getCoordinatesArray();
+  const minPointsRequired = geometryType === "Point" ? 1 : geometryType === "LineString" ? 2 : 3;
+  const isGeometryValid = coordsArray.length >= minPointsRequired;
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
@@ -322,7 +342,13 @@ export function FeatureForm({
       {/* ジオメトリ */}
       <Card>
         <CardHeader>
-          <CardTitle>ジオメトリ</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            ジオメトリ
+          </CardTitle>
+          <CardDescription>
+            地図をクリックして座標を設定、またはマーカーをドラッグして移動できます
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* ジオメトリタイプ選択 */}
@@ -330,7 +356,7 @@ export function FeatureForm({
             <Label>ジオメトリタイプ</Label>
             <Select
               value={geometryType}
-              onValueChange={(value) => setGeometryType(value as GeometryType)}
+              onValueChange={(value) => handleGeometryTypeChange(value as GeometryType)}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -343,169 +369,103 @@ export function FeatureForm({
             </Select>
           </div>
 
-          {/* Point入力 */}
-          {geometryType === "Point" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>経度 (Longitude)</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={pointCoords?.[0] ?? ""}
-                    onChange={(e) => {
-                      const lng = parseFloat(e.target.value);
-                      if (!isNaN(lng)) {
-                        setPointCoords([lng, pointCoords?.[1] ?? 35.6812]);
-                      }
-                    }}
-                    placeholder="139.7671"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>緯度 (Latitude)</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={pointCoords?.[1] ?? ""}
-                    onChange={(e) => {
-                      const lat = parseFloat(e.target.value);
-                      if (!isNaN(lat)) {
-                        setPointCoords([pointCoords?.[0] ?? 139.7671, lat]);
-                      }
-                    }}
-                    placeholder="35.6812"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>地図でクリックして座標を設定</Label>
-                <CoordinatePicker
-                  value={pointCoords}
-                  onChange={setPointCoords}
-                  height="300px"
-                />
-              </div>
-            </div>
-          )}
+          {/* ジオメトリステータス */}
+          <div className="flex items-center gap-2">
+            <Badge variant={isGeometryValid ? "default" : "secondary"}>
+              {coordsArray.length}点
+            </Badge>
+            {!isGeometryValid && (
+              <span className="text-sm text-muted-foreground">
+                ({minPointsRequired}点以上必要)
+              </span>
+            )}
+          </div>
 
-          {/* LineString入力 */}
-          {geometryType === "LineString" && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                2点以上の座標を入力してください
-              </p>
-              {lineCoords.map((coord, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-2 rounded-md border p-3"
-                >
-                  <span className="text-sm font-medium">#{index + 1}</span>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={coord[0]}
-                    onChange={(e) =>
-                      updateLineCoord(index, "lng", parseFloat(e.target.value))
-                    }
-                    placeholder="経度"
-                    className="flex-1"
-                  />
-                  <Input
-                    type="number"
-                    step="any"
-                    value={coord[1]}
-                    onChange={(e) =>
-                      updateLineCoord(index, "lat", parseFloat(e.target.value))
-                    }
-                    placeholder="緯度"
-                    className="flex-1"
-                  />
+          {/* 地図エディタ */}
+          <GeometryEditor
+            geometryType={geometryType}
+            coordinates={coordinates}
+            onChange={handleCoordinatesChange}
+            height="400px"
+          />
+
+          {/* 座標入力フィールド（折りたたみ可能） */}
+          <div className="border rounded-md">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50"
+              onClick={() => setShowCoordInputs(!showCoordInputs)}
+            >
+              <span>座標を数値で編集</span>
+              {showCoordInputs ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+            
+            {showCoordInputs && (
+              <div className="p-3 border-t space-y-3">
+                {coordsArray.map((coord, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 rounded-md border p-2"
+                  >
+                    <span className="text-sm font-medium w-8">#{index + 1}</span>
+                    <div className="flex-1 grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">経度</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={coord[0]}
+                          onChange={(e) =>
+                            updateCoordinate(index, "lng", parseFloat(e.target.value))
+                          }
+                          placeholder="経度"
+                          className="h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">緯度</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={coord[1]}
+                          onChange={(e) =>
+                            updateCoordinate(index, "lat", parseFloat(e.target.value))
+                          }
+                          placeholder="緯度"
+                          className="h-8"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeCoordinate(index)}
+                      disabled={geometryType !== "Point" && coordsArray.length <= 1}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                
+                {geometryType !== "Point" && (
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeLineCoord(index)}
-                    disabled={lineCoords.length <= 2}
+                    variant="outline"
+                    onClick={addCoordinate}
+                    className="w-full"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Plus className="mr-2 h-4 w-4" />
+                    座標を追加
                   </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={addLineCoord}
-                className="w-full"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                座標を追加
-              </Button>
-            </div>
-          )}
-
-          {/* Polygon入力 */}
-          {geometryType === "Polygon" && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                3点以上の座標を入力してください（自動的に閉じられます）
-              </p>
-              {polygonCoords.map((coord, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-2 rounded-md border p-3"
-                >
-                  <span className="text-sm font-medium">#{index + 1}</span>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={coord[0]}
-                    onChange={(e) =>
-                      updatePolygonCoord(
-                        index,
-                        "lng",
-                        parseFloat(e.target.value)
-                      )
-                    }
-                    placeholder="経度"
-                    className="flex-1"
-                  />
-                  <Input
-                    type="number"
-                    step="any"
-                    value={coord[1]}
-                    onChange={(e) =>
-                      updatePolygonCoord(
-                        index,
-                        "lat",
-                        parseFloat(e.target.value)
-                      )
-                    }
-                    placeholder="緯度"
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removePolygonCoord(index)}
-                    disabled={polygonCoords.length <= 3}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={addPolygonCoord}
-                className="w-full"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                座標を追加
-              </Button>
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -513,11 +473,11 @@ export function FeatureForm({
       <Card>
         <CardHeader>
           <CardTitle>プロパティ（属性）</CardTitle>
+          <CardDescription>
+            フィーチャーに付加する属性情報を入力してください
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            フィーチャーに付加する属性情報を入力してください
-          </p>
           {properties.map((prop, index) => (
             <div key={index} className="flex items-center gap-2">
               <Input
@@ -561,7 +521,7 @@ export function FeatureForm({
             キャンセル
           </Button>
         )}
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || !isGeometryValid}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isEditMode ? "更新" : "作成"}
         </Button>
