@@ -12,6 +12,7 @@ import os
 from fastmcp import FastMCP
 
 from config import get_settings
+from logger import get_logger
 from tools.tilesets import (
     list_tilesets,
     get_tileset,
@@ -33,9 +34,22 @@ from tools.crud import (
     update_feature,
     delete_feature,
 )
+from tools.stats import (
+    get_tileset_stats,
+    get_feature_distribution,
+    get_layer_stats,
+    get_area_stats,
+)
+from tools.analysis import (
+    analyze_area,
+    calculate_distance,
+    find_nearest_features,
+    get_buffer_zone_features,
+)
 
-# Initialize settings
+# Initialize settings and logger
 settings = get_settings()
+logger = get_logger(__name__)
 
 # Create MCP server instance
 mcp = FastMCP(
@@ -216,12 +230,17 @@ async def tool_health_check() -> dict:
 
     tile_server_url = settings.tile_server_url.rstrip("/")
 
+    logger.debug(f"Checking health of tile server at {tile_server_url}")
+
     async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
         try:
             response = await client.get(f"{tile_server_url}/api/health")
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            logger.info(f"Health check completed: {result.get('status', 'unknown')}")
+            return result
         except httpx.HTTPError as e:
+            logger.warning(f"Health check failed: {e}")
             return {
                 "status": "unhealthy",
                 "error": str(e),
@@ -528,10 +547,283 @@ async def tool_delete_feature(feature_id: str) -> dict:
 
 
 # ============================================================
+# Statistics Tools
+# ============================================================
+
+
+@mcp.tool()
+async def tool_get_tileset_stats(tileset_id: str) -> dict:
+    """
+    Get comprehensive statistics for a tileset.
+
+    Retrieves features from the tileset and calculates various statistics
+    including feature count, geometry type distribution, and layer breakdown.
+
+    Args:
+        tileset_id: UUID of the tileset to analyze
+
+    Returns:
+        Dictionary containing:
+        - tileset_id: The tileset ID
+        - tileset_name: Name of the tileset
+        - feature_count: Total number of features
+        - geometry_types: Distribution of geometry types (Point, LineString, Polygon, etc.)
+        - layers: Statistics per layer
+        - coordinate_count: Total coordinate points
+        - zoom_range: Min/max zoom levels
+    """
+    return await get_tileset_stats(tileset_id=tileset_id)
+
+
+@mcp.tool()
+async def tool_get_feature_distribution(
+    tileset_id: str | None = None,
+    bbox: str | None = None,
+) -> dict:
+    """
+    Get distribution of feature geometry types.
+
+    Analyzes features and returns the distribution of geometry types
+    (Point, LineString, Polygon, etc.) either for a specific tileset
+    or within a bounding box.
+
+    Args:
+        tileset_id: Optional tileset ID to limit analysis
+        bbox: Optional bounding box in format "minx,miny,maxx,maxy" (WGS84)
+              Example: "139.5,35.5,140.0,36.0" for Tokyo area
+
+    Returns:
+        Dictionary containing:
+        - total_features: Total number of features analyzed
+        - geometry_types: Count per geometry type
+        - percentages: Percentage per geometry type
+    """
+    return await get_feature_distribution(tileset_id=tileset_id, bbox=bbox)
+
+
+@mcp.tool()
+async def tool_get_layer_stats(tileset_id: str) -> dict:
+    """
+    Get statistics broken down by layer for a tileset.
+
+    Analyzes features grouped by their layer_name field and provides
+    detailed statistics for each layer.
+
+    Args:
+        tileset_id: UUID of the tileset to analyze
+
+    Returns:
+        Dictionary containing:
+        - tileset_id: The tileset ID
+        - total_features: Total feature count
+        - layer_count: Number of unique layers
+        - layers: Per-layer statistics including feature_count, geometry_types, property_keys
+    """
+    return await get_layer_stats(tileset_id=tileset_id)
+
+
+@mcp.tool()
+async def tool_get_area_stats(
+    bbox: str,
+    tileset_id: str | None = None,
+) -> dict:
+    """
+    Get statistics for a geographic area defined by a bounding box.
+
+    Calculates area-based statistics including feature density,
+    geometry distribution, and coverage metrics. This is useful for
+    understanding the data coverage and density in a specific region.
+
+    Args:
+        bbox: Bounding box in format "minx,miny,maxx,maxy" (WGS84)
+              Example: "139.5,35.5,140.0,36.0" for Tokyo area
+        tileset_id: Optional tileset ID to limit analysis
+
+    Returns:
+        Dictionary containing:
+        - bbox: Parsed bounding box coordinates
+        - area_km2: Area of the bounding box in square kilometers
+        - feature_count: Number of features in the area
+        - density: Features per square kilometer
+        - geometry_types: Distribution of geometry types
+        - layers: Layers present in the area
+    """
+    return await get_area_stats(bbox=bbox, tileset_id=tileset_id)
+
+
+# ============================================================
+# Spatial Analysis Tools
+# ============================================================
+
+
+@mcp.tool()
+async def tool_analyze_area(
+    bbox: str,
+    tileset_id: str | None = None,
+    include_density: bool = True,
+    include_clustering: bool = True,
+) -> dict:
+    """
+    Perform comprehensive spatial analysis on a geographic area.
+
+    Analyzes features within the bounding box and provides feature distribution,
+    spatial density analysis with hotspot detection, and proximity-based clustering.
+
+    Args:
+        bbox: Bounding box in format "minx,miny,maxx,maxy" (WGS84)
+              Example: "139.5,35.5,140.0,36.0" for Tokyo area
+        tileset_id: Optional tileset ID to limit analysis
+        include_density: Calculate density metrics with grid analysis (default: True)
+        include_clustering: Perform clustering analysis (default: True)
+
+    Returns:
+        Dictionary containing:
+        - bbox: Parsed bounding box
+        - area_km2: Area in square kilometers
+        - features: Feature counts and geometry type distribution
+        - density: Density metrics including grid analysis and hotspots
+        - clustering: Cluster analysis with member counts
+        - layers: Layer breakdown
+    """
+    return await analyze_area(
+        bbox=bbox,
+        tileset_id=tileset_id,
+        include_density=include_density,
+        include_clustering=include_clustering,
+    )
+
+
+@mcp.tool()
+async def tool_calculate_distance(
+    lat1: float,
+    lng1: float,
+    lat2: float,
+    lng2: float,
+) -> dict:
+    """
+    Calculate the distance between two geographic points.
+
+    Uses the Haversine formula for accurate great-circle distance calculation.
+    Also calculates the initial bearing (compass direction) from point 1 to point 2.
+
+    Args:
+        lat1: Latitude of first point in decimal degrees (e.g., 35.6812 for Tokyo Station)
+        lng1: Longitude of first point in decimal degrees (e.g., 139.7671 for Tokyo Station)
+        lat2: Latitude of second point in decimal degrees
+        lng2: Longitude of second point in decimal degrees
+
+    Returns:
+        Dictionary containing:
+        - distance_km: Distance in kilometers
+        - distance_m: Distance in meters
+        - distance_miles: Distance in miles
+        - bearing: Initial bearing in degrees (0-360)
+        - bearing_direction: Compass direction (N, NE, E, etc.)
+        - points: The input coordinates
+    """
+    return await calculate_distance(
+        lat1=lat1,
+        lng1=lng1,
+        lat2=lat2,
+        lng2=lng2,
+    )
+
+
+@mcp.tool()
+async def tool_find_nearest_features(
+    lat: float,
+    lng: float,
+    radius_km: float = 1.0,
+    limit: int = 10,
+    tileset_id: str | None = None,
+    layer: str | None = None,
+) -> dict:
+    """
+    Find features nearest to a given point.
+
+    Searches for features within a radius and returns them sorted by distance
+    from the search center. Useful for "what's nearby" queries.
+
+    Args:
+        lat: Latitude of the search center in decimal degrees
+        lng: Longitude of the search center in decimal degrees
+        radius_km: Search radius in kilometers (default: 1.0)
+        limit: Maximum number of results (default: 10, max: 100)
+        tileset_id: Optional tileset ID to limit search
+        layer: Optional layer name to filter results
+
+    Returns:
+        Dictionary containing:
+        - center: The search center point
+        - radius_km: The search radius
+        - features: List of features with distance_km, distance_m, sorted by proximity
+        - count: Number of features found
+    """
+    return await find_nearest_features(
+        lat=lat,
+        lng=lng,
+        radius_km=radius_km,
+        limit=limit,
+        tileset_id=tileset_id,
+        layer=layer,
+    )
+
+
+@mcp.tool()
+async def tool_get_buffer_zone_features(
+    lat: float,
+    lng: float,
+    inner_radius_km: float,
+    outer_radius_km: float,
+    tileset_id: str | None = None,
+) -> dict:
+    """
+    Get features within a ring buffer zone (donut shape) around a point.
+
+    Useful for analyzing features at specific distances from a point,
+    such as finding all features between 1-2 km from a location.
+
+    Args:
+        lat: Latitude of the center point in decimal degrees
+        lng: Longitude of the center point in decimal degrees
+        inner_radius_km: Inner radius of the buffer zone in kilometers
+        outer_radius_km: Outer radius of the buffer zone in kilometers
+        tileset_id: Optional tileset ID to limit search
+
+    Returns:
+        Dictionary containing:
+        - center: The center point
+        - inner_radius_km: Inner radius
+        - outer_radius_km: Outer radius
+        - ring_area_km2: Area of the ring buffer
+        - features: List of features in the buffer zone with distances
+        - count: Number of features found
+        - density_per_km2: Feature density in the ring
+    """
+    return await get_buffer_zone_features(
+        lat=lat,
+        lng=lng,
+        inner_radius_km=inner_radius_km,
+        outer_radius_km=outer_radius_km,
+        tileset_id=tileset_id,
+    )
+
+
+# ============================================================
 # Entry Point
 # ============================================================
 
 if __name__ == "__main__":
+    # Log startup information
+    logger.info(
+        f"Starting {settings.server_name} v{settings.server_version}",
+        extra={
+            "tile_server_url": settings.tile_server_url,
+            "environment": settings.environment,
+            "log_level": settings.log_level,
+        },
+    )
+
     # Get transport mode from environment variable
     # Options: "stdio" (default, for local Claude Desktop)
     #          "sse" (for remote HTTP connections via Fly.io)
@@ -542,16 +834,21 @@ if __name__ == "__main__":
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_PORT", "8080"))
     
+    logger.info(f"Using transport: {transport}")
+    
     if transport == "stdio":
         # Run with stdio transport (default for Claude Desktop local)
         mcp.run()
     elif transport == "sse":
         # Run with SSE transport (for remote connections)
+        logger.info(f"Starting SSE server on {host}:{port}")
         mcp.run(transport="sse", host=host, port=port)
     elif transport == "streamable-http":
         # Run with Streamable HTTP transport
+        logger.info(f"Starting Streamable HTTP server on {host}:{port}")
         mcp.run(transport="streamable-http", host=host, port=port)
     else:
+        logger.error(f"Unknown transport: {transport}")
         print(f"Unknown transport: {transport}")
         print("Valid options: stdio, sse, streamable-http")
         exit(1)

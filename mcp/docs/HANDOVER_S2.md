@@ -4,7 +4,7 @@
 
 **最終更新**: 2025-12-14  
 **プロジェクト**: geo-base MCP Server Enhancement  
-**フェーズ**: セカンドシーズン準備完了
+**フェーズ**: セカンドシーズン Phase 2完了（最重要ゴール達成）
 
 ---
 
@@ -34,7 +34,7 @@ geo-base MCPサーバーの機能を拡充し、以下を実現する：
 |------|-----|
 | リポジトリ | https://github.com/mopinfish/geo-base |
 | 対象ディレクトリ | `/mcp` |
-| 現行MCPバージョン | 0.2.0 |
+| 現行MCPバージョン | 0.2.2 |
 | 目標バージョン | 1.0.0 |
 | APIバージョン | 0.4.0 |
 
@@ -82,27 +82,37 @@ CRUD操作（6ツール）
 └── tool_delete_feature     - フィーチャー削除
 ```
 
-### 2.3 現在のファイル構成
+### 2.3 現在のファイル構成（Step 2.5-B完了後）
 
 ```
 mcp/
 ├── server.py              # FastMCPサーバー本体
-├── config.py              # 設定管理
+├── config.py              # 設定管理（LOG_LEVEL追加）
+├── logger.py              # ロギング基盤
+├── errors.py              # 🆕 カスタム例外・エラーハンドリング
+├── retry.py               # 🆕 リトライ機能（tenacity）
 ├── tools/
-│   ├── __init__.py
-│   ├── tilesets.py        # タイルセット関連
-│   ├── features.py        # フィーチャー関連
-│   ├── geocoding.py       # ジオコーディング
-│   └── crud.py            # CRUD操作
+│   ├── __init__.py        # エクスポート整理
+│   ├── tilesets.py        # ロギング追加済み
+│   ├── features.py        # ロギング追加済み
+│   ├── geocoding.py       # ロギング追加済み
+│   └── crud.py            # ロギング追加済み
 ├── tests/
+│   ├── __init__.py
 │   ├── conftest.py
+│   ├── test_logger.py     # ロギングテスト
+│   ├── test_errors.py     # 🆕 エラーハンドリングテスト
+│   ├── test_retry.py      # 🆕 リトライテスト
 │   ├── test_tools.py
 │   ├── test_geocoding.py
 │   ├── test_crud.py
 │   └── live_test.py
+├── docs/
+│   ├── HANDOVER_S2.md     # 引き継ぎドキュメント
+│   └── MCP_BEST_PRACTICES.md
 ├── Dockerfile
 ├── fly.toml
-├── pyproject.toml
+├── pyproject.toml         # 更新: version 0.2.1, tenacity追加
 └── uv.lock
 ```
 
@@ -114,15 +124,15 @@ mcp/
 
 | Step | 内容 | ステータス | 担当 | 備考 |
 |------|------|-----------|------|------|
-| 2.5-A | ロギング基盤の追加 | 🔲 未着手 | - | logger.py作成 |
-| 2.5-B | エラーハンドリング・リトライ | 🔲 未着手 | - | errors.py, retry.py作成 |
+| 2.5-A | ロギング基盤の追加 | ✅ 完了 | Claude | logger.py作成、全ツールにロギング追加 |
+| 2.5-B | エラーハンドリング・リトライ | ✅ 完了 | Claude | errors.py, retry.py作成、tenacity導入 |
 
 ### Phase 2: 機能拡充
 
 | Step | 内容 | ステータス | 担当 | 備考 |
 |------|------|-----------|------|------|
-| 2.5-C | 統計ツールの追加 | 🔲 未着手 | - | tools/stats.py作成 |
-| 2.5-D | 空間分析ツールの追加 | 🔲 未着手 | - | **最重要ゴール** tools/analysis.py作成 |
+| 2.5-C | 統計ツールの追加 | ✅ 完了 | Claude | tools/stats.py作成、4ツール追加 |
+| 2.5-D | 空間分析ツールの追加 | ✅ 完了 | Claude | **最重要ゴール** tools/analysis.py作成、4ツール追加 |
 
 ### Phase 3: 品質向上
 
@@ -135,124 +145,264 @@ mcp/
 
 ---
 
-## 4. 次のアクション
+## 4. Step 2.5-A 完了内容
 
-### 4.1 即座に着手可能なタスク
+### 4.1 追加・更新ファイル
 
-1. **Step 2.5-A: ロギング基盤の追加**
-   - [ ] `mcp/logger.py` を作成
-   - [ ] 各ツールにロギングを追加
-   - [ ] 環境変数 `LOG_LEVEL` 対応
+| ファイル | 内容 |
+|---------|------|
+| `mcp/logger.py` | ロギング基盤モジュール |
+| `mcp/config.py` | `LOG_LEVEL`設定追加、バージョン0.2.0 |
+| `mcp/server.py` | 起動時ログ追加 |
+| `mcp/tools/tilesets.py` | ToolCallLogger追加 |
+| `mcp/tools/features.py` | ToolCallLogger追加 |
+| `mcp/tools/geocoding.py` | ToolCallLogger追加 |
+| `mcp/tools/crud.py` | ToolCallLogger追加 |
+| `mcp/tools/__init__.py` | エクスポート整理 |
+| `mcp/tests/test_logger.py` | ロギングテスト |
 
-2. **Step 2.5-B: エラーハンドリング強化**
-   - [ ] `mcp/errors.py` を作成（カスタム例外）
-   - [ ] `mcp/retry.py` を作成（tenacity導入）
-   - [ ] pyproject.toml に tenacity を追加
+### 4.2 logger.py の機能
 
-### 4.2 依存関係の追加予定
+```python
+# 主要コンポーネント
+- MCPFormatter: カスタムログフォーマッター（extra fieldsサポート）
+- ToolCallLogger: ツール呼び出しのコンテキストマネージャー
+- get_logger(): 名前付きロガーの取得（キャッシュ付き）
+- get_log_level(): 環境変数からログレベルを取得
 
-```toml
-# pyproject.toml に追加
-dependencies = [
-    # 既存
-    "fastmcp>=0.1.0",
-    "httpx>=0.25.0",
-    "python-dotenv>=1.0.0",
-    # 新規追加
-    "tenacity>=8.0.0",
-]
+# 使用例
+from logger import get_logger, ToolCallLogger
+
+logger = get_logger(__name__)
+
+async def my_tool(param: str) -> dict:
+    with ToolCallLogger(logger, "my_tool", param=param) as log:
+        result = await process(param)
+        log.set_result(result)
+        return result
+```
+
+### 4.3 環境変数
+
+```bash
+# 追加された環境変数
+LOG_LEVEL=INFO            # DEBUG, INFO, WARNING, ERROR, CRITICAL
 ```
 
 ---
 
-## 5. 技術的なメモ
+## 5. Step 2.5-B 完了内容
 
-### 5.1 ロギング実装パターン
+### 5.1 追加・更新ファイル
+
+| ファイル | 内容 |
+|---------|------|
+| `mcp/errors.py` | カスタム例外クラス、エラーハンドリング関数 |
+| `mcp/retry.py` | tenacityベースのリトライ機能 |
+| `mcp/config.py` | バージョン0.2.1に更新 |
+| `mcp/pyproject.toml` | tenacity依存関係追加、バージョン0.2.1 |
+| `mcp/tests/test_errors.py` | エラーハンドリングテスト（19テスト） |
+| `mcp/tests/test_retry.py` | リトライ機能テスト |
+
+### 5.2 errors.py の機能
 
 ```python
-# mcp/logger.py
-import logging
-import os
+# カスタム例外クラス
+- MCPError: 基底例外クラス
+- ValidationError: 入力バリデーションエラー
+- APIError: 外部API呼び出しエラー
+- AuthenticationError: 認証エラー
+- NotFoundError: リソース未発見エラー
+- NetworkError: ネットワークエラー
 
-def setup_logger(name: str) -> logging.Logger:
-    logger = logging.getLogger(name)
-    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-    logger.setLevel(getattr(logging, log_level, logging.INFO))
-    
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    return logger
+# エラーコード（ErrorCode Enum）
+- VALIDATION_ERROR, AUTH_REQUIRED, FORBIDDEN, NOT_FOUND
+- NETWORK_ERROR, TIMEOUT, SERVER_ERROR, UNKNOWN_ERROR
+
+# ユーティリティ関数
+- handle_api_error(e, context): 例外を標準化レスポンスに変換
+- create_error_response(message, code, **kwargs): エラーレスポンス作成
+
+# 使用例
+from errors import handle_api_error, ValidationError, ErrorCode
+
+try:
+    response = await client.get(url)
+    response.raise_for_status()
+except Exception as e:
+    return handle_api_error(e, {"url": url})
 ```
 
-### 5.2 リトライ実装パターン
+### 5.3 retry.py の機能
 
 ```python
-# mcp/retry.py
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-import httpx
+# リトライ付きHTTP関数
+- fetch_with_retry(url, params, headers, timeout, max_attempts)
+- post_with_retry(url, json, headers, timeout, max_attempts)
+- put_with_retry(url, json, headers, timeout, max_attempts)
+- delete_with_retry(url, headers, timeout, max_attempts)
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
-    retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
-)
-async def fetch_with_retry(url: str, params: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(url, params=params)
-        response.raise_for_status()
-        return response.json()
+# RetryableClient: コンテキストマネージャー付きクライアント
+async with RetryableClient(headers=auth_headers) as client:
+    data = await client.get("https://api.example.com/data")
+    result = await client.post("https://api.example.com/create", json={...})
+
+# リトライ設定（環境変数で設定可能）
+- RETRY_MAX_ATTEMPTS=3    # 最大リトライ回数
+- RETRY_MIN_WAIT=1        # 最小待機時間（秒）
+- RETRY_MAX_WAIT=10       # 最大待機時間（秒）
+
+# リトライ対象例外
+- httpx.TimeoutException
+- httpx.NetworkError
+- httpx.ConnectError
 ```
 
-### 5.3 tool_analyze_area 設計案
+### 5.4 環境変数
 
-```python
-@mcp.tool()
-async def tool_analyze_area(
-    bbox: str,
-    tileset_id: str | None = None,
-    analysis_type: str = "summary",
-) -> dict:
-    """
-    指定範囲内の地理空間データを分析
-    
-    Args:
-        bbox: バウンディングボックス "minx,miny,maxx,maxy" (WGS84)
-        tileset_id: 分析対象タイルセットID
-        analysis_type: "summary" | "density" | "distribution" | "full"
-    
-    Returns:
-        {
-            "bbox": {...},
-            "area_km2": 12.5,
-            "feature_count": 150,
-            "geometry_distribution": {
-                "Point": 100,
-                "LineString": 30,
-                "Polygon": 20
-            },
-            "density": {
-                "features_per_km2": 12.0
-            },
-            "layers": ["default", "buildings", "roads"]
-        }
-    """
+```bash
+# 追加された環境変数
+RETRY_MAX_ATTEMPTS=3      # リトライ最大回数
+RETRY_MIN_WAIT=1          # 最小待機時間（秒）
+RETRY_MAX_WAIT=10         # 最大待機時間（秒）
 ```
 
 ---
 
-## 6. 既知の問題・注意点
+## 6. Step 2.5-C 完了内容
 
-### 6.1 制限事項
+### 6.1 追加ファイル
+
+| ファイル | 内容 |
+|---------|------|
+| `mcp/tools/stats.py` | 統計ツールモジュール（4関数） |
+| `mcp/tests/test_stats.py` | 統計ツールテスト |
+
+### 6.2 stats.py の機能
+
+```python
+# 統計ツール関数
+- get_tileset_stats(tileset_id): タイルセットの包括的統計
+  - フィーチャー数、ジオメトリタイプ分布、レイヤー別統計、座標点数
+
+- get_feature_distribution(tileset_id?, bbox?): ジオメトリタイプ分布
+  - タイプ別カウント、パーセンテージ計算
+
+- get_layer_stats(tileset_id): レイヤー別統計
+  - レイヤー毎のフィーチャー数、プロパティキー一覧
+
+- get_area_stats(bbox, tileset_id?): エリア統計
+  - 面積計算(km²)、密度計算、レイヤー分布
+```
+
+---
+
+## 7. Step 2.5-D 完了内容 (最重要ゴール)
+
+### 7.1 追加ファイル
+
+| ファイル | 内容 |
+|---------|------|
+| `mcp/tools/analysis.py` | 空間分析ツールモジュール（4関数） |
+| `mcp/tests/test_analysis.py` | 空間分析ツールテスト |
+
+### 7.2 analysis.py の機能
+
+```python
+# 空間分析ツール関数
+- analyze_area(bbox, tileset_id?, include_density?, include_clustering?):
+  - 包括的な空間分析: 密度グリッド、ホットスポット検出、クラスタリング
+
+- calculate_distance(lat1, lng1, lat2, lng2):
+  - Haversine距離計算、方位計算
+
+- find_nearest_features(lat, lng, radius_km, limit, tileset_id?, layer?):
+  - 近傍フィーチャー検索、距離順ソート
+
+- get_buffer_zone_features(lat, lng, inner_radius_km, outer_radius_km, tileset_id?):
+  - リングバッファ（ドーナツ型）内のフィーチャー検索、密度計算
+```
+
+### 7.3 ヘルパー関数
+
+```python
+# 空間計算ヘルパー
+- _haversine_distance(): 大圏距離計算（km）
+- _get_feature_centroid(): フィーチャーの重心座標取得
+- _expand_bbox(): バウンディングボックスのバッファ拡張
+- _bearing_to_direction(): 方位角をコンパス方向に変換
+```
+
+---
+
+## 8. 現在のツール一覧（20ツール）
+
+### 8.1 タイルセット関連 (3)
+- `tool_list_tilesets` - タイルセット一覧
+- `tool_get_tileset` - タイルセット詳細
+- `tool_get_tileset_tilejson` - TileJSON取得
+
+### 8.2 フィーチャー関連 (2)
+- `tool_search_features` - フィーチャー検索
+- `tool_get_feature` - フィーチャー詳細
+
+### 8.3 ジオコーディング (2)
+- `tool_geocode` - 住所→座標
+- `tool_reverse_geocode` - 座標→住所
+
+### 8.4 CRUD操作 (6)
+- `tool_create_tileset` / `tool_update_tileset` / `tool_delete_tileset`
+- `tool_create_feature` / `tool_update_feature` / `tool_delete_feature`
+
+### 8.5 ユーティリティ (3)
+- `tool_get_tile_url` - タイルURL生成
+- `tool_health_check` - ヘルスチェック
+- `tool_get_server_info` - サーバー情報
+
+### 8.6 統計ツール (4) - NEW
+- `tool_get_tileset_stats` - タイルセット統計
+- `tool_get_feature_distribution` - ジオメトリ分布
+- `tool_get_layer_stats` - レイヤー別統計
+- `tool_get_area_stats` - エリア統計
+
+### 8.7 空間分析ツール (4) - NEW
+- `tool_analyze_area` - 包括的空間分析
+- `tool_calculate_distance` - 距離計算
+- `tool_find_nearest_features` - 近傍検索
+- `tool_get_buffer_zone_features` - バッファゾーン分析
+
+---
+
+## 9. 次のアクション
+
+### 9.1 Phase 3: 品質向上
+
+1. **Step 2.5-E: 入力バリデーション強化**
+   - [ ] `mcp/validators.py` を作成
+   - [ ] UUID、座標、bbox形式の検証関数
+   - [ ] 既存ツールへの統合
+
+2. **Step 2.5-F: テストコードの拡充**
+   - [ ] カバレッジ80%目標
+   - [ ] 統合テストの追加
+   - [ ] モックテストの改善
+
+### 9.2 オプショナル改善
+
+1. **既存ツールへのリトライ機能統合**
+   - [ ] tilesets.py を retry.py の関数で更新
+   - [ ] features.py を retry.py の関数で更新
+   - [ ] crud.py を retry.py の関数で更新
+
+2. **パフォーマンス改善**
+   - [ ] キャッシュ機能の追加
+   - [ ] バッチ処理の実装
+
+---
+
+## 10. 既知の問題・注意点
+
+### 10.1 制限事項
 
 | 項目 | 詳細 |
 |------|------|
@@ -260,7 +410,7 @@ async def tool_analyze_area(
 | PMTiles | 読み取りのみ対応（書き込み未対応） |
 | 認証 | API_TOKENが必須のCRUD操作あり |
 
-### 6.2 環境変数
+### 10.2 環境変数
 
 ```bash
 # 必須
@@ -276,9 +426,9 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 
 ---
 
-## 7. 参考資料
+## 11. 参考資料
 
-### 7.1 サンプルコード（プロジェクト添付）
+### 11.1 サンプルコード（プロジェクト添付）
 
 | ファイル | 内容 |
 |---------|------|
@@ -287,7 +437,7 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 | chillax-mcp-server.txt | 過ごし方提案MCPサーバー |
 | documentor.txt | 社内ドキュメント検索MCPサーバー |
 
-### 7.2 外部ドキュメント
+### 11.2 外部ドキュメント
 
 - [FastMCP GitHub](https://github.com/jlowin/fastmcp)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
@@ -295,7 +445,7 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 
 ---
 
-## 8. 連絡先・質問
+## 12. 連絡先・質問
 
 作業を再開する際は、このドキュメントと [MCP_ROADMAP_S2.md](./MCP_ROADMAP_S2.md) を参照してください。
 
@@ -306,3 +456,7 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 | 日付 | 内容 | 担当 |
 |------|------|------|
 | 2025-12-14 | 初版作成（セカンドシーズン準備） | Claude |
+| 2025-12-14 | Step 2.5-A完了（ロギング基盤追加） | Claude |
+| 2025-12-14 | Step 2.5-B完了（エラーハンドリング・リトライ追加） | Claude |
+| 2025-12-14 | Step 2.5-C完了（統計ツール4種追加）バージョン0.2.2 | Claude |
+| 2025-12-14 | Step 2.5-D完了（空間分析ツール4種追加）バージョン0.2.2 | Claude |
