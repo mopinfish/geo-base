@@ -9,7 +9,7 @@
 **本番URL (Admin)**: https://geo-base-app.vercel.app/  
 **APIバージョン**: 0.4.0  
 **MCPバージョン**: 0.2.0  
-**Admin UIバージョン**: 0.8.0
+**Admin UIバージョン**: 0.10.0
 
 ---
 
@@ -24,7 +24,7 @@
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Admin UI      │     │   MCP Server    │     │   外部クライアント  │
 │   (Next.js)     │     │   (FastMCP)     │     │   (MapLibre等)   │
-│   ✅ Step3.8完了│     │   ✅ Fly.io稼働 │     │                   │
+│   ✅ Step3.15完了│     │   ✅ Fly.io稼働 │     │                   │
 └────────┬────────┘     └────────┬────────┘     └────────┬────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
@@ -85,6 +85,9 @@
 | 3.10 | マップビューワー初期表示位置改善 | ✅ 完了 |
 | 3.11 | DBコネクションプール枯渇対策 | ✅ 完了 |
 | 3.12 | GeoJSONインポート時Bounds自動取得 | ✅ 完了 |
+| 3.13 | 一括削除機能・ジオメトリエディタ | ✅ 完了 |
+| 3.14 | マップキャッシュリフレッシュ修正 | ✅ 完了 |
+| 3.15 | タイルセット統計・エラーハンドリング改善 | ✅ 完了 |
 
 ---
 
@@ -100,11 +103,9 @@ geo-base/
 │   │   ├── config.py            # 設定管理（pydantic-settings）
 │   │   ├── database.py          # DB接続（サーバーレス対応）
 │   │   ├── main.py              # FastAPIアプリ・エンドポイント
-│   │   │                        # ※データソースAPIエンドポイント追加【Step 3.8】
+│   │   │                        # ※統計APIエンドポイント追加【Step 3.15】
 │   │   ├── pmtiles.py           # PMTilesユーティリティ【Step 1.6】
-│   │   │                        # ※aiopmtiles Enum対応修正【Step 3.8】
 │   │   ├── raster_tiles.py      # ラスタータイル生成ユーティリティ
-│   │   │                        # ※rio-tiler Info属性対応修正【Step 3.8】
 │   │   └── tiles.py             # ベクタータイル生成ユーティリティ
 │   ├── data/                    # MBTilesファイル格納（ローカル用）
 │   ├── index.py                 # Vercelエントリーポイント
@@ -139,32 +140,32 @@ geo-base/
 │   ├── .env.example
 │   ├── .python-version
 │   └── claude_desktop_config.example.json
-├── app/                          # Next.js管理画面【Step 3.8完了】
+├── app/                          # Next.js管理画面【Step 3.15完了】
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── layout.tsx       # ルートレイアウト
-│   │   │   ├── page.tsx         # ダッシュボード（タイルセット数表示修正済み）
+│   │   │   ├── page.tsx         # ダッシュボード（統計表示追加）【Step 3.15】
 │   │   │   ├── globals.css      # グローバルスタイル
 │   │   │   ├── login/
 │   │   │   │   └── page.tsx     # ログインページ【Step 3.2】
 │   │   │   ├── tilesets/
-│   │   │   │   ├── page.tsx     # タイルセット一覧【Step 3.3】
+│   │   │   │   ├── page.tsx     # タイルセット一覧（一括削除追加）【Step 3.13】
 │   │   │   │   ├── new/
 │   │   │   │   │   └── page.tsx # タイルセット新規作成【Step 3.3】
 │   │   │   │   └── [id]/
-│   │   │   │       ├── page.tsx # タイルセット詳細【Step 3.3】
+│   │   │   │       ├── page.tsx # タイルセット詳細（統計カード追加）【Step 3.15】
 │   │   │   │       └── edit/
 │   │   │   │           └── page.tsx # タイルセット編集【Step 3.3】
-│   │   │   ├── features/        # フィーチャー管理【Step 3.4, 3.7】
-│   │   │   │   ├── page.tsx     # フィーチャー一覧（インポートボタン追加）
+│   │   │   ├── features/        # フィーチャー管理【Step 3.4, 3.7, 3.13】
+│   │   │   │   ├── page.tsx     # フィーチャー一覧（一括削除追加）【Step 3.13】
 │   │   │   │   ├── new/
-│   │   │   │   │   └── page.tsx # フィーチャー新規作成
+│   │   │   │   │   └── page.tsx # フィーチャー新規作成（ジオメトリエディタ）【Step 3.13】
 │   │   │   │   ├── import/
 │   │   │   │   │   └── page.tsx # GeoJSONインポート【Step 3.7】
 │   │   │   │   └── [id]/
 │   │   │   │       ├── page.tsx # フィーチャー詳細
 │   │   │   │       └── edit/
-│   │   │   │           └── page.tsx # フィーチャー編集
+│   │   │   │           └── page.tsx # フィーチャー編集（ジオメトリエディタ）【Step 3.13】
 │   │   │   ├── datasources/     # データソース管理【Step 3.8】
 │   │   │   │   ├── page.tsx     # データソース一覧
 │   │   │   │   ├── new/
@@ -182,11 +183,12 @@ geo-base/
 │   │   │   │   ├── tileset-form.tsx      # 作成/編集フォーム
 │   │   │   │   ├── delete-tileset-dialog.tsx # 削除確認ダイアログ
 │   │   │   │   └── index.ts
-│   │   │   ├── features/        # フィーチャー関連コンポーネント【Step 3.4, 3.7】
+│   │   │   ├── features/        # フィーチャー関連コンポーネント【Step 3.4, 3.7, 3.13】
 │   │   │   │   ├── feature-form.tsx      # 作成/編集フォーム
 │   │   │   │   ├── delete-feature-dialog.tsx # 削除確認ダイアログ
 │   │   │   │   ├── geojson-dropzone.tsx  # ドラッグ&ドロップアップロード【Step 3.7】
 │   │   │   │   ├── geojson-preview.tsx   # 地図プレビュー【Step 3.7】
+│   │   │   │   ├── geometry-editor.tsx   # ジオメトリエディタ【Step 3.13】
 │   │   │   │   └── index.ts
 │   │   │   ├── settings/        # 設定関連コンポーネント【Step 3.5】
 │   │   │   │   ├── profile-form.tsx      # プロフィール編集
@@ -200,6 +202,7 @@ geo-base/
 │   │   │       ├── alert.tsx    # アラートコンポーネント【Step 3.8】
 │   │   │       ├── button.tsx
 │   │   │       ├── card.tsx
+│   │   │       ├── checkbox.tsx # チェックボックス【Step 3.13】
 │   │   │       ├── input.tsx
 │   │   │       ├── label.tsx
 │   │   │       ├── table.tsx
@@ -213,7 +216,7 @@ geo-base/
 │   │   │       └── separator.tsx
 │   │   ├── lib/
 │   │   │   ├── api.ts           # APIクライアント
-│   │   │   │                    # ※Datasource型・API追加【Step 3.8】
+│   │   │   │                    # ※統計API追加【Step 3.15】
 │   │   │   ├── utils.ts         # ユーティリティ（cn関数）
 │   │   │   └── supabase/        # Supabase クライアント【Step 3.2】
 │   │   │       ├── client.ts    # ブラウザ用クライアント
@@ -227,7 +230,7 @@ geo-base/
 │   ├── middleware.ts            # Next.js認証ミドルウェア【Step 3.2】
 │   ├── public/                  # 静的ファイル
 │   ├── .env.example             # 環境変数サンプル
-│   ├── package.json             # バージョン: 0.7.0
+│   ├── package.json             # バージョン: 0.10.0
 │   ├── package-lock.json
 │   ├── tsconfig.json
 │   ├── next.config.ts
@@ -247,218 +250,180 @@ geo-base/
 │   ├── seed.sh
 │   ├── seed_sample_data.fish    # サンプルデータ投入（fish shell）【Step 3.4】
 │   └── seed_sample_data.py      # サンプルデータ投入（Python）【Step 3.4】
-├── vercel.json                   # API用（既存のまま）
-├── DEPLOY.md
-├── TESTING.md                    # 動作確認手順【Step 2.4-B】
-├── LOCAL_DEVELOPMENT.md          # ローカル開発環境ガイド【Step 3.1】
-├── HANDOVER.md                   # 本ドキュメント
-├── PROJECT_ROADMAP.md            # プロジェクトロードマップ
-└── README.md
+├── .github/
+│   └── workflows/               # CI/CD（未実装）
+├── vercel.json                  # Vercel設定（API用）
+├── .gitignore
+├── HANDOVER.md                  # このドキュメント
+├── PROJECT_ROADMAP.md           # プロジェクトロードマップ
+└── README.md                    # プロジェクト概要
 ```
 
 ---
 
-## 4. データベーススキーマ
+## 4. 最新のステップ詳細（Step 3.13〜3.15）
 
-### テーブル一覧
+### Step 3.13: 一括削除機能・ジオメトリエディタ
 
-| テーブル名 | 説明 |
-|-----------|------|
-| tilesets | タイルセットのメタデータ |
-| features | ベクタフィーチャーデータ（PostGIS geometry） |
-| tile_files | 静的タイルファイルの参照情報 |
-| pmtiles_sources | PMTilesファイルのソース情報【Step 3.8】 |
-| raster_sources | COGファイルのソース情報【Step 3.8】 |
+#### 実装内容
 
-### pmtiles_sources テーブル【Step 3.8】
+1. **一括削除機能**
+   - タイルセット一覧：チェックボックスで複数選択、一括削除ボタン
+   - フィーチャー一覧：チェックボックスで複数選択、一括削除ボタン
+   - 削除確認ダイアログで選択数を表示
 
-```sql
-CREATE TABLE pmtiles_sources (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tileset_id UUID NOT NULL UNIQUE REFERENCES tilesets(id) ON DELETE CASCADE,
-    pmtiles_url TEXT NOT NULL,
-    storage_provider VARCHAR(50) DEFAULT 'supabase',  -- 'supabase', 's3', 'http'
-    tile_type VARCHAR(20),        -- 'vector', 'raster', 'unknown'
-    tile_compression VARCHAR(20), -- 'gzip', 'zstd', 'br', 'none'
-    min_zoom INTEGER,
-    max_zoom INTEGER,
-    bounds JSONB,                 -- [west, south, east, north]
-    center JSONB,                 -- [lng, lat, zoom]
-    layers JSONB DEFAULT '[]',    -- Vector layer info for MVT
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+2. **ジオメトリエディタ**
+   - フィーチャー作成/編集ページにマップ上でのジオメトリ編集機能
+   - Point/LineString/Polygon対応
+   - 地図クリックで座標追加、既存座標の編集・削除
+   - JSON直接編集とマップ編集の切り替え
+
+3. **UIコンポーネント追加**
+   - `checkbox.tsx` - shadcn/uiチェックボックス
+   - `geometry-editor.tsx` - ジオメトリエディタコンポーネント
+
+### Step 3.14: マップキャッシュリフレッシュ修正
+
+#### 実装内容
+
+- フィーチャー編集後のマップ更新が正しく動作するよう修正
+- `mapRefreshKey` を `Date.now()` ベースに変更（確実なキャッシュバスティング）
+- 更新ボタン押下時に `isRefreshing` 状態を表示
+
+### Step 3.15: タイルセット統計・エラーハンドリング改善
+
+#### 実装内容
+
+1. **システム統計API** (`GET /api/stats`)
+   - タイルセット数（タイプ別、公開/非公開）
+   - フィーチャー数（ジオメトリタイプ別：Point/LineString/Polygon）
+   - データソース数（PMTiles/COG）
+   - フィーチャー数上位タイルセット（トップ10）
+
+2. **タイルセット統計API** (`GET /api/tilesets/{id}/stats`)
+   - フィーチャー数
+   - ジオメトリタイプ分布
+   - バウンズ（フィーチャーから計算）
+   - 最終更新日時
+   - アクセス制御（非公開タイルセットはオーナーのみ）
+
+3. **ダッシュボード機能強化**
+   - フィーチャー数表示（新規統計カード）
+   - ジオメトリタイプ分布表示（Point/Line/Polygon）
+   - 公開/非公開タイルセット統計
+   - データソース統計（PMTiles/COG数）
+   - フィーチャー数上位タイルセット表示（トップ3）
+   - エラー表示の改善（アイコン付きアラート）
+
+4. **タイルセット詳細ページ機能強化**
+   - フィーチャー統計カード追加（vectorタイプのみ）
+   - 総フィーチャー数、Point/Line/Polygon数表示
+   - 最終更新日時表示
+
+5. **APIクライアント更新**
+   - `SystemStats` 型定義追加
+   - `TilesetStats` 型定義追加
+   - `getSystemStats()` メソッド追加
+   - `getTilesetStats(id)` メソッド追加
+
+---
+
+## 5. APIエンドポイント一覧
+
+### タイル配信
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|--------------|--------|-----|------|
+| `/api/health` | GET | 不要 | ヘルスチェック |
+| `/api/tilesets` | GET | オプション | タイルセット一覧（公開のみ or 全て） |
+| `/api/tilesets/{id}` | GET | オプション | タイルセット詳細 |
+| `/api/tilesets/{id}/tilejson` | GET | オプション | TileJSON取得 |
+| `/api/tilesets/{id}/tiles/{z}/{x}/{y}.{format}` | GET | オプション | タイル取得 |
+| `/api/stats` | GET | 不要 | システム統計【Step 3.15】 |
+| `/api/tilesets/{id}/stats` | GET | オプション | タイルセット統計【Step 3.15】 |
+
+### タイルセットCRUD
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|--------------|--------|-----|------|
+| `/api/tilesets` | POST | 必須 | タイルセット作成 |
+| `/api/tilesets/{id}` | PUT | 必須 | タイルセット更新 |
+| `/api/tilesets/{id}` | DELETE | 必須 | タイルセット削除 |
+
+### フィーチャーCRUD
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|--------------|--------|-----|------|
+| `/api/features` | GET | オプション | フィーチャー一覧 |
+| `/api/features/{id}` | GET | オプション | フィーチャー詳細 |
+| `/api/features` | POST | 必須 | フィーチャー作成 |
+| `/api/features/bulk` | POST | 必須 | フィーチャー一括作成【Step 3.7】 |
+| `/api/features/{id}` | PUT | 必須 | フィーチャー更新 |
+| `/api/features/{id}` | DELETE | 必須 | フィーチャー削除 |
+
+### データソースCRUD【Step 3.8】
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|--------------|--------|-----|------|
+| `/api/datasources` | GET | 必須 | データソース一覧 |
+| `/api/datasources/{id}` | GET | 必須 | データソース詳細 |
+| `/api/datasources` | POST | 必須 | データソース作成 |
+| `/api/datasources/{id}` | PUT | 必須 | データソース更新 |
+| `/api/datasources/{id}` | DELETE | 必須 | データソース削除 |
+| `/api/datasources/{id}/test` | POST | 必須 | データソース接続テスト |
+
+---
+
+## 6. 環境変数
+
+### API（api/.env）
+
+```bash
+# データベース
+DATABASE_URL=postgresql://user:pass@host:5432/db
+
+# 認証（Supabase）
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_ANON_KEY=xxx
+SUPABASE_JWT_SECRET=xxx
+
+# 環境
+ENVIRONMENT=development  # development | production
 ```
 
-### raster_sources テーブル【Step 3.8】
+### Admin UI（app/.env.local）
 
-```sql
-CREATE TABLE raster_sources (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tileset_id UUID NOT NULL UNIQUE REFERENCES tilesets(id) ON DELETE CASCADE,
-    cog_url TEXT NOT NULL,
-    storage_provider VARCHAR(50) DEFAULT 'http',
-    band_count INTEGER,
-    band_descriptions JSONB DEFAULT '[]',
-    statistics JSONB DEFAULT '{}',
-    native_crs VARCHAR(50),
-    native_resolution FLOAT,
-    recommended_min_zoom INTEGER,
-    recommended_max_zoom INTEGER,
-    bounds JSONB,
-    center JSONB,
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+```bash
+# API
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 ```
 
-### 制約
+### MCP Server（mcp/.env）
 
-- 1つのタイルセットには最大1つのデータソース（PMTiles OR COG、両方は不可）
-- `tileset_id`にUNIQUE制約
+```bash
+# API
+GEO_BASE_API_URL=http://localhost:8000
+GEO_BASE_AUTH_TOKEN=xxx  # オプション
 
----
-
-## 5. Step 3.8 データソース管理UI 詳細
-
-### 実装内容
-
-| サブステップ | 内容 | ファイル |
-|-------------|------|---------|
-| 3.8.1 | API拡張（データソースエンドポイント） | `api/lib/main.py` |
-| 3.8.2 | データソース一覧UI | `app/src/app/datasources/page.tsx` |
-| 3.8.3 | データソース新規登録フォーム | `app/src/app/datasources/new/page.tsx` |
-| 3.8.4 | データソース詳細ページ | `app/src/app/datasources/[id]/page.tsx` |
-| 3.8.5 | 接続テスト機能 | 各ページに統合 |
-
-### APIエンドポイント（データソース）
-
-| メソッド | パス | 認証 | 説明 |
-|---------|------|------|------|
-| GET | `/api/datasources` | 不要※ | データソース一覧 |
-| GET | `/api/datasources/{id}` | 条件付き | データソース詳細 |
-| POST | `/api/datasources` | 必須 | データソース作成 |
-| DELETE | `/api/datasources/{id}` | 必須 | データソース削除 |
-| POST | `/api/datasources/{id}/test` | 必須 | 接続テスト |
-
-※ 公開タイルセットのデータソースは認証不要で取得可能
-
-### 機能
-
-1. **一覧表示**: PMTiles/COGを統合表示、タイプ別フィルタリング
-2. **新規登録**: タイプ選択 → タイルセット選択 → URL入力 → ストレージプロバイダ自動検出
-3. **詳細表示**: メタデータ、関連タイルセットへのリンク、接続テスト
-4. **接続テスト**: PMTilesはメタデータ取得、COGは情報取得で確認
-
-### 修正されたバグ
-
-| ファイル | 問題 | 修正内容 |
-|---------|------|---------|
-| `api/lib/pmtiles.py` | `reader.header()`メソッド呼び出しエラー | `reader.header`プロパティに変更、Enum値の`.value`取得 |
-| `api/lib/raster_tiles.py` | `info.minzoom`属性がない | `getattr()`で安全にアクセス、`cog.minzoom`へのフォールバック |
-| `docker/postgis-init/01_init.sql` | `type`制約に`'pmtiles'`がない | 制約に追加 |
-| `docker/postgis-init/04_rls_policies.sql` | `authenticated`ロールがローカルにない | ローカル開発用に全許可ポリシーに変更 |
+# サーバー設定
+MCP_TRANSPORT=stdio  # stdio | sse
+```
 
 ---
 
-## 6. Step 3.9 マップビューワー 詳細
-
-### 実装内容
-
-| サブステップ | 内容 | ファイル |
-|-------------|------|---------|
-| 3.9.1 | TilesetMapPreviewコンポーネント | `app/src/components/map/tileset-map-preview.tsx` |
-| 3.9.2 | mapエクスポート更新 | `app/src/components/map/index.ts` |
-| 3.9.3 | タイルセット詳細ページに統合 | `app/src/app/tilesets/[id]/page.tsx` |
-
-### TilesetMapPreviewコンポーネント機能
-
-1. **タイルセットタイプ別表示**
-   - vector: PostGISベースのMVTタイル表示
-   - pmtiles: PMTilesファイルからのタイル表示
-   - raster: COGベースのラスタータイル表示
-
-2. **自動設定**
-   - TileJSONまたはタイルセット情報から中心座標・ズームを自動計算
-   - boundsから中心を計算するフォールバック
-
-3. **レイヤースタイル**
-   - ポリゴン: 塗りつぶし + 境界線
-   - ライン: 線描画
-   - ポイント: サークル + ストローク
-
-4. **インタラクション**
-   - ポイントクリックでプロパティ表示（ポップアップ）
-   - 「範囲にフィット」ボタン
-   - 表示/非表示トグル
-
-### Props
-
-| プロパティ | 型 | 説明 |
-|-----------|---|------|
-| tileset | Tileset | タイルセット情報（必須） |
-| tileJSON | TileJSON \| null | TileJSON（オプション） |
-| height | string | 地図の高さ（デフォルト: "400px"） |
-| fillColor | string | ポリゴン塗りつぶし色 |
-| lineColor | string | 線の色 |
-| pointColor | string | ポイントの色 |
-| hideBaseMap | boolean | ベースマップを非表示にするか |
-
-### 動作確認結果（2025-12-14）
-
-| タイルタイプ | 動作確認 | 備考 |
-|-------------|----------|------|
-| PMTiles | ✅ 成功 | フィレンツェ地域のサンプルデータで表示確認 |
-| COG (ラスター) | ✅ 成功 | 北海道南部（Sentinel-2 Tile 54TWN）で表示確認 |
-| Vector (PostGIS) | ✅ 成功 | 既存のPostGISベースMVT表示確認済み |
-
-### 注意事項
-
-1. **タイルの範囲**: PMTiles/COGファイルは特定の地域のみをカバーしているため、地図を適切な位置にパンする必要がある
-2. **TileJSONのbounds**: 現在、デフォルト値（全世界）が設定されているため、実際のCOG範囲とは異なる場合がある
-3. **CORS設定**: `allow_credentials=False`に設定（`allow_origins=["*"]`との併用制約のため）
-
----
-
-## 7. 次のステップ（未実装）
+## 7. 今後の課題
 
 ### 高優先度
-
-#### マップビューワーの初期表示位置改善
-
-**目的**: タイルセットの実際のデータ範囲に自動的にフィットする
-
-**現状の問題**:
-- TileJSONのboundsがデフォルト値（全世界）になっている場合、地図がデータのない位置を表示する
-- ユーザーが手動でパンしないとタイルが見えない
-
-**実装方針**:
-1. データソース登録時に実際のboundsを計算・保存
-2. タイルセットのbounds/centerを自動更新するAPIエンドポイント追加
-3. TilesetMapPreviewで「データ範囲にフィット」ボタンの動作を改善
-
-**優先度**: 高
-
-### 中優先度
-
-#### フィーチャー地図表示の改善
-
-**目的**: フィーチャー詳細ページでの地図表示を改善
-
-**実装方針**:
-1. 既存のMapViewコンポーネントを活用
-2. フィーチャーのジオメトリをハイライト表示
-3. 編集ページでの座標ピッカー改善
-
-**優先度**: 中
 
 #### 本番デプロイ
 
 **対象**:
-- API（CORS修正、PMTiles TileJSON修正）
-- Admin UI（マップビューワー追加）
+- API（統計エンドポイント追加）
+- Admin UI（統計表示、一括削除、ジオメトリエディタ）
 
 **手順**:
 ```bash
@@ -472,44 +437,76 @@ git push origin main
 - Supabaseの本番DBに`pmtiles_sources`と`raster_sources`テーブルが必要
 - 本番のRLSポリシーは`04_rls_policies.sql.supabase`を使用
 
-### 低優先度
+### 中優先度
 
-#### タイルセット統計・分析機能
+#### Toast通知システム統合
 
-**目的**: タイルセットの利用状況やフィーチャー数などの統計表示
+**目的**: CRUD操作の成功/失敗をユーザーにフィードバック
 
 **実装方針**:
-1. APIにフィーチャーカウントエンドポイント追加
-2. ダッシュボードに統計グラフ追加
-3. タイルセット詳細ページに統計カード追加
+1. Toast通知コンポーネントは作成済み（`app/src/components/ui/toast.tsx`）
+2. 各ページのCRUD操作にToast呼び出しを追加
+3. 成功時は緑色、エラー時は赤色で表示
+
+**優先度**: 中
+
+#### ドキュメント整備
+
+**目的**: 開発者向けドキュメントの充実
+
+**実装方針**:
+1. API仕様書（OpenAPI/Swagger）の整備
+2. MCPサーバーのツール一覧ドキュメント
+3. ローカル開発環境セットアップガイドの更新
+
+**優先度**: 中
+
+### 低優先度
+
+#### 権限管理の高度化
+
+**目的**: チーム利用時の権限管理
+
+**実装方針**:
+1. ロールベースアクセス制御（RBAC）
+2. タイルセット単位の共有設定
+3. 組織機能の追加
+
+**優先度**: 低
+
+#### パフォーマンス最適化
+
+**目的**: 大量データ時のレスポンス改善
+
+**実装方針**:
+1. タイルキャッシュのCDN連携
+2. フィーチャー検索のインデックス最適化
+3. ページネーションの改善
 
 **優先度**: 低
 
 ### 完了した課題
 
-#### ~~PMTiles用TileJSONエンドポイント修正~~ ✅ 完了
+#### ~~タイルセット統計・分析機能~~ ✅ 完了（Step 3.15）
 
-**症状**: pmtilesタイプのタイルセットでTileJSON取得時に500エラー
+- システム統計API追加
+- タイルセット統計API追加
+- ダッシュボードに統計表示
+- タイルセット詳細に統計カード追加
 
-**原因**: `generate_pmtiles_tilejson()`関数の呼び出し時に引数が正しくマッピングされていなかった
-- `name` → `tileset_name`に変更が必要
-- 個別の引数を`metadata`辞書にまとめる必要があった
+#### ~~一括削除機能~~ ✅ 完了（Step 3.13）
 
-**修正内容**:
-- `api/lib/main.py`の`get_tileset_tilejson`エンドポイント内で、pmtilesタイプの場合の`generate_pmtiles_tilejson()`呼び出しを修正
+- タイルセット一覧での一括削除
+- フィーチャー一覧での一括削除
 
-**ステータス**: ✅ 修正完了
+#### ~~ジオメトリエディタ~~ ✅ 完了（Step 3.13）
 
-#### ~~CORS設定の修正~~ ✅ 完了
+- マップ上でのジオメトリ編集
+- Point/LineString/Polygon対応
 
-**症状**: ブラウザからのタイルリクエストがCORSエラーでブロックされる
+#### ~~マップキャッシュリフレッシュ~~ ✅ 完了（Step 3.14）
 
-**原因**: `allow_origins=["*"]`と`allow_credentials=True`の組み合わせはブラウザで拒否される
-
-**修正内容**:
-- `api/lib/main.py`のCORSMiddleware設定を`allow_credentials=False`に変更
-
-**ステータス**: ✅ 修正完了
+- フィーチャー編集後のマップ更新修正
 
 ---
 
@@ -544,13 +541,7 @@ git push origin main
 | pmtiles | ❌ 不可 | ✅ 必須（PMTilesファイル） |
 | raster | ❌ 不可 | ✅ 必須（COGファイル） |
 
-### ~~4. PMTiles TileJSON 500エラー~~ ✅ 修正済み
-
-**症状**: pmtilesタイプのタイルセット詳細ページでTileJSON取得時に500エラー
-
-**修正済み**: `api/lib/main.py`の`generate_pmtiles_tilejson()`呼び出しの引数を修正
-
-### 5. Next.js 16 Middleware警告
+### 4. Next.js 16 Middleware警告
 
 **症状**: ビルド時に `middleware` ファイル規約が非推奨との警告が表示される
 
@@ -558,7 +549,7 @@ git push origin main
 
 ---
 
-## 8. 技術スタック
+## 9. 技術スタック
 
 | レイヤー | 技術 | バージョン | 備考 |
 |---------|------|-----------|------|
@@ -579,127 +570,4 @@ git push origin main
 | Package Manager (Python) | uv | latest | |
 | Package Manager (Node) | npm | - | |
 | Vector Tiles | PostGIS ST_AsMVT | - | |
-| PMTiles | aiopmtiles | 0.1.0 | ✅ Vercelで動作 |
-| Raster Tiles | rio-tiler | 7.0+ | ⚠️ Vercelでは動作不可 |
-| Authentication | Supabase Auth + PyJWT | - | ✅ JWT検証実装済み |
-| Geocoding | Nominatim API | - | OpenStreetMap |
-| Tile Format | MVT (pbf), PNG, WebP | - | |
-
----
-
-## 9. ローカル開発環境セットアップ
-
-### Docker PostgreSQL初期化
-
-```fish
-cd /path/to/geo-base/docker
-
-# ボリューム削除して再初期化
-docker compose down -v
-docker compose up -d
-
-# ログ確認（エラーがないこと）
-docker compose logs -f postgis
-```
-
-### API起動
-
-```fish
-cd /path/to/geo-base/api
-uv run uvicorn lib.main:app --reload --port 8000
-```
-
-### Admin UI起動
-
-```fish
-cd /path/to/geo-base/app
-npm run dev
-```
-
-### 動作確認URL
-
-| サービス | URL |
-|---------|-----|
-| API | http://localhost:8000 |
-| Admin UI | http://localhost:3000 |
-| API Docs | http://localhost:8000/docs |
-
-### テスト用サンプルデータ
-
-ローカルテストで使用できるサンプルデータソース：
-
-#### PMTiles
-| 名前 | URL | 範囲 |
-|------|-----|------|
-| Protomaps Firenze | `https://protomaps.github.io/PMTiles/protomaps(vector)ODbL_firenze.pmtiles` | イタリア・フィレンツェ（緯度43.77, 経度11.25） |
-| US ZCTAs | `https://r2-public.protomaps.com/protomaps-sample-datasets/cb_2018_us_zcta510_500k.pmtiles` | 米国全域 |
-
-#### COG (Cloud Optimized GeoTIFF)
-| 名前 | URL | 範囲 |
-|------|-----|------|
-| Sentinel-2 54TWN | `https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/54/T/WN/2023/11/S2B_54TWN_20231118_1_L2A/TCI.tif` | 北海道南部（緯度42.36〜43.34, 経度140.99〜142.35）, z7-13 |
-
-**注意**: COGはローカル環境でのみ動作（Vercelでは rasterio が使用不可）
-
----
-
-## 10. 本番環境URL一覧
-
-| サービス | URL | プラットフォーム | 状態 |
-|---------|-----|----------------|------|
-| Admin UI | https://geo-base-app.vercel.app | Vercel | ✅ 稼働中 |
-| API | https://geo-base-puce.vercel.app | Vercel | ✅ 稼働中 |
-| MCP Server | https://geo-base-mcp.fly.dev | Fly.io | ✅ 稼働中 |
-
----
-
-## 11. 参照資料
-
-### プロジェクト内ドキュメント
-- `/mnt/project/geolocation-tech-source.txt` - タイルサーバー実装のサンプルコード
-- `/mnt/project/PROJECT_ROADMAP.md` - プロジェクトロードマップ
-- `/mnt/project/geo-base.txt` - 最新ソースコード
-- `TESTING.md` - 動作確認手順
-- `LOCAL_DEVELOPMENT.md` - ローカル開発環境ガイド
-
-### 外部ドキュメント
-- [Next.js Documentation](https://nextjs.org/docs)
-- [shadcn/ui Documentation](https://ui.shadcn.com/)
-- [Supabase Auth (SSR)](https://supabase.com/docs/guides/auth/server-side/nextjs)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [FastMCP Documentation](https://gofastmcp.com/)
-- [MCP Specification](https://modelcontextprotocol.io/)
-- [PostGIS MVT Functions](https://postgis.net/docs/ST_AsMVT.html)
-- [MapLibre GL JS](https://maplibre.org/maplibre-gl-js/docs/)
-- [aiopmtiles](https://github.com/developmentseed/aiopmtiles)
-- [rio-tiler](https://cogeotiff.github.io/rio-tiler/)
-
----
-
-## 12. 変更履歴
-
-| 日付 | バージョン | 変更内容 |
-|------|-----------|---------|
-| 2025-12-12 | 0.1.0 | 初版作成（Step 1.1〜1.4完了） |
-| 2025-12-12 | 0.2.0 | ラスタタイル対応（Step 1.5）、PMTiles対応（Step 1.6）追加 |
-| 2025-12-12 | 0.3.0 | 認証機能（Step 1.7）追加 |
-| 2025-12-12 | 0.4.0 | MCPサーバー基盤構築（Step 2.1）、テスト追加（Step 2.2） |
-| 2025-12-12 | 0.5.0 | Fly.ioデプロイ（Step 2.3）、Claude Desktop連携確認（Step 2.4） |
-| 2025-12-12 | 0.6.0 | ジオコーディングツール追加（Step 2.4-A） |
-| 2025-12-12 | 0.7.0 | CRUDツール追加（Step 2.4-B）、Phase 2完了 |
-| 2025-12-13 | 0.8.0 | Next.js Admin UI基盤構築（Step 3.1完了） |
-| 2025-12-13 | 0.9.0 | Supabase Auth連携（Step 3.2完了） |
-| 2025-12-13 | 1.0.0 | タイルセット管理UI（Step 3.3完了）、バグ修正、タイル表示確認 |
-| 2025-12-13 | 1.1.0 | フィーチャー管理UI（Step 3.4完了）、MapLibre GL JS統合、サンプルデータ投入スクリプト追加 |
-| 2025-12-14 | 1.2.0 | 設定画面（Step 3.5完了）、ダッシュボードのタイルセット数表示修正 |
-| 2025-12-14 | 1.3.0 | GeoJSONインポート機能（Step 3.7完了）、フィーチャー一覧にインポートボタン追加 |
-| 2025-12-14 | 1.4.0 | データソース管理UI（Step 3.8完了）、PMTiles/COG接続テスト、aiopmtiles/rio-tiler互換性修正 |
-| 2025-12-14 | 1.4.1 | PMTiles TileJSONエンドポイント500エラー修正（generate_pmtiles_tilejson引数修正） |
-| 2025-12-14 | 1.5.0 | マップビューワー（Step 3.9完了）、TilesetMapPreviewコンポーネント追加、CORS設定修正 |
-| 2025-12-14 | 1.6.0 | マップビューワー初期表示位置改善（Step 3.10完了）、COG WGS84座標変換修正 |
-| 2025-12-14 | 1.7.0 | DBコネクションプール枯渇対策（Step 3.11完了）、インメモリキャッシュ導入 |
-| 2025-12-14 | 1.8.0 | GeoJSONインポート時Bounds自動取得（Step 3.12完了）、vectorタイプTileJSON改善、本番デプロイ |
-
----
-
-*このドキュメントは2025-12-14時点の情報です。APIバージョン: 0.4.0 / MCPバージョン: 0.2.0 / Admin UIバージョン: 0.9.0（Step 3.12完了）*
+| PMTiles | aiopm
