@@ -52,6 +52,15 @@ from lib.pmtiles import (
     get_pmtiles_cache_headers,
     generate_pmtiles_tilejson,
 )
+from lib.cache import (
+    get_cached_tileset_info,
+    cache_tileset_info,
+    invalidate_tileset_cache,
+    get_cached_pmtiles_metadata,
+    cache_pmtiles_metadata,
+    get_cache_stats,
+    clear_all_caches,
+)
 from lib.auth import (
     User,
     get_current_user,
@@ -239,6 +248,26 @@ def health_check_db():
         response["postgis_error"] = postgis_result["error"]
     
     return response
+
+
+@app.get("/api/health/cache")
+def health_check_cache():
+    """Cache statistics endpoint."""
+    return {
+        "status": "ok",
+        "cache": get_cache_stats(),
+    }
+
+
+@app.post("/api/admin/cache/clear")
+def clear_cache(user: User = Depends(require_auth)):
+    """
+    Clear all caches.
+    
+    Requires authentication. In production, this should be restricted to admins.
+    """
+    clear_all_caches()
+    return {"status": "ok", "message": "All caches cleared"}
 
 
 # ============================================================================
@@ -506,52 +535,77 @@ async def get_pmtiles_tile_endpoint(
             detail="PMTiles service is not available. aiopmtiles not installed."
         )
     
-    # Get PMTiles source from database with access check
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT ps.pmtiles_url, ps.tile_type, ps.tile_compression,
-                       ps.min_zoom, ps.max_zoom,
-                       t.is_public, t.user_id
-                FROM pmtiles_sources ps
-                JOIN tilesets t ON ps.tileset_id = t.id
-                WHERE t.id = %s
-                LIMIT 1
-                """,
-                (tileset_id,),
-            )
-            row = cur.fetchone()
-        
-        if not row:
-            raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
-        
-        pmtiles_url, tile_type, compression, min_zoom, max_zoom, is_public, owner_user_id = row
-        owner_user_id = str(owner_user_id) if owner_user_id else None
-        
-        # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Authentication required to access this tileset",
-                    headers={"WWW-Authenticate": "Bearer"},
+    # Try to get tileset info from cache first
+    cache_key = f"pmtiles:{tileset_id}"
+    cached_info = get_cached_tileset_info(cache_key)
+    
+    if cached_info:
+        # Use cached info
+        pmtiles_url = cached_info["pmtiles_url"]
+        tile_type = cached_info["tile_type"]
+        compression = cached_info["compression"]
+        min_zoom = cached_info["min_zoom"]
+        max_zoom = cached_info["max_zoom"]
+        is_public = cached_info["is_public"]
+        owner_user_id = cached_info["owner_user_id"]
+    else:
+        # Get PMTiles source from database with access check
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT ps.pmtiles_url, ps.tile_type, ps.tile_compression,
+                           ps.min_zoom, ps.max_zoom,
+                           t.is_public, t.user_id
+                    FROM pmtiles_sources ps
+                    JOIN tilesets t ON ps.tileset_id = t.id
+                    WHERE t.id = %s
+                    LIMIT 1
+                    """,
+                    (tileset_id,),
                 )
+                row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
+            
+            pmtiles_url, tile_type, compression, min_zoom, max_zoom, is_public, owner_user_id = row
+            owner_user_id = str(owner_user_id) if owner_user_id else None
+            
+            # Cache the tileset info
+            cache_tileset_info(cache_key, {
+                "pmtiles_url": pmtiles_url,
+                "tile_type": tile_type,
+                "compression": compression,
+                "min_zoom": min_zoom,
+                "max_zoom": max_zoom,
+                "is_public": is_public,
+                "owner_user_id": owner_user_id,
+            })
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Check access
+    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+        if not user:
             raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+                status_code=401,
+                detail="Authentication required to access this tileset",
+                headers={"WWW-Authenticate": "Bearer"},
             )
-        
-        # Validate zoom level
-        if min_zoom is not None and z < min_zoom:
-            raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
-        if max_zoom is not None and z > max_zoom:
-            raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to access this tileset"
+        )
+    
+    # Validate zoom level
+    if min_zoom is not None and z < min_zoom:
+        raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
+    if max_zoom is not None and z > max_zoom:
+        raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
     
     # Get tile from PMTiles
     try:
@@ -775,54 +829,81 @@ async def get_raster_tile(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    # Get COG URL from database with access check
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT rs.cog_url, t.min_zoom, t.max_zoom, t.is_public, t.user_id,
-                       COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
-                       COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max,
-                       COALESCE(t.metadata->>'bands', NULL) as default_bands
-                FROM raster_sources rs
-                JOIN tilesets t ON rs.tileset_id = t.id
-                WHERE t.id = %s
-                LIMIT 1
-                """,
-                (settings.raster_default_scale_min, settings.raster_default_scale_max, tileset_id),
-            )
-            row = cur.fetchone()
-        
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
-        
-        (cog_url, min_zoom, max_zoom, is_public, owner_user_id,
-         db_scale_min, db_scale_max, default_bands) = row
-        owner_user_id = str(owner_user_id) if owner_user_id else None
-        
-        # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Authentication required to access this tileset",
-                    headers={"WWW-Authenticate": "Bearer"},
+    # Try to get tileset info from cache first
+    cache_key = f"raster:{tileset_id}"
+    cached_info = get_cached_tileset_info(cache_key)
+    
+    if cached_info:
+        # Use cached info
+        cog_url = cached_info["cog_url"]
+        min_zoom = cached_info["min_zoom"]
+        max_zoom = cached_info["max_zoom"]
+        is_public = cached_info["is_public"]
+        owner_user_id = cached_info["owner_user_id"]
+        db_scale_min = cached_info["scale_min"]
+        db_scale_max = cached_info["scale_max"]
+        default_bands = cached_info["default_bands"]
+    else:
+        # Get COG URL from database with access check
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT rs.cog_url, t.min_zoom, t.max_zoom, t.is_public, t.user_id,
+                           COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
+                           COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max,
+                           COALESCE(t.metadata->>'bands', NULL) as default_bands
+                    FROM raster_sources rs
+                    JOIN tilesets t ON rs.tileset_id = t.id
+                    WHERE t.id = %s
+                    LIMIT 1
+                    """,
+                    (settings.raster_default_scale_min, settings.raster_default_scale_max, tileset_id),
                 )
+                row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+            
+            (cog_url, min_zoom, max_zoom, is_public, owner_user_id,
+             db_scale_min, db_scale_max, default_bands) = row
+            owner_user_id = str(owner_user_id) if owner_user_id else None
+            
+            # Cache the tileset info
+            cache_tileset_info(cache_key, {
+                "cog_url": cog_url,
+                "min_zoom": min_zoom,
+                "max_zoom": max_zoom,
+                "is_public": is_public,
+                "owner_user_id": owner_user_id,
+                "scale_min": db_scale_min,
+                "scale_max": db_scale_max,
+                "default_bands": default_bands,
+            })
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+    
+    # Check access
+    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
+        if not user:
             raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+                status_code=401,
+                detail="Authentication required to access this tileset",
+                headers={"WWW-Authenticate": "Bearer"},
             )
-        
-        # Validate zoom level
-        if min_zoom and z < min_zoom:
-            raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
-        if max_zoom and z > max_zoom:
-            raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to access this tileset"
+        )
+    
+    # Validate zoom level
+    if min_zoom and z < min_zoom:
+        raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
+    if max_zoom and z > max_zoom:
+        raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
     
     # Parse band indexes
     band_indexes = None
@@ -1721,6 +1802,11 @@ def update_tileset(
             row = cur.fetchone()
             conn.commit()
             
+            # Invalidate cache for this tileset
+            invalidate_tileset_cache(f"raster:{tileset_id}")
+            invalidate_tileset_cache(f"pmtiles:{tileset_id}")
+            invalidate_tileset_cache(f"vector:{tileset_id}")
+            
             return {
                 "id": str(row[0]),
                 "name": row[1],
@@ -1771,6 +1857,11 @@ def delete_tileset(
             # Delete tileset (cascades to features due to FK constraint)
             cur.execute("DELETE FROM tilesets WHERE id = %s", (tileset_id,))
             conn.commit()
+            
+            # Invalidate cache for this tileset
+            invalidate_tileset_cache(f"raster:{tileset_id}")
+            invalidate_tileset_cache(f"pmtiles:{tileset_id}")
+            invalidate_tileset_cache(f"vector:{tileset_id}")
             
             return Response(status_code=204)
             
