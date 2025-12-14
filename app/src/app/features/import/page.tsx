@@ -12,6 +12,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useApi } from "@/hooks/use-api";
 import type { Tileset } from "@/lib/api";
@@ -24,6 +25,7 @@ import {
   FileJson,
   MapPin,
   Map,
+  Layers,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -49,6 +51,7 @@ export default function GeoJSONImportPage() {
   // 状態管理
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [selectedTilesetId, setSelectedTilesetId] = useState<string>("");
+  const [layerName, setLayerName] = useState<string>("imported");
   const [parsedGeoJSON, setParsedGeoJSON] = useState<ParsedGeoJSON | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ImportStatus>("idle");
@@ -104,6 +107,13 @@ export default function GeoJSONImportPage() {
   const handleImport = async () => {
     if (!parsedGeoJSON || !selectedTilesetId) return;
 
+    // レイヤー名のバリデーション
+    const trimmedLayerName = layerName.trim();
+    if (!trimmedLayerName) {
+      setError("レイヤー名を入力してください");
+      return;
+    }
+
     setStatus("importing");
     setError(null);
     setBoundsResult(null);
@@ -123,7 +133,7 @@ export default function GeoJSONImportPage() {
       const batch = features.slice(i, i + batchSize);
       
       const results = await Promise.allSettled(
-        batch.map((feature) => createFeature(feature))
+        batch.map((feature) => createFeature(feature, trimmedLayerName))
       );
 
       results.forEach((result, index) => {
@@ -157,18 +167,18 @@ export default function GeoJSONImportPage() {
       }
     } else {
       setStatus("error");
-      setError(`すべてのフィーチャーのインポートに失敗しました`);
+      setError("すべてのフィーチャーのインポートに失敗しました");
     }
   };
 
   // 単一フィーチャーの作成
-  const createFeature = async (feature: GeoJSONFeature): Promise<void> => {
+  const createFeature = async (feature: GeoJSONFeature, layer: string): Promise<void> => {
     try {
       const response = await api.createFeature({
         tileset_id: selectedTilesetId,
         geometry: feature.geometry,
         properties: feature.properties || {},
-        layer_name: "imported",
+        layer_name: layer,
       });
 
       if (!response) {
@@ -350,6 +360,35 @@ export default function GeoJSONImportPage() {
                     )}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* レイヤー名設定 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="h-5 w-5" />
+                  レイヤー名
+                </CardTitle>
+                <CardDescription>
+                  インポートするフィーチャーのレイヤー名を指定
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <Label htmlFor="layer-name">レイヤー名</Label>
+                  <Input
+                    id="layer-name"
+                    value={layerName}
+                    onChange={(e) => setLayerName(e.target.value)}
+                    placeholder="例: buildings, roads, points"
+                    disabled={status === "importing" || status === "calculating"}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    ベクタータイルのsource-layer名として使用されます。
+                    QGISやMapLibre GL JSでレイヤーを識別する際に必要です。
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
