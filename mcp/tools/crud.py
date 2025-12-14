@@ -107,7 +107,7 @@ async def create_tileset(
                 
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"Created tileset: {result.get('id')}", extra={"name": name})
+                logger.info(f"Created tileset: {result.get('id')}", extra={"tileset_name": name})
                 log.set_result(result)
                 return result
                 
@@ -115,7 +115,7 @@ async def create_tileset(
                 error_detail = e.response.text if e.response else str(e)
                 logger.error(
                     f"HTTP error creating tileset: {e.response.status_code}",
-                    extra={"name": name, "status_code": e.response.status_code},
+                    extra={"tileset_name": name, "status_code": e.response.status_code},
                 )
                 result = {
                     "error": f"HTTP error {e.response.status_code}: {error_detail}",
@@ -123,7 +123,7 @@ async def create_tileset(
                 log.set_result(result)
                 return result
             except httpx.HTTPError as e:
-                logger.error(f"Network error creating tileset: {e}", extra={"name": name})
+                logger.error(f"Network error creating tileset: {e}", extra={"tileset_name": name})
                 result = {"error": f"Network error: {str(e)}"}
                 log.set_result(result)
                 return result
