@@ -225,6 +225,34 @@ export function TilesetMapPreview({
     }
   }, [tileset, tileJSON]);
 
+  /**
+   * ソースレイヤー名を決定
+   * 
+   * 重要: vectorタイプのタイルセットでは、タイルURLに layer パラメータを
+   * 指定していない場合、MVT内のレイヤー名は常に "features" になる。
+   * そのため、vectorタイプの場合は "features" を使用する。
+   * 
+   * pmtilesの場合は、TileJSONのvector_layersから取得するか、デフォルト値を使用。
+   */
+  const getSourceLayer = useCallback((): string => {
+    // vectorタイプの場合、MVT生成時のデフォルトレイヤー名は "features"
+    // （generate_features_mvt関数で、layerパラメータなしの場合は "features" を使用）
+    if (tileset.type === "vector") {
+      return "features";
+    }
+    
+    // pmtilesの場合、TileJSONのvector_layersから取得を試みる
+    if (tileset.type === "pmtiles") {
+      const tileJSONWithLayers = tileJSON as (typeof tileJSON & { vector_layers?: Array<{ id: string }> }) | null;
+      if (tileJSONWithLayers?.vector_layers?.[0]?.id) {
+        return tileJSONWithLayers.vector_layers[0].id;
+      }
+    }
+    
+    // デフォルト
+    return "default";
+  }, [tileset.type, tileJSON]);
+
   // boundsにフィット
   const fitToBounds = useCallback(() => {
     if (!map.current || !isLoaded) return;
@@ -338,11 +366,8 @@ export function TilesetMapPreview({
           });
 
           // ソースレイヤー名を決定
-          // TileJSONのvector_layersから取得、またはデフォルト値を使用
-          // vector_layersはTileJSON仕様にはあるが、型定義に含まれていない場合がある
-          const tileJSONWithLayers = tileJSON as (typeof tileJSON & { vector_layers?: Array<{ id: string }> }) | null;
-          const sourceLayer =
-            tileJSONWithLayers?.vector_layers?.[0]?.id || "features" || "default";
+          const sourceLayer = getSourceLayer();
+          console.log(`Using source-layer: "${sourceLayer}" for tileset type: ${tileset.type}`);
 
           // ポリゴンレイヤー
           map.current.addLayer({
@@ -462,6 +487,7 @@ export function TilesetMapPreview({
     tileJSON,
     getTileUrl,
     getInitialView,
+    getSourceLayer,
     fillColor,
     lineColor,
     pointColor,
