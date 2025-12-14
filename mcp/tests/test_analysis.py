@@ -69,8 +69,9 @@ class TestHelperFunctions:
         result = _get_feature_centroid(feature)
         assert result is not None
         lat, lng = result
-        assert 4 < lat < 6  # Average of 0, 0, 10, 10, 0
-        assert 4 < lng < 6
+        # Average of 0, 0, 10, 10, 0 = 20/5 = 4.0
+        assert 3.9 <= lat <= 4.1
+        assert 3.9 <= lng <= 4.1
 
     def test_get_feature_centroid_empty(self):
         """Empty feature should return None."""
