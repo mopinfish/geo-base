@@ -153,6 +153,15 @@ export interface DatasourceTestResult {
   info?: Record<string, unknown>;
 }
 
+// Bounds計算結果
+export interface CalculateBoundsResult {
+  message: string;
+  tileset_id: string;
+  feature_count: number;
+  bounds: number[] | null;
+  center: number[] | null;
+}
+
 // ============================
 // API クライアント
 // ============================
@@ -287,6 +296,16 @@ class ApiClient {
 
   async getTilesetTileJSON(id: string): Promise<TileJSON> {
     return this.request<TileJSON>(`/api/tilesets/${id}/tilejson.json`);
+  }
+
+  /**
+   * タイルセットのboundsをフィーチャーから計算して更新
+   * GeoJSONインポート後に呼び出すことで、マップビューワーの自動フィットが有効になる
+   */
+  async calculateTilesetBounds(id: string): Promise<CalculateBoundsResult> {
+    return this.request<CalculateBoundsResult>(`/api/tilesets/${id}/calculate-bounds`, {
+      method: 'POST',
+    });
   }
 
   // ============================

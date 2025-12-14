@@ -23,16 +23,23 @@ import {
   Loader2,
   FileJson,
   MapPin,
+  Map,
 } from "lucide-react";
 import Link from "next/link";
 
-type ImportStatus = "idle" | "importing" | "success" | "error";
+type ImportStatus = "idle" | "importing" | "calculating" | "success" | "error";
 
 interface ImportProgress {
   total: number;
   completed: number;
   failed: number;
   errors: string[];
+}
+
+interface BoundsResult {
+  feature_count: number;
+  bounds: number[] | null;
+  center: number[] | null;
 }
 
 export default function GeoJSONImportPage() {
@@ -51,6 +58,7 @@ export default function GeoJSONImportPage() {
     failed: 0,
     errors: [],
   });
+  const [boundsResult, setBoundsResult] = useState<BoundsResult | null>(null);
 
   // タイルセット一覧の取得（vectorタイプのみ）
   useEffect(() => {
@@ -83,6 +91,7 @@ export default function GeoJSONImportPage() {
     setError(null);
     setStatus("idle");
     setProgress({ total: 0, completed: 0, failed: 0, errors: [] });
+    setBoundsResult(null);
   };
 
   // ファイル読み込みエラー時
@@ -97,6 +106,7 @@ export default function GeoJSONImportPage() {
 
     setStatus("importing");
     setError(null);
+    setBoundsResult(null);
     
     const features = parsedGeoJSON.data.features;
     const total = features.length;
@@ -129,13 +139,25 @@ export default function GeoJSONImportPage() {
       setProgress({ total, completed, failed, errors: [...errors] });
     }
 
-    if (failed === 0) {
-      setStatus("success");
-    } else if (completed === 0) {
+    // インポート完了後、boundsを計算
+    if (completed > 0) {
+      setStatus("calculating");
+      try {
+        const boundsResponse = await api.calculateTilesetBounds(selectedTilesetId);
+        setBoundsResult({
+          feature_count: boundsResponse.feature_count,
+          bounds: boundsResponse.bounds,
+          center: boundsResponse.center,
+        });
+        setStatus("success");
+      } catch (boundsError) {
+        console.warn("Failed to calculate bounds:", boundsError);
+        // bounds計算に失敗してもインポート自体は成功とみなす
+        setStatus("success");
+      }
+    } else {
       setStatus("error");
       setError(`すべてのフィーチャーのインポートに失敗しました`);
-    } else {
-      setStatus("success");
     }
   };
 
@@ -163,6 +185,7 @@ export default function GeoJSONImportPage() {
     setError(null);
     setStatus("idle");
     setProgress({ total: 0, completed: 0, failed: 0, errors: [] });
+    setBoundsResult(null);
   };
 
   // 進捗率の計算
@@ -210,28 +233,50 @@ export default function GeoJSONImportPage() {
           <Card className="border-green-500 bg-green-500/5">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-green-600">
-                  <Check className="h-5 w-5" />
-                  <p>
-                    {progress.completed}件のフィーチャーをインポートしました
-                    {progress.failed > 0 && (
-                      <span className="text-destructive ml-2">
-                        （{progress.failed}件失敗）
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-green-600">
+                    <Check className="h-5 w-5" />
+                    <p>
+                      {progress.completed}件のフィーチャーをインポートしました
+                      {progress.failed > 0 && (
+                        <span className="text-destructive ml-2">
+                          （{progress.failed}件失敗）
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  {boundsResult && boundsResult.bounds && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Map className="h-4 w-4" />
+                      <span>
+                        Bounds更新: [{boundsResult.bounds.map(b => b.toFixed(4)).join(", ")}]
                       </span>
-                    )}
-                  </p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={handleReset}>
                     別のファイルをインポート
                   </Button>
-                  <Link href="/features">
+                  <Link href={`/tilesets/${selectedTilesetId}`}>
                     <Button>
                       <MapPin className="mr-2 h-4 w-4" />
-                      フィーチャー一覧へ
+                      タイルセットを確認
                     </Button>
                   </Link>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Bounds計算中 */}
+        {status === "calculating" && (
+          <Card className="border-blue-500 bg-blue-500/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-blue-600">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <p>タイルセットのBoundsを計算中...</p>
               </div>
             </CardContent>
           </Card>
@@ -255,7 +300,7 @@ export default function GeoJSONImportPage() {
                 <GeoJSONDropzone
                   onFileLoaded={handleFileLoaded}
                   onError={handleFileError}
-                  disabled={status === "importing"}
+                  disabled={status === "importing" || status === "calculating"}
                 />
               </CardContent>
             </Card>
@@ -285,7 +330,7 @@ export default function GeoJSONImportPage() {
                       id="tileset-select"
                       value={selectedTilesetId}
                       onChange={(e) => setSelectedTilesetId(e.target.value)}
-                      disabled={status === "importing"}
+                      disabled={status === "importing" || status === "calculating"}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       {tilesets.map((tileset) => (
@@ -308,102 +353,94 @@ export default function GeoJSONImportPage() {
               </CardContent>
             </Card>
 
-            {/* インポート実行 */}
-            {status === "importing" && (
+            {/* インポートボタン */}
+            {parsedGeoJSON && status !== "success" && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    インポート中...
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="w-full bg-secondary rounded-full h-3">
-                    <div
-                      className="bg-primary h-3 rounded-full transition-all duration-300"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>
-                      {progress.completed + progress.failed} / {progress.total}
-                    </span>
-                    <span>{progressPercent}%</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    <span className="text-green-600">成功: {progress.completed}</span>
-                    {progress.failed > 0 && (
-                      <span className="text-destructive ml-4">
-                        失敗: {progress.failed}
-                      </span>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    {status === "importing" && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>インポート中...</span>
+                          <span>{progressPercent}%</span>
+                        </div>
+                        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all duration-300"
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {progress.completed} / {progress.total} 完了
+                          {progress.failed > 0 && ` (${progress.failed} 失敗)`}
+                        </p>
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={handleImport}
+                      disabled={status === "importing" || status === "calculating" || !selectedTilesetId}
+                      className="w-full"
+                    >
+                      {status === "importing" ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          インポート中...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="mr-2 h-4 w-4" />
+                          {parsedGeoJSON.data.features.length}件のフィーチャーをインポート
+                        </>
+                      )}
+                    </Button>
+
+                    {progress.errors.length > 0 && (
+                      <div className="mt-4 max-h-32 overflow-y-auto text-sm text-destructive">
+                        {progress.errors.slice(0, 5).map((error, index) => (
+                          <p key={index}>{error}</p>
+                        ))}
+                        {progress.errors.length > 5 && (
+                          <p>...他 {progress.errors.length - 5} 件のエラー</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </CardContent>
               </Card>
             )}
-
-            {/* アクションボタン */}
-            {status !== "importing" && status !== "success" && (
-              <div className="flex gap-2">
-                <Link href="/features" className="flex-1">
-                  <Button variant="outline" className="w-full">
-                    キャンセル
-                  </Button>
-                </Link>
-                <Button
-                  className="flex-1"
-                  disabled={!parsedGeoJSON || !selectedTilesetId || tilesets.length === 0}
-                  onClick={handleImport}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  インポート実行
-                  {parsedGeoJSON && ` (${parsedGeoJSON.featureCount}件)`}
-                </Button>
-              </div>
-            )}
           </div>
 
           {/* 右カラム：プレビュー */}
-          <Card>
-            <CardHeader>
-              <CardTitle>プレビュー</CardTitle>
-              <CardDescription>
-                インポートするフィーチャーを地図上で確認
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <GeoJSONPreview
-                data={parsedGeoJSON?.data || null}
-                height="500px"
-              />
-            </CardContent>
-          </Card>
+          <div>
+            {parsedGeoJSON ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>プレビュー</CardTitle>
+                  <CardDescription>
+                    {parsedGeoJSON.fileName} - {parsedGeoJSON.data.features.length}件のフィーチャー
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <GeoJSONPreview 
+                    geoJson={parsedGeoJSON.data}
+                    height="400px"
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex flex-col items-center justify-center h-64 text-center text-muted-foreground">
+                    <FileJson className="h-16 w-16 mb-4 opacity-50" />
+                    <p>GeoJSONファイルをアップロードすると</p>
+                    <p>ここにプレビューが表示されます</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-
-        {/* エラー詳細（インポート中に失敗したもの） */}
-        {progress.errors.length > 0 && (
-          <Card className="border-destructive">
-            <CardHeader>
-              <CardTitle className="text-destructive">
-                インポートエラー詳細
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-1 text-sm max-h-40 overflow-y-auto">
-                {progress.errors.slice(0, 20).map((err, index) => (
-                  <li key={index} className="text-destructive">
-                    {err}
-                  </li>
-                ))}
-                {progress.errors.length > 20 && (
-                  <li className="text-muted-foreground">
-                    ...他 {progress.errors.length - 20} 件のエラー
-                  </li>
-                )}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </AdminLayout>
   );

@@ -1714,6 +1714,111 @@ def create_tileset(
         raise HTTPException(status_code=500, detail=f"Error creating tileset: {str(e)}")
 
 
+@app.post("/api/tilesets/{tileset_id}/calculate-bounds")
+def calculate_tileset_bounds(
+    tileset_id: str,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Calculate and update tileset bounds from its features.
+    
+    This endpoint calculates the bounding box from all features in the tileset
+    and updates the tileset's bounds and center fields.
+    
+    Useful after bulk importing GeoJSON features.
+    
+    Requires authentication and ownership of the tileset.
+    """
+    try:
+        with conn.cursor() as cur:
+            # Check if tileset exists and user owns it
+            cur.execute(
+                "SELECT id, user_id, type FROM tilesets WHERE id = %s",
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to update this tileset")
+            
+            tileset_type = row[2]
+            
+            # Only calculate bounds for vector tilesets (which have features)
+            if tileset_type != "vector":
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Bounds calculation is only supported for vector tilesets, not {tileset_type}"
+                )
+            
+            # Calculate bounding box from all features in this tileset
+            cur.execute(
+                """
+                SELECT 
+                    ST_XMin(extent) as xmin,
+                    ST_YMin(extent) as ymin,
+                    ST_XMax(extent) as xmax,
+                    ST_YMax(extent) as ymax,
+                    ST_X(ST_Centroid(extent)) as center_x,
+                    ST_Y(ST_Centroid(extent)) as center_y,
+                    COUNT(*) as feature_count
+                FROM (
+                    SELECT ST_Extent(geom) as extent
+                    FROM features
+                    WHERE tileset_id = %s
+                ) AS subquery
+                """,
+                (tileset_id,),
+            )
+            result = cur.fetchone()
+            
+            if not result or result[0] is None:
+                # No features found
+                return {
+                    "message": "No features found in tileset",
+                    "tileset_id": tileset_id,
+                    "feature_count": 0,
+                    "bounds": None,
+                    "center": None,
+                }
+            
+            xmin, ymin, xmax, ymax, center_x, center_y, feature_count = result
+            
+            # Update tileset with calculated bounds and center
+            cur.execute(
+                """
+                UPDATE tilesets
+                SET bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326),
+                    center = ST_SetSRID(ST_MakePoint(%s, %s), 4326),
+                    updated_at = NOW()
+                WHERE id = %s
+                RETURNING id
+                """,
+                (xmin, ymin, xmax, ymax, center_x, center_y, tileset_id),
+            )
+            conn.commit()
+            
+            # Invalidate cache for this tileset
+            invalidate_tileset_cache(f"vector:{tileset_id}")
+            
+            return {
+                "message": "Bounds calculated and updated successfully",
+                "tileset_id": tileset_id,
+                "feature_count": feature_count,
+                "bounds": [xmin, ymin, xmax, ymax],
+                "center": [center_x, center_y],
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error calculating bounds: {str(e)}")
+
+
 @app.patch("/api/tilesets/{tileset_id}")
 def update_tileset(
     tileset_id: str,
