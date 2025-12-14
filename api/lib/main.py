@@ -85,17 +85,17 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="geo-base Tile Server",
-    description="ÃƒÂ¥Ã…â€œÃ‚Â°ÃƒÂ§Ã‚ÂÃ¢â‚¬Â ÃƒÂ§Ã‚Â©Ã‚ÂºÃƒÂ©Ã¢â‚¬â€œÃ¢â‚¬Å“ÃƒÂ£Ã¢â‚¬Å¡Ã‚Â¿ÃƒÂ£Ã¢â‚¬Å¡Ã‚Â¤ÃƒÂ£Ã†â€™Ã‚Â«ÃƒÂ©Ã¢â‚¬Â¦Ã‚ÂÃƒÂ¤Ã‚Â¿Ã‚Â¡API",
+    description="ÃƒÆ’Ã‚Â¥Ãƒâ€¦Ã¢â‚¬Å“Ãƒâ€šÃ‚Â°ÃƒÆ’Ã‚Â§Ãƒâ€šÃ‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â§Ãƒâ€šÃ‚Â©Ãƒâ€šÃ‚ÂºÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¿ÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã‚Â£Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¤Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â¡API",
     version="0.4.0",
     lifespan=lifespan,
 )
 
-# CORS middleware - Ã¥â€¦Â¨Ã£â€šÂªÃ£Æ’ÂªÃ£â€šÂ¸Ã£Æ’Â³Ã£â€šâ€™Ã¨Â¨Â±Ã¥ÂÂ¯Ã¯Â¼Ë†Ã©â€“â€¹Ã§â„¢ÂºÃ£Æ’Â»Ã¦Å“Â¬Ã§â€¢ÂªÃ¥â€¦Â±Ã©â‚¬Å¡Ã¯Â¼â€°
+# CORS middleware - ÃƒÂ¥Ã¢â‚¬Â¦Ã‚Â¨ÃƒÂ£Ã¢â‚¬Å¡Ã‚ÂªÃƒÂ£Ã†â€™Ã‚ÂªÃƒÂ£Ã¢â‚¬Å¡Ã‚Â¸ÃƒÂ£Ã†â€™Ã‚Â³ÃƒÂ£Ã¢â‚¬Å¡Ã¢â‚¬â„¢ÃƒÂ¨Ã‚Â¨Ã‚Â±ÃƒÂ¥Ã‚ÂÃ‚Â¯ÃƒÂ¯Ã‚Â¼Ã‹â€ ÃƒÂ©Ã¢â‚¬â€œÃ¢â‚¬Â¹ÃƒÂ§Ã¢â€žÂ¢Ã‚ÂºÃƒÂ£Ã†â€™Ã‚Â»ÃƒÂ¦Ã…â€œÃ‚Â¬ÃƒÂ§Ã¢â‚¬Â¢Ã‚ÂªÃƒÂ¥Ã¢â‚¬Â¦Ã‚Â±ÃƒÂ©Ã¢â€šÂ¬Ã…Â¡ÃƒÂ¯Ã‚Â¼Ã¢â‚¬Â°
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Ã¥â€¦Â¨Ã£â€šÂªÃ£Æ’ÂªÃ£â€šÂ¸Ã£Æ’Â³Ã£â€šâ€™Ã¨Â¨Â±Ã¥ÂÂ¯
-    allow_credentials=False,  # "*"Ã£ÂÂ®Ã¥Â Â´Ã¥ÂË†Ã£ÂÂ¯FalseÃ£ÂÅ’Ã¥Â¿â€¦Ã¨Â¦Â
+    allow_origins=["*"],  # ÃƒÂ¥Ã¢â‚¬Â¦Ã‚Â¨ÃƒÂ£Ã¢â‚¬Å¡Ã‚ÂªÃƒÂ£Ã†â€™Ã‚ÂªÃƒÂ£Ã¢â‚¬Å¡Ã‚Â¸ÃƒÂ£Ã†â€™Ã‚Â³ÃƒÂ£Ã¢â‚¬Å¡Ã¢â‚¬â„¢ÃƒÂ¨Ã‚Â¨Ã‚Â±ÃƒÂ¥Ã‚ÂÃ‚Â¯
+    allow_credentials=False,  # "*"ÃƒÂ£Ã‚ÂÃ‚Â®ÃƒÂ¥Ã‚Â Ã‚Â´ÃƒÂ¥Ã‚ÂÃ‹â€ ÃƒÂ£Ã‚ÂÃ‚Â¯FalseÃƒÂ£Ã‚ÂÃ…â€™ÃƒÂ¥Ã‚Â¿Ã¢â‚¬Â¦ÃƒÂ¨Ã‚Â¦Ã‚Â
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1372,38 +1372,55 @@ def list_tilesets(
     conn=Depends(get_connection),
     user: Optional[User] = Depends(get_current_user),
     include_private: bool = Query(False, description="Include private tilesets (requires auth)"),
+    type: Optional[str] = Query(None, description="Filter by tileset type (vector, raster, pmtiles)"),
 ):
     """
     List all accessible tilesets.
     
     By default, only public tilesets are returned.
     With authentication and include_private=true, also returns user's private tilesets.
+    Optionally filter by tileset type.
     """
     try:
+        # Validate type parameter if provided
+        valid_types = {"vector", "raster", "pmtiles"}
+        if type is not None and type.lower() not in valid_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid type '{type}'. Must be one of: {', '.join(sorted(valid_types))}"
+            )
+        
         with conn.cursor() as cur:
+            # Build query dynamically based on parameters
+            base_query = """
+                SELECT id, name, description, type, format, min_zoom, max_zoom,
+                       is_public, user_id, created_at, updated_at
+                FROM tilesets
+                WHERE 1=1
+            """
+            params = []
+            
+            # Add visibility filter
             if include_private and user:
-                # Return public tilesets + user's private tilesets
-                cur.execute(
-                    """
-                    SELECT id, name, description, type, format, min_zoom, max_zoom,
-                           is_public, user_id, created_at, updated_at
-                    FROM tilesets
-                    WHERE is_public = true OR user_id = %s
-                    ORDER BY created_at DESC
-                    """,
-                    (user.id,),
-                )
+                base_query += " AND (is_public = true OR user_id = %s)"
+                params.append(user.id)
             else:
-                # Return only public tilesets
-                cur.execute(
-                    """
-                    SELECT id, name, description, type, format, min_zoom, max_zoom,
-                           is_public, user_id, created_at, updated_at
-                    FROM tilesets
-                    WHERE is_public = true
-                    ORDER BY created_at DESC
-                    """
-                )
+                base_query += " AND is_public = true"
+            
+            # Add type filter if provided
+            if type is not None:
+                base_query += " AND type = %s"
+                params.append(type.lower())
+            
+            # Add ordering
+            base_query += " ORDER BY created_at DESC"
+            
+            # Execute query
+            if params:
+                cur.execute(base_query, tuple(params))
+            else:
+                cur.execute(base_query)
+            
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
 
@@ -1421,6 +1438,8 @@ def list_tilesets(
                 tileset["updated_at"] = tileset["updated_at"].isoformat()
 
         return {"tilesets": tilesets, "count": len(tilesets)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing tilesets: {str(e)}")
 
@@ -3130,7 +3149,7 @@ def get_system_stats():
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # タイルセット統計
+                # ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆçµ±è¨ˆ
                 cur.execute("""
                     SELECT 
                         type,
@@ -3154,7 +3173,7 @@ def get_system_stats():
                     tileset_stats["public"] += row[2]
                     tileset_stats["private"] += row[3]
                 
-                # フィーチャー統計
+                # ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼çµ±è¨ˆ
                 cur.execute("""
                     SELECT 
                         COUNT(*) as total,
@@ -3174,7 +3193,7 @@ def get_system_stats():
                     }
                 }
                 
-                # タイルセット別フィーチャー数（上位10件）
+                # ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆåˆ¥ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼æ•°ï¼ˆä¸Šä½10ä»¶ï¼‰
                 cur.execute("""
                     SELECT 
                         t.id,
@@ -3200,7 +3219,7 @@ def get_system_stats():
                     for row in top_tilesets
                 ]
                 
-                # データソース統計
+                # ãƒ‡ãƒ¼ã‚¿ã‚½ãƒ¼ã‚¹çµ±è¨ˆ
                 cur.execute("""
                     SELECT 
                         (SELECT COUNT(*) FROM pmtiles_sources) as pmtiles_count,
@@ -3251,7 +3270,7 @@ def get_tileset_stats(
         
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # タイルセット存在確認とアクセス権チェック
+                # ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆå­˜åœ¨ç¢ºèªã¨ã‚¢ã‚¯ã‚»ã‚¹æ¨©ãƒã‚§ãƒƒã‚¯
                 cur.execute("""
                     SELECT id, name, type, is_public, user_id
                     FROM tilesets
@@ -3262,14 +3281,14 @@ def get_tileset_stats(
                 if not tileset:
                     raise HTTPException(status_code=404, detail="Tileset not found")
                 
-                # 非公開タイルセットの場合はオーナーチェック
+                # éžå…¬é–‹ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆã®å ´åˆã¯ã‚ªãƒ¼ãƒŠãƒ¼ãƒã‚§ãƒƒã‚¯
                 if not tileset[3]:  # is_public
                     if not user:
                         raise HTTPException(status_code=401, detail="Authentication required")
                     if tileset[4] and str(tileset[4]) != user.id:  # user_id
                         raise HTTPException(status_code=403, detail="Access denied")
                 
-                # vectorタイプのみフィーチャー統計を返す
+                # vectorã‚¿ã‚¤ãƒ—ã®ã¿ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼çµ±è¨ˆã‚’è¿”ã™
                 if tileset[2] != "vector":  # type
                     return {
                         "tileset_id": tileset_id,
@@ -3282,7 +3301,7 @@ def get_tileset_stats(
                         "message": "Feature statistics are only available for vector tilesets"
                     }
                 
-                # フィーチャー統計
+                # ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼çµ±è¨ˆ
                 cur.execute("""
                     SELECT 
                         COUNT(*) as total,
@@ -3295,7 +3314,7 @@ def get_tileset_stats(
                 """, (str(uuid_obj),))
                 stats_row = cur.fetchone()
                 
-                # Bounds計算
+                # Boundsè¨ˆç®—
                 cur.execute("""
                     SELECT 
                         ST_XMin(ST_Extent(geom)) as min_x,
@@ -3395,12 +3414,12 @@ PREVIEW_HTML = """
             .then(response => response.json())
             .then(data => {
                 const el = document.getElementById('db-status');
-                el.textContent = data.status === 'ok' ? 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Â Connected' : 'ÃƒÂ¢Ã…â€œÃ¢â‚¬â€œ ' + data.database;
+                el.textContent = data.status === 'ok' ? 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Connected' : 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ ' + data.database;
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('db-status');
-                el.textContent = 'ÃƒÂ¢Ã…â€œÃ¢â‚¬â€œ Error';
+                el.textContent = 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Error';
                 el.className = 'status error';
             });
 
@@ -3488,6 +3507,7 @@ PREVIEW_HTML = """
 def preview_page():
     """Tile preview page with MapLibre GL JS."""
     return PREVIEW_HTML
+
 
 
 

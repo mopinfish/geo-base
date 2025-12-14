@@ -23,7 +23,8 @@ from validators import (
     validate_latitude,
     validate_longitude,
     validate_non_empty_string,
-    validate_range,
+    validate_limit,
+    validate_zoom,
 )
 
 # Initialize logger
@@ -79,8 +80,8 @@ async def geocode(
             log.set_result(result)
             return result
 
-        # Validate limit
-        limit_result = validate_range(limit, "limit", min_value=1, max_value=50)
+        # Validate limit - use validate_limit which returns int
+        limit_result = validate_limit(limit, "limit", min_value=1, max_value=50)
         if not limit_result.valid:
             result = limit_result.to_error_response(
                 results=[],
@@ -89,7 +90,7 @@ async def geocode(
             )
             log.set_result(result)
             return result
-        validated_limit = limit_result.value
+        validated_limit = limit_result.value  # This is now int, not float
 
         params = {
             "q": query,
@@ -272,8 +273,8 @@ async def reverse_geocode(
             return result
         validated_lng = lng_result.value
 
-        # Validate zoom
-        zoom_result = validate_range(zoom, "zoom", min_value=0, max_value=18)
+        # Validate zoom - use validate_zoom which returns int
+        zoom_result = validate_zoom(zoom, min_zoom=0, max_zoom=18, field_name="zoom")
         if not zoom_result.valid:
             result = zoom_result.to_error_response(
                 address=None,
@@ -282,7 +283,7 @@ async def reverse_geocode(
             )
             log.set_result(result)
             return result
-        validated_zoom = zoom_result.value
+        validated_zoom = zoom_result.value  # This is now int, not float
 
         params = {
             "lat": validated_lat,
