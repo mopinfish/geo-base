@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { DeleteTilesetDialog } from "@/components/tilesets/delete-tileset-dialog";
 import { TilesetMapPreview } from "@/components/map";
 import { useApi } from "@/hooks/use-api";
-import type { Tileset, TileJSON } from "@/lib/api";
+import type { Tileset, TileJSON, TilesetStats } from "@/lib/api";
 import {
   ArrowLeft,
   Pencil,
@@ -28,6 +28,7 @@ import {
   Map,
   Eye,
   EyeOff,
+  BarChart3,
 } from "lucide-react";
 
 interface TilesetDetailPageProps {
@@ -41,6 +42,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
 
   const [tileset, setTileset] = useState<Tileset | null>(null);
   const [tileJSON, setTileJSON] = useState<TileJSON | null>(null);
+  const [tilesetStats, setTilesetStats] = useState<TilesetStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
@@ -70,6 +72,16 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
       } catch {
         // TileJSONの取得に失敗しても詳細は表示
         console.warn("TileJSON fetch failed, but continuing without it");
+      }
+
+      // フィーチャー統計を取得（vectorタイプの場合）
+      if (data.type === "vector") {
+        try {
+          const statsData = await api.getTilesetStats(id);
+          setTilesetStats(statsData);
+        } catch {
+          console.warn("Tileset stats fetch failed");
+        }
       }
 
       // マップをリフレッシュ（キャッシュバスティング）
@@ -290,6 +302,51 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             </CardContent>
           )}
         </Card>
+
+        {/* フィーチャー統計（vectorタイプのみ） */}
+        {tileset.type === "vector" && tilesetStats && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                フィーチャー統計
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold">
+                    {tilesetStats.feature_count.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-muted-foreground">総フィーチャー数</div>
+                </div>
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold">
+                    {tilesetStats.geometry_types?.Point?.toLocaleString() ?? 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">ポイント</div>
+                </div>
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold">
+                    {tilesetStats.geometry_types?.LineString?.toLocaleString() ?? 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">ライン</div>
+                </div>
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold">
+                    {tilesetStats.geometry_types?.Polygon?.toLocaleString() ?? 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">ポリゴン</div>
+                </div>
+              </div>
+              {tilesetStats.latest_update && (
+                <div className="mt-4 text-sm text-muted-foreground">
+                  最終更新: {new Date(tilesetStats.latest_update).toLocaleString("ja-JP")}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* 基本情報 */}

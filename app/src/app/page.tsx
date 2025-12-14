@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
-import type { Tileset, HealthStatus } from "@/lib/api";
+import type { Tileset, HealthStatus, SystemStats } from "@/lib/api";
 import { 
   Layers, 
   Map, 
@@ -15,6 +15,10 @@ import {
   RefreshCw,
   Plus,
   ExternalLink,
+  MapPin,
+  TrendingUp,
+  AlertCircle,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -22,58 +26,74 @@ export default function DashboardPage() {
   const { api, isReady } = useApi();
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
+  const [stats, setStats] = useState<SystemStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
+    setStatsError(null);
+    
     try {
-      const [healthData, tilesetsData] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         api.getHealthDb(),
         api.listTilesets(),
+        api.getSystemStats(),
       ]);
       
       // ヘルスチェック結果の処理
-      if (healthData.status === "fulfilled") {
-        setHealth(healthData.value);
+      if (results[0].status === "fulfilled") {
+        setHealth(results[0].value);
+      } else {
+        console.error("Health check failed:", results[0].reason);
       }
       
       // タイルセット結果の処理
-      // APIレスポンスは {tilesets: [...], count: N} 形式
-      if (tilesetsData.status === "fulfilled") {
-        const data = tilesetsData.value;
+      if (results[1].status === "fulfilled") {
+        const data = results[1].value;
         if (Array.isArray(data)) {
-          // 配列が直接返ってくる場合
           setTilesets(data);
         } else if (data && Array.isArray(data.tilesets)) {
-          // {tilesets: [...]} 形式の場合
           setTilesets(data.tilesets);
         } else {
           setTilesets([]);
         }
       } else {
+        console.error("Tilesets fetch failed:", results[1].reason);
         setTilesets([]);
+        setError("タイルセットの取得に失敗しました");
       }
+      
+      // 統計結果の処理
+      if (results[2].status === "fulfilled") {
+        setStats(results[2].value);
+      } else {
+        console.error("Stats fetch failed:", results[2].reason);
+        setStatsError("統計情報の取得に失敗しました");
+      }
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : "データの取得に失敗しました");
+      const errorMessage = err instanceof Error ? err.message : "データの取得に失敗しました";
+      setError(errorMessage);
       setTilesets([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // isReadyがtrueになったらデータを取得
   useEffect(() => {
     if (isReady) {
       fetchData();
     }
   }, [isReady]);
 
-  // 安全にフィルタリング（tilesetsが配列でない場合に備える）
+  // 安全にフィルタリング
   const safeFilterTilesets = Array.isArray(tilesets) ? tilesets : [];
   const vectorTilesets = safeFilterTilesets.filter((t) => t.type === "vector");
   const rasterTilesets = safeFilterTilesets.filter((t) => t.type === "raster");
+  const pmtilesTilesets = safeFilterTilesets.filter((t) => t.type === "pmtiles");
 
   return (
     <AdminLayout>
@@ -86,7 +106,7 @@ export default function DashboardPage() {
               geo-base タイルサーバーの管理画面へようこそ
             </p>
           </div>
-          <Button onClick={fetchData} variant="outline" size="sm" disabled={!isReady}>
+          <Button onClick={fetchData} variant="outline" size="sm" disabled={!isReady || isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             更新
           </Button>
@@ -94,8 +114,9 @@ export default function DashboardPage() {
 
         {/* エラー表示 */}
         {error && (
-          <Card className="border-destructive">
-            <CardContent className="pt-6">
+          <Card className="border-destructive bg-destructive/10">
+            <CardContent className="pt-6 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
               <p className="text-destructive">{error}</p>
             </CardContent>
           </Card>
@@ -111,7 +132,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Badge variant={health?.status === "healthy" ? "default" : "destructive"}>
+                <Badge variant={health?.status === "healthy" || health?.status === "ok" ? "default" : "destructive"}>
                   {health?.status || "確認中..."}
                 </Badge>
               </div>
@@ -147,30 +168,108 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {!isReady || isLoading ? "-" : safeFilterTilesets.length}
+                {!isReady || isLoading ? "-" : stats?.tilesets?.total ?? safeFilterTilesets.length}
               </div>
               <p className="text-xs text-muted-foreground">
-                ベクタ: {!isReady || isLoading ? "-" : vectorTilesets.length} / ラスタ: {!isReady || isLoading ? "-" : rasterTilesets.length}
+                ベクタ: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.vector ?? vectorTilesets.length} / 
+                PMTiles: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.pmtiles ?? pmtilesTilesets.length} / 
+                ラスタ: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.raster ?? rasterTilesets.length}
               </p>
             </CardContent>
           </Card>
 
-          {/* 公開状態 */}
+          {/* フィーチャー数（新規追加） */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">公開タイルセット</CardTitle>
-              <Map className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">フィーチャー</CardTitle>
+              <MapPin className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {!isReady || isLoading ? "-" : safeFilterTilesets.filter((t) => t.is_public).length}
+                {!isReady || isLoading ? "-" : stats?.features?.total?.toLocaleString() ?? "-"}
               </div>
-              <p className="text-xs text-muted-foreground">
-                非公開: {!isReady || isLoading ? "-" : safeFilterTilesets.filter((t) => !t.is_public).length}
-              </p>
+              {stats?.features && (
+                <p className="text-xs text-muted-foreground">
+                  Point: {stats.features.by_geometry_type?.Point ?? 0} / 
+                  Line: {stats.features.by_geometry_type?.LineString ?? 0} / 
+                  Polygon: {stats.features.by_geometry_type?.Polygon ?? 0}
+                </p>
+              )}
+              {statsError && (
+                <p className="text-xs text-muted-foreground">統計取得エラー</p>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        {/* 統計サマリー（新規追加） */}
+        {stats && (
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* 公開状態 */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">公開状態</CardTitle>
+                <Map className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-bold">{stats.tilesets.public}</div>
+                    <p className="text-xs text-muted-foreground">公開タイルセット</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-muted-foreground">{stats.tilesets.private}</div>
+                    <p className="text-xs text-muted-foreground">非公開</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* データソース */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">データソース</CardTitle>
+                <Database className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-bold">{stats.datasources.total}</div>
+                    <p className="text-xs text-muted-foreground">登録済み</p>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">
+                    <p>PMTiles: {stats.datasources.pmtiles}</p>
+                    <p>COG: {stats.datasources.raster}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* フィーチャートップ */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">フィーチャー数トップ</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {stats.top_tilesets_by_features.length > 0 ? (
+                  <div className="space-y-1">
+                    {stats.top_tilesets_by_features.slice(0, 3).map((item, index) => (
+                      <div key={item.id} className="flex items-center justify-between text-sm">
+                        <span className="truncate max-w-[150px]">
+                          {index + 1}. {item.name}
+                        </span>
+                        <Badge variant="secondary">{item.feature_count.toLocaleString()}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">フィーチャーなし</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* クイックアクション */}
         <div className="grid gap-4 md:grid-cols-2">
@@ -190,6 +289,12 @@ export default function DashboardPage() {
                 <Button variant="outline">
                   <Map className="mr-2 h-4 w-4" />
                   フィーチャー管理
+                </Button>
+              </Link>
+              <Link href="/features/import">
+                <Button variant="outline">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  GeoJSONインポート
                 </Button>
               </Link>
               <a
@@ -268,6 +373,12 @@ export default function DashboardPage() {
                 <span className="font-medium">MCP サーバー:</span>
                 <code className="rounded bg-muted px-2 py-1">
                   https://geo-base-mcp.fly.dev
+                </code>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Admin UI:</span>
+                <code className="rounded bg-muted px-2 py-1">
+                  https://geo-base-app.vercel.app
                 </code>
               </div>
             </div>
