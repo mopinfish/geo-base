@@ -1,6 +1,6 @@
 [project]
 name = "geo-base-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP Server for geo-base tile server - Access geographic data through Claude Desktop"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,7 +32,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["tools", "server.py", "config.py"]
+packages = ["tools", "server.py", "config.py", "logger.py"]
 
 [tool.ruff]
 line-length = 100

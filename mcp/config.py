@@ -1,5 +1,8 @@
 """
 Configuration management for geo-base MCP Server.
+
+Provides type-safe settings using Pydantic BaseSettings with
+environment variable support and .env file loading.
 """
 
 import os
@@ -36,7 +39,7 @@ class Settings(BaseSettings):
         description="MCP server name",
     )
     server_version: str = Field(
-        default="0.1.0",
+        default="0.2.0",
         description="MCP server version",
     )
 
@@ -56,6 +59,12 @@ class Settings(BaseSettings):
     debug: bool = Field(
         default=False,
         description="Enable debug mode",
+    )
+
+    # Logging configuration
+    log_level: str = Field(
+        default="INFO",
+        description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
 
 

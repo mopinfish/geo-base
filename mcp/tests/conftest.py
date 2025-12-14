@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Set test environment variables
 os.environ.setdefault("TILE_SERVER_URL", "https://geo-base-puce.vercel.app")
 os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("LOG_LEVEL", "DEBUG")
 
 # Exclude live_test.py from pytest collection (it's a standalone script)
 collect_ignore = ["live_test.py"]
@@ -22,4 +23,5 @@ def pytest_configure(config):
     print("\n" + "=" * 60)
     print("🧪 geo-base MCP Server Tests")
     print(f"📡 Tile Server: {os.environ.get('TILE_SERVER_URL')}")
+    print(f"📝 Log Level: {os.environ.get('LOG_LEVEL')}")
     print("=" * 60)

@@ -12,6 +12,7 @@ import os
 from fastmcp import FastMCP
 
 from config import get_settings
+from logger import get_logger
 from tools.tilesets import (
     list_tilesets,
     get_tileset,
@@ -34,8 +35,9 @@ from tools.crud import (
     delete_feature,
 )
 
-# Initialize settings
+# Initialize settings and logger
 settings = get_settings()
+logger = get_logger(__name__)
 
 # Create MCP server instance
 mcp = FastMCP(
@@ -216,12 +218,17 @@ async def tool_health_check() -> dict:
 
     tile_server_url = settings.tile_server_url.rstrip("/")
 
+    logger.debug(f"Checking health of tile server at {tile_server_url}")
+
     async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
         try:
             response = await client.get(f"{tile_server_url}/api/health")
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            logger.info(f"Health check completed: {result.get('status', 'unknown')}")
+            return result
         except httpx.HTTPError as e:
+            logger.warning(f"Health check failed: {e}")
             return {
                 "status": "unhealthy",
                 "error": str(e),
@@ -532,6 +539,16 @@ async def tool_delete_feature(feature_id: str) -> dict:
 # ============================================================
 
 if __name__ == "__main__":
+    # Log startup information
+    logger.info(
+        f"Starting {settings.server_name} v{settings.server_version}",
+        extra={
+            "tile_server_url": settings.tile_server_url,
+            "environment": settings.environment,
+            "log_level": settings.log_level,
+        },
+    )
+
     # Get transport mode from environment variable
     # Options: "stdio" (default, for local Claude Desktop)
     #          "sse" (for remote HTTP connections via Fly.io)
@@ -542,16 +559,21 @@ if __name__ == "__main__":
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_PORT", "8080"))
     
+    logger.info(f"Using transport: {transport}")
+    
     if transport == "stdio":
         # Run with stdio transport (default for Claude Desktop local)
         mcp.run()
     elif transport == "sse":
         # Run with SSE transport (for remote connections)
+        logger.info(f"Starting SSE server on {host}:{port}")
         mcp.run(transport="sse", host=host, port=port)
     elif transport == "streamable-http":
         # Run with Streamable HTTP transport
+        logger.info(f"Starting Streamable HTTP server on {host}:{port}")
         mcp.run(transport="streamable-http", host=host, port=port)
     else:
+        logger.error(f"Unknown transport: {transport}")
         print(f"Unknown transport: {transport}")
         print("Valid options: stdio, sse, streamable-http")
         exit(1)

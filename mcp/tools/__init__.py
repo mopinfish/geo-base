@@ -1,26 +1,33 @@
 """
-geo-base MCP Tools
+MCP Tools for geo-base.
 
-MCP Tools for geo-base tile server.
+This package provides tools for interacting with the geo-base tile server API.
+
+Modules:
+    tilesets: Tileset listing and retrieval
+    features: Feature search and retrieval
+    geocoding: Address/coordinate conversion
+    crud: Create, update, delete operations
 """
 
-__version__ = "0.1.0"
-
-from .tilesets import (
+from tools.tilesets import (
     list_tilesets,
     get_tileset,
     get_tileset_tilejson,
 )
-from .features import (
+
+from tools.features import (
     search_features,
     get_feature,
     get_features_in_tile,
 )
-from .geocoding import (
+
+from tools.geocoding import (
     geocode,
     reverse_geocode,
 )
-from .crud import (
+
+from tools.crud import (
     create_tileset,
     update_tileset,
     delete_tileset,

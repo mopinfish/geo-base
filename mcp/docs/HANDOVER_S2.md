@@ -4,7 +4,7 @@
 
 **最終更新**: 2025-12-14  
 **プロジェクト**: geo-base MCP Server Enhancement  
-**フェーズ**: セカンドシーズン準備完了
+**フェーズ**: セカンドシーズン Phase 1進行中
 
 ---
 
@@ -82,27 +82,30 @@ CRUD操作（6ツール）
 └── tool_delete_feature     - フィーチャー削除
 ```
 
-### 2.3 現在のファイル構成
+### 2.3 現在のファイル構成（Step 2.5-A完了後）
 
 ```
 mcp/
 ├── server.py              # FastMCPサーバー本体
-├── config.py              # 設定管理
+├── config.py              # 設定管理（LOG_LEVEL追加）
+├── logger.py              # 🆕 ロギング基盤
 ├── tools/
-│   ├── __init__.py
-│   ├── tilesets.py        # タイルセット関連
-│   ├── features.py        # フィーチャー関連
-│   ├── geocoding.py       # ジオコーディング
-│   └── crud.py            # CRUD操作
+│   ├── __init__.py        # 更新: エクスポート整理
+│   ├── tilesets.py        # 更新: ロギング追加
+│   ├── features.py        # 更新: ロギング追加
+│   ├── geocoding.py       # 更新: ロギング追加
+│   └── crud.py            # 更新: ロギング追加
 ├── tests/
+│   ├── __init__.py
 │   ├── conftest.py
+│   ├── test_logger.py     # 🆕 ロギングテスト
 │   ├── test_tools.py
 │   ├── test_geocoding.py
 │   ├── test_crud.py
 │   └── live_test.py
 ├── Dockerfile
 ├── fly.toml
-├── pyproject.toml
+├── pyproject.toml         # 更新: version 0.2.0, logger.py追加
 └── uv.lock
 ```
 
@@ -114,7 +117,7 @@ mcp/
 
 | Step | 内容 | ステータス | 担当 | 備考 |
 |------|------|-----------|------|------|
-| 2.5-A | ロギング基盤の追加 | 🔲 未着手 | - | logger.py作成 |
+| 2.5-A | ロギング基盤の追加 | ✅ 完了 | Claude | logger.py作成、全ツールにロギング追加 |
 | 2.5-B | エラーハンドリング・リトライ | 🔲 未着手 | - | errors.py, retry.py作成 |
 
 ### Phase 2: 機能拡充
@@ -135,117 +138,76 @@ mcp/
 
 ---
 
-## 4. 次のアクション
+## 4. Step 2.5-A 完了内容
 
-### 4.1 即座に着手可能なタスク
+### 4.1 追加・更新ファイル
 
-1. **Step 2.5-A: ロギング基盤の追加**
-   - [ ] `mcp/logger.py` を作成
-   - [ ] 各ツールにロギングを追加
-   - [ ] 環境変数 `LOG_LEVEL` 対応
+| ファイル | 内容 |
+|---------|------|
+| `mcp/logger.py` | ロギング基盤モジュール |
+| `mcp/config.py` | `LOG_LEVEL`設定追加、バージョン0.2.0 |
+| `mcp/server.py` | 起動時ログ追加 |
+| `mcp/tools/tilesets.py` | ToolCallLogger追加 |
+| `mcp/tools/features.py` | ToolCallLogger追加 |
+| `mcp/tools/geocoding.py` | ToolCallLogger追加 |
+| `mcp/tools/crud.py` | ToolCallLogger追加 |
+| `mcp/tools/__init__.py` | エクスポート整理 |
+| `mcp/tests/test_logger.py` | ロギングテスト |
 
-2. **Step 2.5-B: エラーハンドリング強化**
-   - [ ] `mcp/errors.py` を作成（カスタム例外）
-   - [ ] `mcp/retry.py` を作成（tenacity導入）
-   - [ ] pyproject.toml に tenacity を追加
+### 4.2 logger.py の機能
 
-### 4.2 依存関係の追加予定
+```python
+# 主要コンポーネント
+- MCPFormatter: カスタムログフォーマッター（extra fieldsサポート）
+- ToolCallLogger: ツール呼び出しのコンテキストマネージャー
+- get_logger(): 名前付きロガーの取得（キャッシュ付き）
+- get_log_level(): 環境変数からログレベルを取得
 
-```toml
-# pyproject.toml に追加
-dependencies = [
-    # 既存
-    "fastmcp>=0.1.0",
-    "httpx>=0.25.0",
-    "python-dotenv>=1.0.0",
-    # 新規追加
-    "tenacity>=8.0.0",
-]
+# 使用例
+from logger import get_logger, ToolCallLogger
+
+logger = get_logger(__name__)
+
+async def my_tool(param: str) -> dict:
+    with ToolCallLogger(logger, "my_tool", param=param) as log:
+        result = await process(param)
+        log.set_result(result)
+        return result
+```
+
+### 4.3 環境変数
+
+```bash
+# 追加された環境変数
+LOG_LEVEL=INFO            # DEBUG, INFO, WARNING, ERROR, CRITICAL
 ```
 
 ---
 
-## 5. 技術的なメモ
+## 5. 次のアクション
 
-### 5.1 ロギング実装パターン
+### 5.1 即座に着手可能なタスク
 
-```python
-# mcp/logger.py
-import logging
-import os
+1. **Step 2.5-B: エラーハンドリング強化**
+   - [ ] `mcp/errors.py` を作成（カスタム例外）
+   - [ ] `mcp/retry.py` を作成（tenacity導入）
+   - [ ] pyproject.toml に tenacity を追加
+   - [ ] 各ツールにリトライ処理を追加
 
-def setup_logger(name: str) -> logging.Logger:
-    logger = logging.getLogger(name)
-    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-    logger.setLevel(getattr(logging, log_level, logging.INFO))
-    
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    return logger
-```
+### 5.2 依存関係の追加予定
 
-### 5.2 リトライ実装パターン
-
-```python
-# mcp/retry.py
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-import httpx
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
-    retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
-)
-async def fetch_with_retry(url: str, params: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(url, params=params)
-        response.raise_for_status()
-        return response.json()
-```
-
-### 5.3 tool_analyze_area 設計案
-
-```python
-@mcp.tool()
-async def tool_analyze_area(
-    bbox: str,
-    tileset_id: str | None = None,
-    analysis_type: str = "summary",
-) -> dict:
-    """
-    指定範囲内の地理空間データを分析
-    
-    Args:
-        bbox: バウンディングボックス "minx,miny,maxx,maxy" (WGS84)
-        tileset_id: 分析対象タイルセットID
-        analysis_type: "summary" | "density" | "distribution" | "full"
-    
-    Returns:
-        {
-            "bbox": {...},
-            "area_km2": 12.5,
-            "feature_count": 150,
-            "geometry_distribution": {
-                "Point": 100,
-                "LineString": 30,
-                "Polygon": 20
-            },
-            "density": {
-                "features_per_km2": 12.0
-            },
-            "layers": ["default", "buildings", "roads"]
-        }
-    """
+```toml
+# pyproject.toml に追加予定
+dependencies = [
+    # 既存
+    "fastmcp>=2.0.0",
+    "httpx>=0.26.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    # 新規追加
+    "tenacity>=8.0.0",
+]
 ```
 
 ---
@@ -306,3 +268,4 @@ MCP_PORT=8080             # SSE/HTTP時のポート
 | 日付 | 内容 | 担当 |
 |------|------|------|
 | 2025-12-14 | 初版作成（セカンドシーズン準備） | Claude |
+| 2025-12-14 | Step 2.5-A完了（ロギング基盤追加） | Claude |
