@@ -423,7 +423,7 @@ export default function GeoJSONImportPage() {
                 </CardHeader>
                 <CardContent>
                   <GeoJSONPreview 
-                    geoJson={parsedGeoJSON.data}
+                    data={parsedGeoJSON.data}
                     height="400px"
                   />
                 </CardContent>

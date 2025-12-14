@@ -1533,12 +1533,51 @@ def get_tileset_tilejson(
 
         # Route based on type
         if tileset_type == "vector":
-            return {
+            # Get bounds and center from tileset
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT name, description, min_zoom, max_zoom, attribution,
+                           ST_XMin(bounds), ST_YMin(bounds), ST_XMax(bounds), ST_YMax(bounds),
+                           ST_X(center), ST_Y(center)
+                    FROM tilesets
+                    WHERE id = %s
+                    """,
+                    (tileset_id,),
+                )
+                row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+            
+            (name, description, min_zoom, max_zoom, attribution,
+             xmin, ymin, xmax, ymax, center_x, center_y) = row
+            
+            # Build TileJSON response
+            tilejson = {
                 "tilejson": "3.0.0",
+                "name": name,
                 "tiles": [f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"],
-                "minzoom": 0,
-                "maxzoom": 22,
+                "minzoom": min_zoom or 0,
+                "maxzoom": max_zoom or 22,
             }
+            
+            # Add bounds if available
+            if xmin is not None and ymin is not None and xmax is not None and ymax is not None:
+                tilejson["bounds"] = [xmin, ymin, xmax, ymax]
+            
+            # Add center if available
+            if center_x is not None and center_y is not None:
+                center_zoom = min_zoom if min_zoom else 10
+                tilejson["center"] = [center_x, center_y, center_zoom]
+            
+            if description:
+                tilejson["description"] = description
+            
+            if attribution:
+                tilejson["attribution"] = attribution
+            
+            return tilejson
         elif tileset_type == "pmtiles":
             # Delegate to PMTiles endpoint (handled internally)
             with conn.cursor() as cur:
@@ -1755,21 +1794,19 @@ def calculate_tileset_bounds(
                 )
             
             # Calculate bounding box from all features in this tileset
+            # ST_Extent is an aggregate function, so we use it directly with COUNT(*)
             cur.execute(
                 """
                 SELECT 
-                    ST_XMin(extent) as xmin,
-                    ST_YMin(extent) as ymin,
-                    ST_XMax(extent) as xmax,
-                    ST_YMax(extent) as ymax,
-                    ST_X(ST_Centroid(extent)) as center_x,
-                    ST_Y(ST_Centroid(extent)) as center_y,
+                    ST_XMin(ST_Extent(geom)) as xmin,
+                    ST_YMin(ST_Extent(geom)) as ymin,
+                    ST_XMax(ST_Extent(geom)) as xmax,
+                    ST_YMax(ST_Extent(geom)) as ymax,
+                    ST_X(ST_Centroid(ST_Extent(geom))) as center_x,
+                    ST_Y(ST_Centroid(ST_Extent(geom))) as center_y,
                     COUNT(*) as feature_count
-                FROM (
-                    SELECT ST_Extent(geom) as extent
-                    FROM features
-                    WHERE tileset_id = %s
-                ) AS subquery
+                FROM features
+                WHERE tileset_id = %s
                 """,
                 (tileset_id,),
             )
