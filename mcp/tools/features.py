@@ -3,15 +3,23 @@ Feature-related MCP tools for geo-base.
 
 Provides tools for searching and retrieving geographic features
 from the geo-base tile server API.
+
+Features:
+- Automatic retry for transient network errors
+- Input validation with clear error messages
+- Structured logging for debugging and monitoring
 """
 
 import math
 from typing import Any
 
 import httpx
+from tenacity import RetryError
 
 from config import get_settings
+from errors import handle_api_error, create_error_response, ErrorCode
 from logger import get_logger, ToolCallLogger
+from retry import fetch_with_retry
 from validators import (
     validate_uuid,
     validate_bbox,
@@ -68,13 +76,17 @@ async def search_features(
 
     Args:
         bbox: Bounding box in format "minx,miny,maxx,maxy" (WGS84)
+              Example: "139.5,35.5,140.0,36.0" for Tokyo area
         layer: Filter by layer name
         filter: Property filter in format "key=value"
-        limit: Maximum number of features to return (1-1000)
+        limit: Maximum number of features to return (default: 100)
         tileset_id: Limit search to a specific tileset
 
     Returns:
-        Dictionary containing features and metadata
+        Dictionary containing:
+        - features: List of GeoJSON features with geometry and properties
+        - count: Number of features returned
+        - total: Total count of matching features (if available)
     """
     with ToolCallLogger(
         logger, "search_features",
@@ -145,97 +157,101 @@ async def search_features(
 
         logger.debug(f"Searching features at {url}", extra={"params": str(params)})
 
-        async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
-            try:
-                response = await client.get(
-                    url,
-                    params=params,
-                    headers=_get_auth_headers(),
-                )
-                response.raise_for_status()
-                data = response.json()
+        try:
+            # Use fetch_with_retry for automatic retry on transient failures
+            data = await fetch_with_retry(
+                url,
+                params=params,
+                headers=_get_auth_headers(),
+            )
 
-                # Process features
-                features = data.get("features", []) if isinstance(data, dict) else data
-                if isinstance(features, dict) and "features" in features:
-                    features = features["features"]
+            # Process features
+            features = data.get("features", []) if isinstance(data, dict) else data
+            if isinstance(features, dict) and "features" in features:
+                features = features["features"]
 
-                logger.debug(f"Retrieved {len(features)} features")
+            logger.debug(f"Retrieved {len(features)} features")
 
-                processed_features = []
-                for feature in features:
-                    processed = {
-                        "id": feature.get("id"),
-                        "type": "Feature",
-                        "geometry": _format_geometry(feature.get("geometry", feature.get("geom"))),
-                        "properties": feature.get("properties", {}),
-                    }
-
-                    # Add layer info if available
-                    if feature.get("layer_name"):
-                        processed["layer"] = feature["layer_name"]
-
-                    # Add tileset info if available
-                    if feature.get("tileset_id"):
-                        processed["tileset_id"] = feature["tileset_id"]
-
-                    processed_features.append(processed)
-
-                result = {
-                    "features": processed_features,
-                    "count": len(processed_features),
-                    "query": {
-                        "bbox": bbox,
-                        "layer": layer,
-                        "filter": filter,
-                        "tileset_id": tileset_id,
-                        "limit": validated_limit,
-                    },
+            processed_features = []
+            for feature in features:
+                processed = {
+                    "id": feature.get("id"),
+                    "type": "Feature",
+                    "geometry": _format_geometry(feature.get("geometry", feature.get("geom"))),
+                    "properties": feature.get("properties", {}),
                 }
 
-                # Add total if available
-                if isinstance(data, dict) and "total" in data:
-                    result["total"] = data["total"]
+                # Add layer info if available
+                if feature.get("layer_name"):
+                    processed["layer"] = feature["layer_name"]
 
-                # Add bbox summary if provided
-                if bbox_parsed:
-                    result["bbox_parsed"] = {
-                        "min_lng": bbox_parsed[0],
-                        "min_lat": bbox_parsed[1],
-                        "max_lng": bbox_parsed[2],
-                        "max_lat": bbox_parsed[3],
-                    }
+                # Add tileset info if available
+                if feature.get("tileset_id"):
+                    processed["tileset_id"] = feature["tileset_id"]
 
-                log.set_result(result)
-                return result
+                processed_features.append(processed)
 
-            except httpx.HTTPStatusError as e:
-                status_code = e.response.status_code
-                logger.warning(
-                    f"HTTP error searching features: {status_code}",
-                    extra={"status_code": status_code, "url": url},
-                )
-                
-                if status_code == 400:
-                    result = {
-                        "error": "Invalid query parameters",
-                        "detail": e.response.text,
-                        "hint": "Check bbox format (minx,miny,maxx,maxy) and filter syntax (key=value).",
-                    }
-                else:
-                    result = {
-                        "error": f"HTTP error: {status_code}",
-                        "detail": e.response.text,
-                    }
-                log.set_result(result)
-                return result
-            except httpx.RequestError as e:
-                logger.error(f"Request error searching features: {e}", extra={"url": url})
-                result = {
-                    "error": f"Request error: {str(e)}",
+            result = {
+                "features": processed_features,
+                "count": len(processed_features),
+                "query": {
+                    "bbox": bbox,
+                    "layer": layer,
+                    "filter": filter,
+                    "tileset_id": tileset_id,
+                    "limit": validated_limit,
+                },
+            }
+
+            # Add total if available
+            if isinstance(data, dict) and "total" in data:
+                result["total"] = data["total"]
+
+            # Add bbox summary if provided
+            if bbox_parsed:
+                result["bbox_parsed"] = {
+                    "min_lng": bbox_parsed[0],
+                    "min_lat": bbox_parsed[1],
+                    "max_lng": bbox_parsed[2],
+                    "max_lat": bbox_parsed[3],
                 }
-                log.set_result(result)
-                return result
+
+            log.set_result(result)
+            return result
+
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code
+            logger.warning(
+                f"HTTP error searching features: {status_code}",
+                extra={"status_code": status_code, "url": url},
+            )
+            
+            if status_code == 400:
+                result = create_error_response(
+                    "Invalid query parameters",
+                    ErrorCode.VALIDATION_ERROR,
+                    detail=e.response.text,
+                    hint="Check bbox format (minx,miny,maxx,maxy) and filter syntax (key=value).",
+                )
+            else:
+                result = handle_api_error(e, {"url": url})
+            
+            log.set_result(result)
+            return result
+        except (httpx.RequestError, RetryError) as e:
+            logger.error(f"Request error searching features: {e}", extra={"url": url})
+            result = handle_api_error(e, {"url": url})
+            log.set_result(result)
+            return result
+        except Exception as e:
+            logger.error(f"Unexpected error searching features: {e}", extra={"url": url})
+            result = create_error_response(
+                f"Unexpected error: {str(e)}",
+                ErrorCode.UNKNOWN_ERROR,
+                url=url,
+            )
+            log.set_result(result)
+            return result
 
 
 async def get_feature(feature_id: str) -> dict[str, Any]:
@@ -246,7 +262,7 @@ async def get_feature(feature_id: str) -> dict[str, Any]:
         feature_id: UUID of the feature
 
     Returns:
-        GeoJSON feature object with geometry and properties
+        GeoJSON feature object with geometry and all properties
     """
     with ToolCallLogger(logger, "get_feature", feature_id=feature_id) as log:
         # Validate feature_id
@@ -262,80 +278,86 @@ async def get_feature(feature_id: str) -> dict[str, Any]:
 
         logger.debug(f"Fetching feature {validated_feature_id} from {url}")
 
-        async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
-            try:
-                response = await client.get(
-                    url,
-                    headers=_get_auth_headers(),
+        try:
+            # Use fetch_with_retry for automatic retry on transient failures
+            feature = await fetch_with_retry(
+                url,
+                headers=_get_auth_headers(),
+            )
+
+            logger.debug(f"Retrieved feature: {feature.get('id')}")
+
+            # Get geometry
+            geom = feature.get("geometry") or feature.get("geom")
+
+            result = {
+                "id": feature.get("id"),
+                "type": "Feature",
+                "geometry": geom,
+                "geometry_summary": _format_geometry(geom),
+                "properties": feature.get("properties", {}),
+            }
+
+            # Add optional fields
+            if feature.get("layer_name"):
+                result["layer"] = feature["layer_name"]
+            if feature.get("tileset_id"):
+                result["tileset_id"] = feature["tileset_id"]
+            if feature.get("tileset_name"):
+                result["tileset_name"] = feature["tileset_name"]
+            if feature.get("created_at"):
+                result["created_at"] = feature["created_at"]
+            if feature.get("updated_at"):
+                result["updated_at"] = feature["updated_at"]
+
+            log.set_result(result)
+            return result
+
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code
+            logger.warning(
+                f"HTTP error getting feature {validated_feature_id}: {status_code}",
+                extra={"feature_id": validated_feature_id, "status_code": status_code},
+            )
+            
+            if status_code == 404:
+                result = create_error_response(
+                    "Feature not found",
+                    ErrorCode.NOT_FOUND,
+                    feature_id=validated_feature_id,
                 )
-                response.raise_for_status()
-                feature = response.json()
-
-                logger.debug(f"Retrieved feature: {feature.get('id')}")
-
-                # Get geometry
-                geom = feature.get("geometry") or feature.get("geom")
-
-                result = {
-                    "id": feature.get("id"),
-                    "type": "Feature",
-                    "geometry": geom,
-                    "geometry_summary": _format_geometry(geom),
-                    "properties": feature.get("properties", {}),
-                }
-
-                # Add optional fields
-                if feature.get("layer_name"):
-                    result["layer"] = feature["layer_name"]
-                if feature.get("tileset_id"):
-                    result["tileset_id"] = feature["tileset_id"]
-                if feature.get("tileset_name"):
-                    result["tileset_name"] = feature["tileset_name"]
-                if feature.get("created_at"):
-                    result["created_at"] = feature["created_at"]
-                if feature.get("updated_at"):
-                    result["updated_at"] = feature["updated_at"]
-
-                log.set_result(result)
-                return result
-
-            except httpx.HTTPStatusError as e:
-                status_code = e.response.status_code
-                logger.warning(
-                    f"HTTP error getting feature {validated_feature_id}: {status_code}",
-                    extra={"feature_id": validated_feature_id, "status_code": status_code},
+            elif status_code == 401:
+                result = create_error_response(
+                    "Authentication required",
+                    ErrorCode.AUTH_REQUIRED,
+                    feature_id=validated_feature_id,
+                    hint="This feature may belong to a private tileset. Configure API_TOKEN.",
                 )
-                
-                if status_code == 404:
-                    result = {
-                        "error": "Feature not found",
-                        "feature_id": validated_feature_id,
-                    }
-                elif status_code == 401:
-                    result = {
-                        "error": "Authentication required",
-                        "feature_id": validated_feature_id,
-                        "hint": "This feature may belong to a private tileset. Configure API_TOKEN.",
-                    }
-                else:
-                    result = {
-                        "error": f"HTTP error: {status_code}",
-                        "detail": e.response.text,
-                        "feature_id": validated_feature_id,
-                    }
-                log.set_result(result)
-                return result
-            except httpx.RequestError as e:
-                logger.error(
-                    f"Request error getting feature {validated_feature_id}: {e}",
-                    extra={"feature_id": validated_feature_id},
-                )
-                result = {
-                    "error": f"Request error: {str(e)}",
-                    "feature_id": validated_feature_id,
-                }
-                log.set_result(result)
-                return result
+            else:
+                result = handle_api_error(e, {"feature_id": validated_feature_id})
+            
+            log.set_result(result)
+            return result
+        except (httpx.RequestError, RetryError) as e:
+            logger.error(
+                f"Request error getting feature {validated_feature_id}: {e}",
+                extra={"feature_id": validated_feature_id},
+            )
+            result = handle_api_error(e, {"feature_id": validated_feature_id})
+            log.set_result(result)
+            return result
+        except Exception as e:
+            logger.error(
+                f"Unexpected error getting feature {validated_feature_id}: {e}",
+                extra={"feature_id": validated_feature_id},
+            )
+            result = create_error_response(
+                f"Unexpected error: {str(e)}",
+                ErrorCode.UNKNOWN_ERROR,
+                feature_id=validated_feature_id,
+            )
+            log.set_result(result)
+            return result
 
 
 async def get_features_in_tile(
