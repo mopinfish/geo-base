@@ -8,6 +8,8 @@ Modules:
     features: Feature search and retrieval
     geocoding: Address/coordinate conversion
     crud: Create, update, delete operations
+    stats: Statistics and analysis
+    analysis: Spatial analysis tools
 """
 
 from tools.tilesets import (
@@ -36,6 +38,20 @@ from tools.crud import (
     delete_feature,
 )
 
+from tools.stats import (
+    get_tileset_stats,
+    get_feature_distribution,
+    get_layer_stats,
+    get_area_stats,
+)
+
+from tools.analysis import (
+    analyze_area,
+    calculate_distance,
+    find_nearest_features,
+    get_buffer_zone_features,
+)
+
 __all__ = [
     # Tilesets
     "list_tilesets",
@@ -55,4 +71,14 @@ __all__ = [
     "create_feature",
     "update_feature",
     "delete_feature",
+    # Stats
+    "get_tileset_stats",
+    "get_feature_distribution",
+    "get_layer_stats",
+    "get_area_stats",
+    # Analysis
+    "analyze_area",
+    "calculate_distance",
+    "find_nearest_features",
+    "get_buffer_zone_features",
 ]
