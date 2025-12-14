@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@/components/layout";
@@ -165,6 +165,38 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
     return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}${zoomPart}`;
   };
 
+  /**
+   * タイルセットのタイプに応じたタイルURLを生成
+   */
+  const getTileUrl = (tileset: Tileset, baseUrl: string): string => {
+    switch (tileset.type) {
+      case "pmtiles":
+        return `${baseUrl}/api/tiles/pmtiles/${tileset.id}/{z}/{x}/{y}.pbf`;
+      case "raster":
+        // ラスタータイルのフォーマット（デフォルトはpng）
+        const rasterFormat = tileset.format || "png";
+        return `${baseUrl}/api/tiles/raster/${tileset.id}/{z}/{x}/{y}.${rasterFormat}`;
+      case "vector":
+      default:
+        return `${baseUrl}/api/tiles/features/{z}/{x}/{y}.pbf?tileset_id=${tileset.id}`;
+    }
+  };
+
+  /**
+   * タイルセットのタイプに応じたラベルを取得
+   */
+  const getTileUrlLabel = (type: string): string => {
+    switch (type) {
+      case "pmtiles":
+        return "タイルURL（PMTiles）";
+      case "raster":
+        return "タイルURL（ラスター）";
+      case "vector":
+      default:
+        return "タイルURL（ベクター）";
+    }
+  };
+
   if (!isReady || isLoading) {
     return (
       <AdminLayout>
@@ -199,8 +231,9 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
 
   const apiBaseUrl =
     process.env.NEXT_PUBLIC_API_URL || "https://geo-base-puce.vercel.app";
-  const tileUrl = `${apiBaseUrl}/api/tiles/features/{z}/{x}/{y}.pbf?tileset_id=${id}`;
+  const tileUrl = getTileUrl(tileset, apiBaseUrl);
   const tileJsonUrl = `${apiBaseUrl}/api/tilesets/${id}/tilejson.json`;
+  const tileUrlLabel = getTileUrlLabel(tileset.type);
 
   return (
     <AdminLayout>
@@ -463,7 +496,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               <div>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-muted-foreground">
-                    タイルURL（フィーチャーベース）
+                    {tileUrlLabel}
                   </p>
                   <Button
                     variant="ghost"
