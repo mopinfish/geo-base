@@ -1,3 +1,4 @@
+
 """
 Raster tile serving utilities for geo-base API.
 
@@ -291,18 +292,30 @@ def get_cog_info(cog_url: str) -> dict[str, Any]:
         cog_url: URL or path to the COG file
         
     Returns:
-        Dictionary with COG metadata
+        Dictionary with COG metadata including WGS84 bounds
     """
     if not RASTERIO_AVAILABLE:
         raise RuntimeError("rio-tiler is not available")
     
     try:
+        from rasterio.crs import CRS as RasterioCRS
+        
         with COGReader(cog_url) as cog:
             info = cog.info()
             
+            # Get WGS84 bounds using get_geographic_bounds method
+            # This converts native CRS bounds to WGS84 (EPSG:4326)
+            geographic_bounds = None
+            try:
+                wgs84 = RasterioCRS.from_epsg(4326)
+                geographic_bounds = cog.get_geographic_bounds(wgs84)
+            except Exception as e:
+                print(f"Warning: Could not get geographic bounds: {e}")
+            
             # Build result with safe attribute access
             result = {
-                "bounds": getattr(info, 'bounds', None),
+                "bounds": geographic_bounds,  # WGS84 bounds for web maps
+                "native_bounds": getattr(info, 'bounds', None),  # Original CRS bounds
                 "crs": str(info.crs) if getattr(info, 'crs', None) else None,
                 "band_metadata": getattr(info, 'band_metadata', []),
                 "band_descriptions": getattr(info, 'band_descriptions', []),
@@ -506,3 +519,4 @@ def get_raster_media_type(tile_format: str) -> str:
     """
     normalized = validate_tile_format(tile_format)
     return RASTER_MEDIA_TYPES[normalized]
+

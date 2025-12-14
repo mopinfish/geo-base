@@ -65,8 +65,8 @@ def get_pool() -> psycopg2.pool.SimpleConnectionPool:
         dsn = _prepare_connection_string(settings.database_url)
         _pool = psycopg2.pool.SimpleConnectionPool(
             dsn=dsn,
-            minconn=1,
-            maxconn=5,
+            minconn=2,
+            maxconn=20,  # Increased from 5 to handle concurrent tile requests
         )
     return _pool
 
