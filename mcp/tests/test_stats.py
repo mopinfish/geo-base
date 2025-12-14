@@ -19,32 +19,38 @@ from tools.stats import (
     get_feature_distribution,
     get_layer_stats,
     get_area_stats,
-    _parse_bbox,
     _calculate_bbox_area_km2,
     _extract_geometry_type,
     _count_coordinates,
 )
+from validators import validate_bbox
 
 
 class TestHelperFunctions:
     """Tests for helper functions."""
 
-    def test_parse_bbox_valid(self):
-        """_parse_bbox should parse valid bbox string."""
-        result = _parse_bbox("139.5,35.5,140.0,36.0")
-        assert result == (139.5, 35.5, 140.0, 36.0)
+    def test_validate_bbox_valid(self):
+        """validate_bbox should parse valid bbox string."""
+        result = validate_bbox("139.5,35.5,140.0,36.0")
+        assert result.valid
+        assert result.value == (139.5, 35.5, 140.0, 36.0)
 
-    def test_parse_bbox_with_spaces(self):
-        """_parse_bbox should handle spaces."""
-        result = _parse_bbox("139.5, 35.5, 140.0, 36.0")
-        assert result == (139.5, 35.5, 140.0, 36.0)
+    def test_validate_bbox_with_spaces(self):
+        """validate_bbox should handle spaces."""
+        result = validate_bbox("139.5, 35.5, 140.0, 36.0")
+        assert result.valid
+        assert result.value == (139.5, 35.5, 140.0, 36.0)
 
-    def test_parse_bbox_invalid(self):
-        """_parse_bbox should return None for invalid input."""
-        assert _parse_bbox("invalid") is None
-        assert _parse_bbox("1,2,3") is None
-        assert _parse_bbox("") is None
-        assert _parse_bbox(None) is None
+    def test_validate_bbox_invalid(self):
+        """validate_bbox should return invalid for bad input."""
+        result = validate_bbox("invalid")
+        assert not result.valid
+        
+        result = validate_bbox("1,2,3")
+        assert not result.valid
+        
+        result = validate_bbox("")
+        assert not result.valid
 
     def test_calculate_bbox_area_tokyo(self):
         """_calculate_bbox_area_km2 should calculate reasonable area for Tokyo."""
@@ -113,7 +119,7 @@ class TestGetTilesetStats:
         """get_tileset_stats should return comprehensive statistics."""
         async def run_test():
             tileset_data = {
-                "id": "test-id",
+                "id": "550e8400-e29b-41d4-a716-446655440000",
                 "name": "Test Tileset",
                 "type": "vector",
                 "min_zoom": 0,
@@ -141,27 +147,12 @@ class TestGetTilesetStats:
                 ]
             }
 
-            mock_tileset_response = Mock()
-            mock_tileset_response.json.return_value = tileset_data
-            mock_tileset_response.raise_for_status = Mock()
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.side_effect = [tileset_data, features_data]
 
-            mock_features_response = Mock()
-            mock_features_response.json.return_value = features_data
-            mock_features_response.raise_for_status = Mock()
+                result = await get_tileset_stats("550e8400-e29b-41d4-a716-446655440000")
 
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.side_effect = [
-                    mock_tileset_response,
-                    mock_features_response,
-                ]
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
-
-                result = await get_tileset_stats("test-id")
-
-                assert result["tileset_id"] == "test-id"
+                assert result["tileset_id"] == "550e8400-e29b-41d4-a716-446655440000"
                 assert result["tileset_name"] == "Test Tileset"
                 assert result["feature_count"] == 3
                 assert result["geometry_types"]["Point"] == 2
@@ -171,24 +162,29 @@ class TestGetTilesetStats:
 
         asyncio.run(run_test())
 
-    def test_stats_with_error(self):
-        """get_tileset_stats should handle errors gracefully."""
+    def test_invalid_tileset_id(self):
+        """get_tileset_stats should return error for invalid tileset_id."""
+        async def run_test():
+            result = await get_tileset_stats("invalid-id")
+            assert "error" in result
+            assert "VALIDATION_ERROR" in result.get("code", "")
+
+        asyncio.run(run_test())
+
+    def test_stats_with_http_error(self):
+        """get_tileset_stats should handle HTTP errors gracefully."""
         async def run_test():
             import httpx
 
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
                 mock_response = Mock()
                 mock_response.status_code = 404
                 mock_response.text = "Not found"
-                mock_instance.get.side_effect = httpx.HTTPStatusError(
+                mock_fetch.side_effect = httpx.HTTPStatusError(
                     "", request=Mock(), response=mock_response
                 )
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
 
-                result = await get_tileset_stats("nonexistent-id")
+                result = await get_tileset_stats("550e8400-e29b-41d4-a716-446655440000")
 
                 assert "error" in result
 
@@ -210,16 +206,8 @@ class TestGetFeatureDistribution:
                 ]
             }
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await get_feature_distribution()
 
@@ -236,21 +224,22 @@ class TestGetFeatureDistribution:
         async def run_test():
             features_data = {"features": []}
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.return_value = features_data
 
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
-
-                result = await get_feature_distribution(tileset_id="test-123")
+                result = await get_feature_distribution(tileset_id="550e8400-e29b-41d4-a716-446655440000")
 
                 # Check that tileset_id was in the query
-                assert result["query"]["tileset_id"] == "test-123"
+                assert result["query"]["tileset_id"] == "550e8400-e29b-41d4-a716-446655440000"
+
+        asyncio.run(run_test())
+
+    def test_distribution_with_invalid_tileset_id(self):
+        """get_feature_distribution should return error for invalid tileset_id."""
+        async def run_test():
+            result = await get_feature_distribution(tileset_id="invalid-id")
+            assert "error" in result
+            assert "VALIDATION_ERROR" in result.get("code", "")
 
         asyncio.run(run_test())
 
@@ -269,18 +258,10 @@ class TestGetLayerStats:
                 ]
             }
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.return_value = features_data
 
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
-
-                result = await get_layer_stats("test-tileset")
+                result = await get_layer_stats("550e8400-e29b-41d4-a716-446655440000")
 
                 assert result["layer_count"] == 2
                 assert result["layers"]["roads"]["feature_count"] == 2
@@ -299,20 +280,21 @@ class TestGetLayerStats:
                 ]
             }
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.return_value = features_data
 
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
-
-                result = await get_layer_stats("test-tileset")
+                result = await get_layer_stats("550e8400-e29b-41d4-a716-446655440000")
 
                 assert "default" in result["layers"]
+
+        asyncio.run(run_test())
+
+    def test_invalid_tileset_id(self):
+        """get_layer_stats should return error for invalid tileset_id."""
+        async def run_test():
+            result = await get_layer_stats("invalid-id")
+            assert "error" in result
+            assert "VALIDATION_ERROR" in result.get("code", "")
 
         asyncio.run(run_test())
 
@@ -330,16 +312,8 @@ class TestGetAreaStats:
                 ]
             }
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await get_area_stats("139.5,35.5,140.0,36.0")
 
@@ -367,16 +341,8 @@ class TestGetAreaStats:
         async def run_test():
             features_data = {"features": []}
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await get_area_stats("139.5,35.5,140.0,36.0")
 
@@ -392,22 +358,26 @@ class TestGetAreaStats:
         async def run_test():
             features_data = {"features": []}
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.stats.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.stats.fetch_with_retry") as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await get_area_stats(
                     bbox="139.5,35.5,140.0,36.0",
-                    tileset_id="test-123",
+                    tileset_id="550e8400-e29b-41d4-a716-446655440000",
                 )
 
-                assert result["query"]["tileset_id"] == "test-123"
+                assert result["query"]["tileset_id"] == "550e8400-e29b-41d4-a716-446655440000"
+
+        asyncio.run(run_test())
+
+    def test_with_invalid_tileset_id(self):
+        """get_area_stats should return error for invalid tileset_id."""
+        async def run_test():
+            result = await get_area_stats(
+                bbox="139.5,35.5,140.0,36.0",
+                tileset_id="invalid-id",
+            )
+            assert "error" in result
+            assert "VALIDATION_ERROR" in result.get("code", "")
 
         asyncio.run(run_test())

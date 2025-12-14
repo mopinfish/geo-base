@@ -26,6 +26,10 @@ from tools.analysis import (
 )
 
 
+# Test UUID for consistent use across tests
+TEST_UUID = "550e8400-e29b-41d4-a716-446655440123"
+
+
 class TestHelperFunctions:
     """Tests for helper functions."""
 
@@ -128,16 +132,8 @@ class TestAnalyzeArea:
                 ]
             }
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.analysis.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await analyze_area("139.5,35.5,140.0,36.0")
 
@@ -162,16 +158,8 @@ class TestAnalyzeArea:
         async def run_test():
             features_data = {"features": []}
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.analysis.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await analyze_area(
                     "139.5,35.5,140.0,36.0",
@@ -187,16 +175,8 @@ class TestAnalyzeArea:
         async def run_test():
             features_data = {"features": []}
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.analysis.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await analyze_area(
                     "139.5,35.5,140.0,36.0",
@@ -288,16 +268,8 @@ class TestFindNearestFeatures:
                 ]
             }
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.analysis.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await find_nearest_features(
                     lat=35.6812, lng=139.7671, radius_km=1.0
@@ -324,22 +296,31 @@ class TestFindNearestFeatures:
         async def run_test():
             features_data = {"features": []}
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
+            with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = features_data
 
-            with patch("tools.analysis.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
-
+                # Use valid UUID format for tileset_id
                 result = await find_nearest_features(
-                    lat=35.6812, lng=139.7671, tileset_id="test-123"
+                    lat=35.6812, lng=139.7671, tileset_id=TEST_UUID
                 )
 
-                assert result["query"]["tileset_id"] == "test-123"
+                # Verify the query contains the tileset_id
+                assert "query" in result
+                assert result["query"]["tileset_id"] == TEST_UUID
+
+        asyncio.run(run_test())
+
+    def test_with_invalid_tileset_id(self):
+        """Should return error for invalid tileset_id format."""
+        async def run_test():
+            # Test with invalid UUID format
+            result = await find_nearest_features(
+                lat=35.6812, lng=139.7671, tileset_id="invalid-uuid"
+            )
+
+            # Should return validation error
+            assert "error" in result
+            assert "code" in result
 
         asyncio.run(run_test())
 
@@ -360,16 +341,8 @@ class TestGetBufferZoneFeatures:
                 ]
             }
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.analysis.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await get_buffer_zone_features(
                     lat=35.6812, lng=139.7671,
@@ -398,16 +371,8 @@ class TestGetBufferZoneFeatures:
         async def run_test():
             features_data = {"features": []}
 
-            mock_response = Mock()
-            mock_response.json.return_value = features_data
-            mock_response.raise_for_status = Mock()
-
-            with patch("tools.analysis.httpx.AsyncClient") as mock_client:
-                mock_instance = AsyncMock()
-                mock_instance.get.return_value = mock_response
-                mock_instance.__aenter__.return_value = mock_instance
-                mock_instance.__aexit__.return_value = None
-                mock_client.return_value = mock_instance
+            with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = features_data
 
                 result = await get_buffer_zone_features(
                     lat=35.6812, lng=139.7671,
