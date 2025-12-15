@@ -26,13 +26,18 @@ export interface TilesetMapPreviewProps {
   refreshKey?: number | string;
 }
 
-// レイヤーごとの色パレット
+// レイヤーごとの色パレット（複数レイヤー対応）
 const LAYER_COLORS = [
-  { fill: "#3b82f6", line: "#2563eb", point: "#22c55e" }, // blue/green
-  { fill: "#f59e0b", line: "#d97706", point: "#ef4444" }, // amber/red
-  { fill: "#8b5cf6", line: "#7c3aed", point: "#ec4899" }, // violet/pink
-  { fill: "#06b6d4", line: "#0891b2", point: "#84cc16" }, // cyan/lime
-  { fill: "#f43f5e", line: "#e11d48", point: "#6366f1" }, // rose/indigo
+  { fill: "#3b82f6", line: "#2563eb", point: "#3b82f6" }, // blue
+  { fill: "#22c55e", line: "#16a34a", point: "#22c55e" }, // green
+  { fill: "#f59e0b", line: "#d97706", point: "#f59e0b" }, // amber
+  { fill: "#ef4444", line: "#dc2626", point: "#ef4444" }, // red
+  { fill: "#8b5cf6", line: "#7c3aed", point: "#8b5cf6" }, // violet
+  { fill: "#ec4899", line: "#db2777", point: "#ec4899" }, // pink
+  { fill: "#06b6d4", line: "#0891b2", point: "#06b6d4" }, // cyan
+  { fill: "#84cc16", line: "#65a30d", point: "#84cc16" }, // lime
+  { fill: "#f43f5e", line: "#e11d48", point: "#f43f5e" }, // rose
+  { fill: "#6366f1", line: "#4f46e5", point: "#6366f1" }, // indigo
 ];
 
 /**
@@ -139,7 +144,7 @@ interface TileJSONWithLayers extends TileJSON {
  * タイルセットのプレビュー表示用マップコンポーネント
  *
  * タイルセットのタイプに応じて適切な表示を行う：
- * - vector: PostGISベースのMVTタイルを表示（レイヤー別スタイリング対応）
+ * - vector: PostGISベースのMVTタイルを表示（全レイヤー表示・レイヤー別スタイリング対応）
  * - pmtiles: PMTilesファイルからタイルを表示
  * - raster: COGベースのラスタータイルを表示
  */
@@ -226,12 +231,10 @@ export function TilesetMapPreview({
   /**
    * タイルURLを生成
    * 
-   * vectorタイプの場合：
-   * - layerパラメータなしの場合、全フィーチャーが "features" レイヤーにまとめられる
-   * - layerパラメータありの場合、そのレイヤー名でMVTが生成される
-   * 
-   * マッププレビューでは全フィーチャーを表示するため、layerパラメータなしで取得し
-   * source-layer: "features" を使用する
+   * マッププレビューでは全レイヤーを表示するため、
+   * vectorタイプの場合はlayerパラメータなしのURLを使用する。
+   * これにより全フィーチャーが "features" レイヤーにまとめられ、
+   * layer_nameプロパティでスタイリングできる。
    */
   const getTileUrl = useCallback((cacheBuster?: number | string) => {
     const apiBaseUrl =
@@ -239,19 +242,24 @@ export function TilesetMapPreview({
 
     const bustParam = cacheBuster ? `&_t=${cacheBuster}` : "";
 
-    if (tileJSON?.tiles && tileJSON.tiles.length > 0) {
-      const baseUrl = tileJSON.tiles[0];
-      const separator = baseUrl.includes("?") ? "&" : "?";
-      return cacheBuster ? `${baseUrl}${separator}_t=${cacheBuster}` : baseUrl;
-    }
-
     switch (tileset.type) {
       case "vector":
-        // layerパラメータなし → 全フィーチャーが "features" レイヤーに
+        // マッププレビュー用: layerパラメータなし → 全フィーチャーが "features" レイヤーに
+        // TileJSONのURLは使用しない（layerパラメータが含まれているため）
         return `${apiBaseUrl}/api/tiles/features/{z}/{x}/{y}.pbf?tileset_id=${tileset.id}${bustParam}`;
       case "pmtiles":
+        if (tileJSON?.tiles && tileJSON.tiles.length > 0) {
+          const baseUrl = tileJSON.tiles[0];
+          const separator = baseUrl.includes("?") ? "&" : "?";
+          return cacheBuster ? `${baseUrl}${separator}_t=${cacheBuster}` : baseUrl;
+        }
         return `${apiBaseUrl}/api/tiles/pmtiles/${tileset.id}/{z}/{x}/{y}.pbf${cacheBuster ? `?_t=${cacheBuster}` : ""}`;
       case "raster":
+        if (tileJSON?.tiles && tileJSON.tiles.length > 0) {
+          const baseUrl = tileJSON.tiles[0];
+          const separator = baseUrl.includes("?") ? "&" : "?";
+          return cacheBuster ? `${baseUrl}${separator}_t=${cacheBuster}` : baseUrl;
+        }
         return `${apiBaseUrl}/api/tiles/raster/${tileset.id}/{z}/{x}/{y}.${tileset.format || "png"}${cacheBuster ? `?_t=${cacheBuster}` : ""}`;
       default:
         return null;
@@ -262,15 +270,15 @@ export function TilesetMapPreview({
    * ソースレイヤー名を決定
    * 
    * vectorタイプ:
-   *   - タイルURLに layer パラメータがない場合、MVT内のレイヤー名は常に "features"
-   *   - マッププレビューでは全フィーチャーを表示するため "features" を使用
+   *   - マッププレビューではlayerパラメータなしでリクエストするため、
+   *     MVT内のレイヤー名は常に "features"
    * 
    * pmtiles:
    *   - TileJSONのvector_layersから取得（PMTilesに含まれるレイヤー名）
    */
   const getSourceLayerName = useCallback((): string => {
     if (tileset.type === "vector") {
-      // vectorタイプでlayerパラメータなしの場合、MVTレイヤー名は "features"
+      // マッププレビューではlayerパラメータなし → MVTレイヤー名は "features"
       return "features";
     }
     
@@ -283,6 +291,32 @@ export function TilesetMapPreview({
     
     return "default";
   }, [tileset.type, getVectorLayers]);
+
+  /**
+   * レイヤー名から色を取得するためのmatch式を生成
+   */
+  const getLayerColorExpression = useCallback((colorType: 'fill' | 'line' | 'point', defaultColor: string): maplibregl.ExpressionSpecification => {
+    const vectorLayers = getVectorLayers();
+    
+    if (vectorLayers.length <= 1) {
+      // 単一レイヤーの場合はデフォルト色を使用
+      return defaultColor as unknown as maplibregl.ExpressionSpecification;
+    }
+    
+    // 複数レイヤーの場合はmatch式でlayer_nameごとに色を設定
+    const matchExpr: (string | string[])[] = ["match", ["get", "layer_name"]];
+    
+    vectorLayers.forEach((layer, idx) => {
+      const colors = LAYER_COLORS[idx % LAYER_COLORS.length];
+      matchExpr.push(layer.id);
+      matchExpr.push(colors[colorType]);
+    });
+    
+    // デフォルト色（マッチしない場合）
+    matchExpr.push(defaultColor);
+    
+    return matchExpr as unknown as maplibregl.ExpressionSpecification;
+  }, [getVectorLayers]);
 
   // boundsにフィット
   const fitToBounds = useCallback(() => {
@@ -393,18 +427,18 @@ export function TilesetMapPreview({
 
           // ソースレイヤー名を決定
           const sourceLayer = getSourceLayerName();
+          const vectorLayers = getVectorLayers();
           
           // デバッグログ
           console.log(`[TilesetMapPreview] tileset.type: ${tileset.type}`);
           console.log(`[TilesetMapPreview] source-layer: "${sourceLayer}"`);
           console.log(`[TilesetMapPreview] tileUrl: ${tileUrl}`);
+          console.log(`[TilesetMapPreview] vector_layers:`, vectorLayers.map(l => l.id));
 
-          // 使用する色（propsまたはデフォルト）
-          const colors = {
-            fill: fillColor,
-            line: lineColor,
-            point: pointColor,
-          };
+          // レイヤー別スタイリング用の色を取得
+          const fillColorExpr = getLayerColorExpression('fill', fillColor);
+          const lineColorExpr = getLayerColorExpression('line', lineColor);
+          const pointColorExpr = getLayerColorExpression('point', pointColor);
 
           // ポリゴンレイヤー
           map.current.addLayer({
@@ -414,7 +448,7 @@ export function TilesetMapPreview({
             "source-layer": sourceLayer,
             filter: ["==", ["geometry-type"], "Polygon"],
             paint: {
-              "fill-color": colors.fill,
+              "fill-color": fillColorExpr,
               "fill-opacity": 0.4,
             },
           });
@@ -427,7 +461,7 @@ export function TilesetMapPreview({
             "source-layer": sourceLayer,
             filter: ["==", ["geometry-type"], "Polygon"],
             paint: {
-              "line-color": colors.line,
+              "line-color": lineColorExpr,
               "line-width": 1.5,
             },
           });
@@ -440,7 +474,7 @@ export function TilesetMapPreview({
             "source-layer": sourceLayer,
             filter: ["==", ["geometry-type"], "LineString"],
             paint: {
-              "line-color": colors.line,
+              "line-color": lineColorExpr,
               "line-width": 2,
             },
           });
@@ -454,7 +488,7 @@ export function TilesetMapPreview({
             filter: ["==", ["geometry-type"], "Point"],
             paint: {
               "circle-radius": 6,
-              "circle-color": colors.point,
+              "circle-color": pointColorExpr,
               "circle-stroke-width": 2,
               "circle-stroke-color": "#ffffff",
             },
@@ -492,6 +526,36 @@ export function TilesetMapPreview({
               .addTo(map.current!);
           });
 
+          // ポリゴンクリックでもポップアップ表示
+          map.current.on("click", "tileset-polygon", (e) => {
+            if (!map.current || !e.features || e.features.length === 0) return;
+
+            const feature = e.features[0];
+            const props = feature.properties || {};
+
+            let content = "<div class='p-2'>";
+            
+            if (props.layer_name) {
+              content += `<span class='text-xs bg-gray-200 rounded px-1'>${props.layer_name}</span><br/>`;
+            }
+            
+            if (props.name) {
+              content += `<strong>${props.name}</strong><br/>`;
+            }
+            
+            const excludeKeys = ["name", "layer_name", "feature_id"];
+            const keys = Object.keys(props).filter((k) => !excludeKeys.includes(k));
+            keys.slice(0, 5).forEach((key) => {
+              content += `<span class='text-sm text-gray-600'>${key}: ${props[key]}</span><br/>`;
+            });
+            content += "</div>";
+
+            new maplibregl.Popup()
+              .setLngLat(e.lngLat)
+              .setHTML(content)
+              .addTo(map.current!);
+          });
+
           // ポイントにホバーでカーソル変更
           map.current.on("mouseenter", "tileset-point", () => {
             if (map.current) {
@@ -500,6 +564,19 @@ export function TilesetMapPreview({
           });
 
           map.current.on("mouseleave", "tileset-point", () => {
+            if (map.current) {
+              map.current.getCanvas().style.cursor = "";
+            }
+          });
+
+          // ポリゴンにホバーでカーソル変更
+          map.current.on("mouseenter", "tileset-polygon", () => {
+            if (map.current) {
+              map.current.getCanvas().style.cursor = "pointer";
+            }
+          });
+
+          map.current.on("mouseleave", "tileset-polygon", () => {
             if (map.current) {
               map.current.getCanvas().style.cursor = "";
             }
@@ -533,6 +610,8 @@ export function TilesetMapPreview({
     getTileUrl,
     getInitialView,
     getSourceLayerName,
+    getVectorLayers,
+    getLayerColorExpression,
     fillColor,
     lineColor,
     pointColor,
@@ -589,15 +668,15 @@ export function TilesetMapPreview({
         style={{ height }}
       />
 
-      {/* レイヤー情報（vectorタイプの場合） */}
+      {/* レイヤー凡例（vectorタイプで複数レイヤーがある場合） */}
       {isLoaded && tileset.type === "vector" && vectorLayers.length > 0 && (
         <div className="absolute top-2 left-2 bg-white/90 rounded px-2 py-1 text-xs shadow max-w-[200px]">
           <div className="font-medium mb-1">レイヤー:</div>
           {vectorLayers.map((layer, idx) => (
             <div key={layer.id} className="flex items-center gap-1">
               <span
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].point }}
+                className="w-3 h-3 rounded-sm border border-gray-300"
+                style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].fill }}
               />
               <span className="truncate">{layer.id}</span>
             </div>

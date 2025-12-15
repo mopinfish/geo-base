@@ -75,6 +75,19 @@ export interface FeatureUpdate {
   properties?: Record<string, unknown>;
   geometry?: GeoJSON.Geometry;
 }
+export interface BulkFeatureCreate {
+  tileset_id: string;
+  layer_name?: string;
+  features: GeoJSON.Feature[];
+}
+
+export interface BulkFeatureResponse {
+  success_count: number;
+  failed_count: number;
+  feature_ids: string[];
+  errors: string[];
+}
+
 
 export interface TileJSON {
   tilejson: string;
@@ -398,6 +411,14 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  async createFeaturesBulk(data: BulkFeatureCreate): Promise<BulkFeatureResponse> {
+    return this.request<BulkFeatureResponse>('/api/features/bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
 
   async updateFeature(id: string, data: FeatureUpdate): Promise<Feature> {
     return this.request<Feature>(`/api/features/${id}`, {
