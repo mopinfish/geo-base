@@ -5,7 +5,7 @@ import maplibregl from "maplibre-gl";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { TileJSON, Tileset } from "@/lib/api";
-import { Maximize2, X } from "lucide-react";
+import { Maximize2, X, Eye, EyeOff } from "lucide-react";
 
 export interface TilesetMapPreviewProps {
   /** タイルセット情報 */
@@ -169,6 +169,7 @@ export function TilesetMapPreview({
   const [error, setError] = useState<string | null>(null);
   const [hasFittedBounds, setHasFittedBounds] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [visibleLayers, setVisibleLayers] = useState<Set<string>>(new Set());
 
   // 有効なboundsを取得
   const getValidBounds = useCallback((): number[] | null => {
@@ -296,6 +297,93 @@ export function TilesetMapPreview({
     
     return "default";
   }, [tileset.type, getVectorLayers]);
+
+  /**
+   * レイヤーの表示/非表示をトグル
+   */
+  const toggleLayerVisibility = useCallback((layerId: string) => {
+    setVisibleLayers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(layerId)) {
+        newSet.delete(layerId);
+      } else {
+        newSet.add(layerId);
+      }
+      return newSet;
+    });
+
+    // MapLibreレイヤーの可視性を更新
+    const layerIds = [
+      `tileset-polygon-${layerId}`,
+      `tileset-polygon-outline-${layerId}`,
+      `tileset-line-${layerId}`,
+      `tileset-point-${layerId}`,
+    ];
+
+    const visibility = visibleLayers.has(layerId) ? "none" : "visible";
+
+    // 通常のマップ
+    if (map.current) {
+      layerIds.forEach(id => {
+        if (map.current?.getLayer(id)) {
+          map.current.setLayoutProperty(id, "visibility", visibility);
+        }
+      });
+    }
+
+    // 全画面マップ
+    if (fullscreenMap.current) {
+      layerIds.forEach(id => {
+        if (fullscreenMap.current?.getLayer(id)) {
+          fullscreenMap.current.setLayoutProperty(id, "visibility", visibility);
+        }
+      });
+    }
+  }, [visibleLayers]);
+
+  /**
+   * 全レイヤーの表示/非表示を一括設定
+   */
+  const setAllLayersVisibility = useCallback((visible: boolean) => {
+    const vectorLayers = getVectorLayers();
+    const layerIdSet = new Set(vectorLayers.map(l => l.id));
+
+    if (visible) {
+      setVisibleLayers(layerIdSet);
+    } else {
+      setVisibleLayers(new Set());
+    }
+
+    // MapLibreレイヤーの可視性を更新
+    vectorLayers.forEach(layer => {
+      const layerIds = [
+        `tileset-polygon-${layer.id}`,
+        `tileset-polygon-outline-${layer.id}`,
+        `tileset-line-${layer.id}`,
+        `tileset-point-${layer.id}`,
+      ];
+
+      const visibility = visible ? "visible" : "none";
+
+      // 通常のマップ
+      if (map.current) {
+        layerIds.forEach(id => {
+          if (map.current?.getLayer(id)) {
+            map.current.setLayoutProperty(id, "visibility", visibility);
+          }
+        });
+      }
+
+      // 全画面マップ
+      if (fullscreenMap.current) {
+        layerIds.forEach(id => {
+          if (fullscreenMap.current?.getLayer(id)) {
+            fullscreenMap.current.setLayoutProperty(id, "visibility", visibility);
+          }
+        });
+      }
+    });
+  }, [getVectorLayers]);
 
   // boundsにフィット
   const fitToBounds = useCallback(() => {
@@ -642,6 +730,16 @@ export function TilesetMapPreview({
     }
   }, [isLoaded, autoFitBounds, hasFittedBounds, getValidBounds]);
 
+  // 地図ロード後にレイヤー可視性を初期化（全レイヤー表示）
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    const vectorLayers = getVectorLayers();
+    if (vectorLayers.length > 0 && visibleLayers.size === 0) {
+      setVisibleLayers(new Set(vectorLayers.map(l => l.id)));
+    }
+  }, [isLoaded, getVectorLayers, visibleLayers.size]);
+
   // 全画面表示の切り替え
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
@@ -744,17 +842,54 @@ export function TilesetMapPreview({
 
         {/* レイヤー凡例（vectorタイプで複数レイヤーがある場合） */}
         {isLoaded && tileset.type === "vector" && vectorLayers.length > 0 && (
-          <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-md border border-gray-200 max-w-[200px]">
-            <div className="font-semibold mb-1 text-gray-700">レイヤー:</div>
-            {vectorLayers.map((layer, idx) => (
-              <div key={layer.id} className="flex items-center gap-1.5">
-                <span
-                  className="w-3 h-3 rounded-sm border border-gray-300 flex-shrink-0"
-                  style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].fill }}
-                />
-                <span className="truncate text-gray-700">{layer.id}</span>
+          <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-md border border-gray-200 max-w-[220px]">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-semibold text-gray-700">レイヤー:</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setAllLayersVisibility(true)}
+                  className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                  title="すべて表示"
+                >
+                  全表示
+                </button>
+                <button
+                  onClick={() => setAllLayersVisibility(false)}
+                  className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                  title="すべて非表示"
+                >
+                  全非表示
+                </button>
               </div>
-            ))}
+            </div>
+            {vectorLayers.map((layer, idx) => {
+              const isVisible = visibleLayers.has(layer.id);
+              return (
+                <button
+                  key={layer.id}
+                  onClick={() => toggleLayerVisibility(layer.id)}
+                  className={`flex items-center gap-1.5 w-full py-0.5 px-1 rounded hover:bg-gray-100 transition-colors ${
+                    isVisible ? "" : "opacity-50"
+                  }`}
+                  title={isVisible ? `${layer.id}を非表示` : `${layer.id}を表示`}
+                >
+                  {isVisible ? (
+                    <Eye className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                  ) : (
+                    <EyeOff className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                  )}
+                  <span
+                    className={`w-3 h-3 rounded-sm border border-gray-300 flex-shrink-0 ${
+                      isVisible ? "" : "opacity-40"
+                    }`}
+                    style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].fill }}
+                  />
+                  <span className={`truncate text-left ${isVisible ? "text-gray-700" : "text-gray-400"}`}>
+                    {layer.id}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -826,17 +961,54 @@ export function TilesetMapPreview({
 
           {/* レイヤー凡例（全画面モード） */}
           {tileset.type === "vector" && vectorLayers.length > 0 && (
-            <div className="absolute bottom-20 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-lg border border-gray-200 max-w-[200px]">
-              <div className="font-semibold mb-1 text-gray-700">レイヤー:</div>
-              {vectorLayers.map((layer, idx) => (
-                <div key={layer.id} className="flex items-center gap-1.5">
-                  <span
-                    className="w-3 h-3 rounded-sm border border-gray-300 flex-shrink-0"
-                    style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].fill }}
-                  />
-                  <span className="truncate text-gray-700">{layer.id}</span>
+            <div className="absolute bottom-20 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-lg border border-gray-200 max-w-[220px]">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-semibold text-gray-700">レイヤー:</span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setAllLayersVisibility(true)}
+                    className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                    title="すべて表示"
+                  >
+                    全表示
+                  </button>
+                  <button
+                    onClick={() => setAllLayersVisibility(false)}
+                    className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                    title="すべて非表示"
+                  >
+                    全非表示
+                  </button>
                 </div>
-              ))}
+              </div>
+              {vectorLayers.map((layer, idx) => {
+                const isVisible = visibleLayers.has(layer.id);
+                return (
+                  <button
+                    key={layer.id}
+                    onClick={() => toggleLayerVisibility(layer.id)}
+                    className={`flex items-center gap-1.5 w-full py-0.5 px-1 rounded hover:bg-gray-100 transition-colors ${
+                      isVisible ? "" : "opacity-50"
+                    }`}
+                    title={isVisible ? `${layer.id}を非表示` : `${layer.id}を表示`}
+                  >
+                    {isVisible ? (
+                      <Eye className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                    ) : (
+                      <EyeOff className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                    )}
+                    <span
+                      className={`w-3 h-3 rounded-sm border border-gray-300 flex-shrink-0 ${
+                        isVisible ? "" : "opacity-40"
+                      }`}
+                      style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].fill }}
+                    />
+                    <span className={`truncate text-left ${isVisible ? "text-gray-700" : "text-gray-400"}`}>
+                      {layer.id}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
 
