@@ -446,26 +446,63 @@ export function TilesetMapPreview({
         const feature = e.features[0];
         const props = feature.properties || {};
 
-        let content = "<div class='p-2'>";
+        // 値をフォーマット（URL検出、長文省略など）
+        const formatValue = (value: unknown): string => {
+          if (value === null || value === undefined) return "-";
+          const str = String(value);
+          
+          // URLの場合はリンクにする
+          if (str.match(/^https?:\/\//)) {
+            const displayUrl = str.length > 40 ? str.substring(0, 40) + "..." : str;
+            return `<a href="${str}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${displayUrl}</a>`;
+          }
+          
+          // 長い文字列は省略
+          if (str.length > 50) {
+            return str.substring(0, 50) + "...";
+          }
+          
+          return str;
+        };
+
+        // スタイル: 最大幅を設定し、長い単語を折り返す
+        let content = "<div style='max-width: 280px; word-wrap: break-word; overflow-wrap: break-word;' class='p-2 text-sm'>";
         
         // layer_nameがあれば表示
         if (props.layer_name) {
-          content += `<span class='text-xs bg-gray-200 rounded px-1'>${props.layer_name}</span><br/>`;
+          content += `<span class='inline-block text-xs bg-gray-200 rounded px-1 mb-1'>${props.layer_name}</span><br/>`;
         }
         
-        if (props.name) {
-          content += `<strong>${props.name}</strong><br/>`;
+        // 名称を表示
+        if (props.name || props["名称"]) {
+          const name = props.name || props["名称"];
+          content += `<strong class='text-gray-900'>${name}</strong><br/>`;
         }
         
         // その他のプロパティを表示（最大5件）
-        const excludeKeys = ["name", "layer_name", "feature_id"];
+        const excludeKeys = ["name", "名称", "layer_name", "feature_id"];
         const keys = Object.keys(props).filter((k) => !excludeKeys.includes(k));
-        keys.slice(0, 5).forEach((key) => {
-          content += `<span class='text-sm text-gray-600'>${key}: ${props[key]}</span><br/>`;
-        });
+        
+        if (keys.length > 0) {
+          content += "<table class='mt-1 text-xs' style='border-collapse: collapse;'>";
+          keys.slice(0, 5).forEach((key) => {
+            const formattedValue = formatValue(props[key]);
+            content += `<tr>
+              <td class='text-gray-500 pr-2 py-0.5 align-top' style='white-space: nowrap;'>${key}:</td>
+              <td class='text-gray-700 py-0.5' style='word-break: break-all;'>${formattedValue}</td>
+            </tr>`;
+          });
+          content += "</table>";
+          
+          // 表示されていないプロパティがある場合
+          if (keys.length > 5) {
+            content += `<div class='text-xs text-gray-400 mt-1'>...他 ${keys.length - 5} 件</div>`;
+          }
+        }
+        
         content += "</div>";
 
-        new maplibregl.Popup()
+        new maplibregl.Popup({ maxWidth: "300px" })
           .setLngLat(e.lngLat)
           .setHTML(content)
           .addTo(mapInstance);
