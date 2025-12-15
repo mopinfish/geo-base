@@ -362,12 +362,18 @@ export function TilesetMapPreview({
         const layerId = layer.id;
         const colors = LAYER_COLORS[idx % LAYER_COLORS.length];
         
-        // フィルター条件: 
-        // - vectorタイプ: layer_nameプロパティでフィルタリング
-        // - pmtilesタイプ: フィルタリング不要（各レイヤーが独立）
-        const layerFilter = tileset.type === "vector" 
-          ? ["==", ["get", "layer_name"], layerId]
-          : undefined;
+        // フィルター条件を生成するヘルパー関数
+        // vectorタイプの場合はlayer_nameでフィルタリング
+        const createFilter = (geometryType: string): maplibregl.FilterSpecification => {
+          if (tileset.type === "vector") {
+            return [
+              "all",
+              ["==", ["geometry-type"], geometryType],
+              ["==", ["get", "layer_name"], layerId]
+            ] as maplibregl.FilterSpecification;
+          }
+          return ["==", ["geometry-type"], geometryType] as maplibregl.FilterSpecification;
+        };
 
         // ポリゴンレイヤー
         mapInstance.addLayer({
@@ -375,9 +381,7 @@ export function TilesetMapPreview({
           type: "fill",
           source: "tileset",
           "source-layer": sourceLayer,
-          filter: layerFilter 
-            ? ["all", ["==", ["geometry-type"], "Polygon"], layerFilter]
-            : ["==", ["geometry-type"], "Polygon"],
+          filter: createFilter("Polygon"),
           paint: {
             "fill-color": colors.fill,
             "fill-opacity": 0.4,
@@ -390,9 +394,7 @@ export function TilesetMapPreview({
           type: "line",
           source: "tileset",
           "source-layer": sourceLayer,
-          filter: layerFilter 
-            ? ["all", ["==", ["geometry-type"], "Polygon"], layerFilter]
-            : ["==", ["geometry-type"], "Polygon"],
+          filter: createFilter("Polygon"),
           paint: {
             "line-color": colors.line,
             "line-width": 1.5,
@@ -405,9 +407,7 @@ export function TilesetMapPreview({
           type: "line",
           source: "tileset",
           "source-layer": sourceLayer,
-          filter: layerFilter 
-            ? ["all", ["==", ["geometry-type"], "LineString"], layerFilter]
-            : ["==", ["geometry-type"], "LineString"],
+          filter: createFilter("LineString"),
           paint: {
             "line-color": colors.line,
             "line-width": 2,
@@ -420,9 +420,7 @@ export function TilesetMapPreview({
           type: "circle",
           source: "tileset",
           "source-layer": sourceLayer,
-          filter: layerFilter 
-            ? ["all", ["==", ["geometry-type"], "Point"], layerFilter]
-            : ["==", ["geometry-type"], "Point"],
+          filter: createFilter("Point"),
           paint: {
             "circle-radius": 6,
             "circle-color": colors.point,
