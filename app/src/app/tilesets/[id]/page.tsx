@@ -29,7 +29,21 @@ import {
   Eye,
   EyeOff,
   BarChart3,
+  Database,
 } from "lucide-react";
+
+// TileJSON with vector_layers の型定義
+interface VectorLayer {
+  id: string;
+  fields?: Record<string, string>;
+  minzoom?: number;
+  maxzoom?: number;
+  description?: string;
+}
+
+interface TileJSONWithLayers extends TileJSON {
+  vector_layers?: VectorLayer[];
+}
 
 interface TilesetDetailPageProps {
   params: Promise<{ id: string }>;
@@ -41,7 +55,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const { api, isReady } = useApi();
 
   const [tileset, setTileset] = useState<Tileset | null>(null);
-  const [tileJSON, setTileJSON] = useState<TileJSON | null>(null);
+  const [tileJSON, setTileJSON] = useState<TileJSONWithLayers | null>(null);
   const [tilesetStats, setTilesetStats] = useState<TilesetStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +82,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
       // TileJSONも取得
       try {
         const tjData = await api.getTilesetTileJSON(id);
-        setTileJSON(tjData);
+        setTileJSON(tjData as TileJSONWithLayers);
       } catch {
         // TileJSONの取得に失敗しても詳細は表示
         console.warn("TileJSON fetch failed, but continuing without it");
@@ -197,6 +211,14 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
     }
   };
 
+  /**
+   * vector_layersからレイヤー一覧を取得
+   */
+  const getVectorLayers = (): VectorLayer[] => {
+    if (!tileJSON?.vector_layers) return [];
+    return tileJSON.vector_layers;
+  };
+
   if (!isReady || isLoading) {
     return (
       <AdminLayout>
@@ -234,6 +256,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const tileUrl = getTileUrl(tileset, apiBaseUrl);
   const tileJsonUrl = `${apiBaseUrl}/api/tilesets/${id}/tilejson.json`;
   const tileUrlLabel = getTileUrlLabel(tileset.type);
+  const vectorLayers = getVectorLayers();
 
   return (
     <AdminLayout>
@@ -520,7 +543,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               <div>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-muted-foreground">
-                    TileJSON URL
+                    TileJSON URL（全レイヤー）
                   </p>
                   <Button
                     variant="ghost"
@@ -538,6 +561,64 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                   {tileJsonUrl}
                 </code>
               </div>
+
+              {/* レイヤー別TileJSON URL（vectorタイプのみ） */}
+              {tileset.type === "vector" && vectorLayers.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Database className="h-4 w-4" />
+                      <p className="text-sm font-medium text-muted-foreground">
+                        レイヤー別TileJSON URL（QGIS用）
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      QGISで使用する場合は、各レイヤーごとのTileJSON URLを使用してください。
+                    </p>
+                    <div className="space-y-2">
+                      {vectorLayers.map((layer) => {
+                        const layerTileJsonUrl = `${apiBaseUrl}/api/tilesets/${id}/tilejson.json?layer=${encodeURIComponent(layer.id)}`;
+                        const copyKey = `layer-${layer.id}`;
+                        return (
+                          <div
+                            key={layer.id}
+                            className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {layer.id}
+                                </Badge>
+                                {layer.fields && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {Object.keys(layer.fields).length} fields
+                                  </span>
+                                )}
+                              </div>
+                              <code className="mt-1 block text-xs break-all text-muted-foreground">
+                                {layerTileJsonUrl}
+                              </code>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="ml-2 shrink-0"
+                              onClick={() => copyToClipboard(layerTileJsonUrl, copyKey)}
+                            >
+                              {copiedUrl === copyKey ? (
+                                <Check className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
 
               {tileJSON && (
                 <>

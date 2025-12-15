@@ -1532,6 +1532,7 @@ def get_tileset(
 def get_tileset_tilejson(
     tileset_id: str,
     request: Request,
+    layer: Optional[str] = Query(None, description="Filter to specific layer name for QGIS compatibility"),
     conn=Depends(get_connection),
     user: Optional[User] = Depends(get_current_user),
 ):
@@ -1599,16 +1600,36 @@ def get_tileset_tilejson(
             vector_layers = []
             with conn.cursor() as cur:
                 # Get distinct layer names for this tileset
-                cur.execute(
-                    """
-                    SELECT DISTINCT layer_name
-                    FROM features
-                    WHERE tileset_id = %s
-                    ORDER BY layer_name
-                    """,
-                    (tileset_id,),
-                )
+                if layer:
+                    # Filter to specific layer
+                    cur.execute(
+                        """
+                        SELECT DISTINCT layer_name
+                        FROM features
+                        WHERE tileset_id = %s AND layer_name = %s
+                        ORDER BY layer_name
+                        """,
+                        (tileset_id, layer),
+                    )
+                else:
+                    # Get all layers
+                    cur.execute(
+                        """
+                        SELECT DISTINCT layer_name
+                        FROM features
+                        WHERE tileset_id = %s
+                        ORDER BY layer_name
+                        """,
+                        (tileset_id,),
+                    )
                 layer_names = [row[0] for row in cur.fetchall()]
+                
+                # If specific layer requested but not found, return error
+                if layer and not layer_names:
+                    raise HTTPException(
+                        status_code=404, 
+                        detail=f"Layer '{layer}' not found in tileset"
+                    )
                 
                 # For each layer, get field information from properties
                 for layer_name in layer_names:
