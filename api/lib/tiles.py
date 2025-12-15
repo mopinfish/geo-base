@@ -4,6 +4,7 @@ Tile serving utilities for geo-base API.
 Features:
 - MBTiles/PMTiles static tile serving
 - Dynamic MVT generation from PostGIS
+- Multi-layer MVT support (each layer_name as separate MVT layer)
 - Attribute filtering
 - Zoom-level based geometry simplification
 - Optimized cache headers
@@ -435,7 +436,12 @@ def generate_features_mvt(
     simplify: bool = True,
 ) -> bytes:
     """
-    Generate MVT from the features table with filtering support.
+    Generate MVT from the features table with multi-layer support.
+    
+    When layer_name is specified, generates a single layer with that name.
+    When layer_name is None, generates multiple layers - one for each distinct
+    layer_name in the database. This allows QGIS and other GIS tools to display
+    each layer with different styles.
     
     Args:
         conn: Database connection
@@ -450,31 +456,6 @@ def generate_features_mvt(
     Returns:
         MVT data as bytes
     """
-    # Build WHERE conditions
-    conditions = []
-    params = {"z": z, "x": x, "y": y}
-    
-    if tileset_id:
-        conditions.append("tileset_id = %(tileset_id)s")
-        params["tileset_id"] = tileset_id
-    
-    if layer_name:
-        conditions.append("layer_name = %(layer)s")
-        params["layer"] = layer_name
-    
-    # Parse attribute filter
-    if filter_expr:
-        filter_clause, filter_params = parse_filter_expression(filter_expr)
-        if filter_clause != "TRUE":
-            conditions.append(filter_clause)
-            params.update(filter_params)
-    
-    where_clause = " AND ".join(conditions) if conditions else "TRUE"
-    
-    # MVT layer name
-    mvt_layer = layer_name if layer_name else "features"
-    params["layer_name"] = mvt_layer
-    
     # Get simplification tolerance
     tolerance = get_simplification_tolerance(z) if simplify else 0
     
@@ -489,37 +470,137 @@ def generate_features_mvt(
     else:
         geom_transform = "ST_Transform(geom, 3857)"
     
-    # Build query
-    query = f"""
-        WITH mvtgeom AS (
-            SELECT
-                ST_AsMVTGeom(
-                    {geom_transform},
-                    ST_TileEnvelope(%(z)s, %(x)s, %(y)s),
-                    4096,
-                    256,
-                    true
-                ) AS geom,
-                id::text as feature_id,
-                layer_name,
-                properties
-            FROM features
-            WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
-              AND ({where_clause})
-        )
-        SELECT ST_AsMVT(mvtgeom.*, %(layer_name)s, 4096, 'geom')
-        FROM mvtgeom
-        WHERE geom IS NOT NULL;
-    """
+    # Parse attribute filter if provided
+    filter_clause = "TRUE"
+    filter_params = {}
+    if filter_expr:
+        filter_clause, filter_params = parse_filter_expression(filter_expr)
+    
+    # If specific layer_name is requested, generate single layer
+    if layer_name:
+        params = {"z": z, "x": x, "y": y, "layer_name": layer_name}
+        
+        conditions = [f"layer_name = %(layer_name)s"]
+        if tileset_id:
+            conditions.append("tileset_id = %(tileset_id)s")
+            params["tileset_id"] = tileset_id
+        if filter_clause != "TRUE":
+            conditions.append(filter_clause)
+            params.update(filter_params)
+        
+        where_clause = " AND ".join(conditions)
+        
+        query = f"""
+            WITH mvtgeom AS (
+                SELECT
+                    ST_AsMVTGeom(
+                        {geom_transform},
+                        ST_TileEnvelope(%(z)s, %(x)s, %(y)s),
+                        4096,
+                        256,
+                        true
+                    ) AS geom,
+                    id::text as feature_id,
+                    layer_name,
+                    properties
+                FROM features
+                WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
+                  AND ({where_clause})
+            )
+            SELECT ST_AsMVT(mvtgeom.*, %(layer_name)s, 4096, 'geom')
+            FROM mvtgeom
+            WHERE geom IS NOT NULL;
+        """
+        
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            result = cur.fetchone()
+        
+        if result and result[0]:
+            return result[0].tobytes()
+        return b""
+    
+    # Multi-layer mode: generate separate MVT layer for each layer_name
+    # First, get all distinct layer names within the tile bounds
+    layer_query_params = {"z": z, "x": x, "y": y}
+    layer_conditions = ["ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)"]
+    
+    if tileset_id:
+        layer_conditions.append("tileset_id = %(tileset_id)s")
+        layer_query_params["tileset_id"] = tileset_id
+    if filter_clause != "TRUE":
+        layer_conditions.append(filter_clause)
+        layer_query_params.update(filter_params)
+    
+    layer_where = " AND ".join(layer_conditions)
     
     with conn.cursor() as cur:
-        cur.execute(query, params)
-        result = cur.fetchone()
+        cur.execute(
+            f"""
+            SELECT DISTINCT layer_name
+            FROM features
+            WHERE {layer_where}
+            ORDER BY layer_name
+            """,
+            layer_query_params
+        )
+        layer_names = [row[0] for row in cur.fetchall()]
     
-    if result and result[0]:
-        return result[0].tobytes()
+    if not layer_names:
+        return b""
     
-    return b""
+    # Generate MVT for each layer and concatenate using PostgreSQL's || operator
+    # This creates a single MVT with multiple named layers
+    mvt_parts = []
+    
+    for ln in layer_names:
+        params = {"z": z, "x": x, "y": y, "current_layer": ln}
+        
+        conditions = ["layer_name = %(current_layer)s"]
+        if tileset_id:
+            conditions.append("tileset_id = %(tileset_id)s")
+            params["tileset_id"] = tileset_id
+        if filter_clause != "TRUE":
+            conditions.append(filter_clause)
+            params.update(filter_params)
+        
+        where_clause = " AND ".join(conditions)
+        
+        query = f"""
+            WITH mvtgeom AS (
+                SELECT
+                    ST_AsMVTGeom(
+                        {geom_transform},
+                        ST_TileEnvelope(%(z)s, %(x)s, %(y)s),
+                        4096,
+                        256,
+                        true
+                    ) AS geom,
+                    id::text as feature_id,
+                    layer_name,
+                    properties
+                FROM features
+                WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
+                  AND ({where_clause})
+            )
+            SELECT ST_AsMVT(mvtgeom.*, %(current_layer)s, 4096, 'geom')
+            FROM mvtgeom
+            WHERE geom IS NOT NULL;
+        """
+        
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            result = cur.fetchone()
+        
+        if result and result[0]:
+            mvt_parts.append(result[0].tobytes())
+    
+    if not mvt_parts:
+        return b""
+    
+    # Concatenate all MVT parts
+    # MVT is a Protobuf format where multiple layers can be concatenated
+    return b"".join(mvt_parts)
 
 
 # =============================================================================

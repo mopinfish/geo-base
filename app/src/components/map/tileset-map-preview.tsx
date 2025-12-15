@@ -344,44 +344,38 @@ export function TilesetMapPreview({
         maxzoom: tileJSON?.maxzoom ?? tileset.max_zoom ?? 22,
       });
 
-      // ソースレイヤー名を決定（MVT内のレイヤー名）
-      // vector: "features"（全データを含む単一レイヤー）
-      // pmtiles: TileJSONから取得
-      const sourceLayer = getSourceLayerName();
+      // vector_layersを取得（各layer_nameに対応）
       const vectorLayers = getVectorLayers();
       
       // デバッグログ
       console.log(`[TilesetMapPreview] tileset.type: ${tileset.type}`);
-      console.log(`[TilesetMapPreview] source-layer: "${sourceLayer}"`);
       console.log(`[TilesetMapPreview] tileUrl: ${tileUrl}`);
       console.log(`[TilesetMapPreview] vector_layers:`, vectorLayers.map(l => l.id));
 
       // 各layer_name（TileJSON vector_layers[].id）ごとに個別のMapLibreレイヤーを作成
-      // これにより、各データレイヤーを異なる色でスタイリングできる
+      // MVTの各レイヤーは独立したsource-layerとして扱われる
+      // これにより、QGISでも各レイヤーに異なるスタイルを適用可能
       vectorLayers.forEach((layer, idx) => {
         const layerId = layer.id;
         const colors = LAYER_COLORS[idx % LAYER_COLORS.length];
         
-        // フィルター条件を生成するヘルパー関数
-        // vectorタイプの場合はlayer_nameでフィルタリング
-        const createFilter = (geometryType: string): maplibregl.FilterSpecification => {
-          if (tileset.type === "vector") {
-            return [
-              "all",
-              ["==", ["geometry-type"], geometryType],
-              ["==", ["get", "layer_name"], layerId]
-            ] as maplibregl.FilterSpecification;
-          }
-          return ["==", ["geometry-type"], geometryType] as maplibregl.FilterSpecification;
-        };
+        // source-layer: 
+        // - vectorタイプ: 各layer_nameがMVTの独立したレイヤー名になる
+        // - pmtilesタイプ: TileJSONのvector_layers[].idがレイヤー名
+        const sourceLayerName = layerId;
+
+        // ジオメトリタイプでフィルタリング（layer_nameでのフィルタは不要）
+        const polygonFilter: maplibregl.FilterSpecification = ["==", ["geometry-type"], "Polygon"];
+        const lineFilter: maplibregl.FilterSpecification = ["==", ["geometry-type"], "LineString"];
+        const pointFilter: maplibregl.FilterSpecification = ["==", ["geometry-type"], "Point"];
 
         // ポリゴンレイヤー
         mapInstance.addLayer({
           id: `tileset-polygon-${layerId}`,
           type: "fill",
           source: "tileset",
-          "source-layer": sourceLayer,
-          filter: createFilter("Polygon"),
+          "source-layer": sourceLayerName,
+          filter: polygonFilter,
           paint: {
             "fill-color": colors.fill,
             "fill-opacity": 0.4,
@@ -393,8 +387,8 @@ export function TilesetMapPreview({
           id: `tileset-polygon-outline-${layerId}`,
           type: "line",
           source: "tileset",
-          "source-layer": sourceLayer,
-          filter: createFilter("Polygon"),
+          "source-layer": sourceLayerName,
+          filter: polygonFilter,
           paint: {
             "line-color": colors.line,
             "line-width": 1.5,
@@ -406,8 +400,8 @@ export function TilesetMapPreview({
           id: `tileset-line-${layerId}`,
           type: "line",
           source: "tileset",
-          "source-layer": sourceLayer,
-          filter: createFilter("LineString"),
+          "source-layer": sourceLayerName,
+          filter: lineFilter,
           paint: {
             "line-color": colors.line,
             "line-width": 2,
@@ -419,8 +413,8 @@ export function TilesetMapPreview({
           id: `tileset-point-${layerId}`,
           type: "circle",
           source: "tileset",
-          "source-layer": sourceLayer,
-          filter: createFilter("Point"),
+          "source-layer": sourceLayerName,
+          filter: pointFilter,
           paint: {
             "circle-radius": 6,
             "circle-color": colors.point,
@@ -521,7 +515,7 @@ export function TilesetMapPreview({
         mapInstance.on("mouseleave", polygonLayerId, setCursor(""));
       });
     }
-  }, [tileset, tileJSON, getSourceLayerName, getVectorLayers, fillColor, lineColor, pointColor]);
+  }, [tileset, tileJSON, getVectorLayers, fillColor, lineColor, pointColor]);
 
   /**
    * 地図のベーススタイルを生成
