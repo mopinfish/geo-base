@@ -1626,6 +1626,7 @@ def get_tileset_tilejson(
             
             # If no layers found, add a default layer
             if not vector_layers:
+                layer_names = ["default"]
                 vector_layers.append({
                     "id": "default",
                     "fields": {},
@@ -1634,11 +1635,26 @@ def get_tileset_tilejson(
                     "description": ""
                 })
             
+            # Build tiles URL with layer parameter
+            # This ensures MVT layer name matches vector_layers[].id
+            if len(layer_names) == 1:
+                # Single layer: add layer parameter to match vector_layers[].id
+                primary_layer = layer_names[0]
+                tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}&layer={primary_layer}"
+            else:
+                # Multiple layers: currently use first layer
+                # TODO: Implement multi-layer MVT generation for full support
+                # For now, we use the first layer to ensure QGIS compatibility
+                primary_layer = layer_names[0]
+                tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}&layer={primary_layer}"
+                # Note: Only the first layer will be rendered.
+                # Full multi-layer support requires generate_multi_layer_mvt()
+            
             # Build TileJSON response
             tilejson = {
                 "tilejson": "3.0.0",
                 "name": name,
-                "tiles": [f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"],
+                "tiles": [tiles_url],
                 "minzoom": min_zoom or 0,
                 "maxzoom": max_zoom or 22,
                 "vector_layers": vector_layers,
