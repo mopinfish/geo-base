@@ -670,15 +670,15 @@ export function TilesetMapPreview({
 
       {/* レイヤー凡例（vectorタイプで複数レイヤーがある場合） */}
       {isLoaded && tileset.type === "vector" && vectorLayers.length > 0 && (
-        <div className="absolute top-2 left-2 bg-white/90 rounded px-2 py-1 text-xs shadow max-w-[200px]">
-          <div className="font-medium mb-1">レイヤー:</div>
+        <div className="absolute top-2 left-2 bg-white rounded-md px-3 py-2 text-xs shadow-md border border-gray-200 max-w-[200px]">
+          <div className="font-semibold mb-1 text-gray-700">レイヤー:</div>
           {vectorLayers.map((layer, idx) => (
             <div key={layer.id} className="flex items-center gap-1">
               <span
                 className="w-3 h-3 rounded-sm border border-gray-300"
                 style={{ backgroundColor: LAYER_COLORS[idx % LAYER_COLORS.length].fill }}
               />
-              <span className="truncate">{layer.id}</span>
+              <span className="truncate text-gray-700">{layer.id}</span>
             </div>
           ))}
         </div>
