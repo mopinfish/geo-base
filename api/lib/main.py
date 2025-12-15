@@ -85,17 +85,17 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="geo-base Tile Server",
-    description="ÃƒÆ’Ã‚Â¥Ãƒâ€¦Ã¢â‚¬Å“Ãƒâ€šÃ‚Â°ÃƒÆ’Ã‚Â§Ãƒâ€šÃ‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â§Ãƒâ€šÃ‚Â©Ãƒâ€šÃ‚ÂºÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¿ÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã‚Â£Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â«ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¤Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â¡API",
+    description="ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¥ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¤ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡API",
     version="0.4.0",
     lifespan=lifespan,
 )
 
-# CORS middleware - ÃƒÂ¥Ã¢â‚¬Â¦Ã‚Â¨ÃƒÂ£Ã¢â‚¬Å¡Ã‚ÂªÃƒÂ£Ã†â€™Ã‚ÂªÃƒÂ£Ã¢â‚¬Å¡Ã‚Â¸ÃƒÂ£Ã†â€™Ã‚Â³ÃƒÂ£Ã¢â‚¬Å¡Ã¢â‚¬â„¢ÃƒÂ¨Ã‚Â¨Ã‚Â±ÃƒÂ¥Ã‚ÂÃ‚Â¯ÃƒÂ¯Ã‚Â¼Ã‹â€ ÃƒÂ©Ã¢â‚¬â€œÃ¢â‚¬Â¹ÃƒÂ§Ã¢â€žÂ¢Ã‚ÂºÃƒÂ£Ã†â€™Ã‚Â»ÃƒÂ¦Ã…â€œÃ‚Â¬ÃƒÂ§Ã¢â‚¬Â¢Ã‚ÂªÃƒÂ¥Ã¢â‚¬Â¦Ã‚Â±ÃƒÂ©Ã¢â€šÂ¬Ã…Â¡ÃƒÂ¯Ã‚Â¼Ã¢â‚¬Â°
+# CORS middleware - ÃƒÆ’Ã‚Â¥ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦Ãƒâ€šÃ‚Â¨ÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚ÂªÃƒÆ’Ã‚Â£Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂªÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â£Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â³ÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã‚Â¨Ãƒâ€šÃ‚Â¨Ãƒâ€šÃ‚Â±ÃƒÆ’Ã‚Â¥Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â¯ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¼Ãƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚Â§ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢Ãƒâ€šÃ‚ÂºÃƒÆ’Ã‚Â£Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¦Ãƒâ€¦Ã¢â‚¬Å“Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â§ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂªÃƒÆ’Ã‚Â¥ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦Ãƒâ€šÃ‚Â±ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¼ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ÃƒÂ¥Ã¢â‚¬Â¦Ã‚Â¨ÃƒÂ£Ã¢â‚¬Å¡Ã‚ÂªÃƒÂ£Ã†â€™Ã‚ÂªÃƒÂ£Ã¢â‚¬Å¡Ã‚Â¸ÃƒÂ£Ã†â€™Ã‚Â³ÃƒÂ£Ã¢â‚¬Å¡Ã¢â‚¬â„¢ÃƒÂ¨Ã‚Â¨Ã‚Â±ÃƒÂ¥Ã‚ÂÃ‚Â¯
-    allow_credentials=False,  # "*"ÃƒÂ£Ã‚ÂÃ‚Â®ÃƒÂ¥Ã‚Â Ã‚Â´ÃƒÂ¥Ã‚ÂÃ‹â€ ÃƒÂ£Ã‚ÂÃ‚Â¯FalseÃƒÂ£Ã‚ÂÃ…â€™ÃƒÂ¥Ã‚Â¿Ã¢â‚¬Â¦ÃƒÂ¨Ã‚Â¦Ã‚Â
+    allow_origins=["*"],  # ÃƒÆ’Ã‚Â¥ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦Ãƒâ€šÃ‚Â¨ÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚ÂªÃƒÆ’Ã‚Â£Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚ÂªÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â£Ãƒâ€ Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â³ÃƒÆ’Ã‚Â£ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã‚Â¨Ãƒâ€šÃ‚Â¨Ãƒâ€šÃ‚Â±ÃƒÆ’Ã‚Â¥Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â¯
+    allow_credentials=False,  # "*"ÃƒÆ’Ã‚Â£Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â®ÃƒÆ’Ã‚Â¥Ãƒâ€šÃ‚Â Ãƒâ€šÃ‚Â´ÃƒÆ’Ã‚Â¥Ãƒâ€šÃ‚ÂÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚Â£Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â¯FalseÃƒÆ’Ã‚Â£Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¥Ãƒâ€šÃ‚Â¿ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚Â¨Ãƒâ€šÃ‚Â¦Ãƒâ€šÃ‚Â
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -172,7 +172,7 @@ class BulkFeatureCreate(BaseModel):
         ..., 
         description="List of GeoJSON features to import",
         min_length=1,
-        max_length=10000  # 一度に最大10000件まで
+        max_length=10000  # ä¸€åº¦ã«æœ€å¤§10000ä»¶ã¾ã§
     )
 
 
@@ -1598,10 +1598,11 @@ def get_tileset_tilejson(
             
             # Get vector_layers information from features
             vector_layers = []
+            
+            # Get all layer names from DB
             with conn.cursor() as cur:
-                # Get distinct layer names for this tileset
                 if layer:
-                    # Filter to specific layer
+                    # Specific layer requested - filter to that layer only
                     cur.execute(
                         """
                         SELECT DISTINCT layer_name
@@ -1622,17 +1623,18 @@ def get_tileset_tilejson(
                         """,
                         (tileset_id,),
                     )
-                layer_names = [row[0] for row in cur.fetchall()]
+                db_layer_names = [row[0] for row in cur.fetchall()]
                 
-                # If specific layer requested but not found, return error
-                if layer and not layer_names:
+                # If specific layer requested but not found
+                if layer and not db_layer_names:
                     raise HTTPException(
                         status_code=404, 
                         detail=f"Layer '{layer}' not found in tileset"
                     )
                 
-                # For each layer, get field information from properties
-                for layer_name in layer_names:
+                # Build vector_layers array with each DB layer_name
+                # This provides metadata about available layers
+                for db_layer_name in db_layer_names:
                     cur.execute(
                         """
                         SELECT properties
@@ -1640,13 +1642,12 @@ def get_tileset_tilejson(
                         WHERE tileset_id = %s AND layer_name = %s
                         LIMIT 1
                         """,
-                        (tileset_id, layer_name),
+                        (tileset_id, db_layer_name),
                     )
                     props_row = cur.fetchone()
                     
                     fields = {}
                     if props_row and props_row[0]:
-                        # Extract field names and infer types from properties
                         properties = props_row[0]
                         for key, value in properties.items():
                             if isinstance(value, bool):
@@ -1659,16 +1660,16 @@ def get_tileset_tilejson(
                                 fields[key] = "String"
                     
                     vector_layers.append({
-                        "id": layer_name,
+                        "id": db_layer_name,  # Use DB layer_name
                         "fields": fields,
                         "minzoom": min_zoom or 0,
                         "maxzoom": max_zoom or 22,
                         "description": ""
                     })
             
-            # If no layers found, add a default layer
+            # If no layers found at all, add a default layer
             if not vector_layers:
-                layer_names = ["default"]
+                db_layer_names = ["default"]
                 vector_layers.append({
                     "id": "default",
                     "fields": {},
@@ -1677,20 +1678,15 @@ def get_tileset_tilejson(
                     "description": ""
                 })
             
-            # Build tiles URL with layer parameter
-            # This ensures MVT layer name matches vector_layers[].id
-            if len(layer_names) == 1:
-                # Single layer: add layer parameter to match vector_layers[].id
-                primary_layer = layer_names[0]
-                tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
+            # Build tiles URL
+            # - With ?layer=xxx: returns only that layer's features
+            # - Without ?layer: returns all features with layer_name property
+            # MVT layer name is always "features" (single layer containing all data)
+            # MapLibre can filter by layer_name property for styling
+            if layer:
+                tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}&layer={layer}"
             else:
-                # Multiple layers: currently use first layer
-                # TODO: Implement multi-layer MVT generation for full support
-                # For now, we use the first layer to ensure QGIS compatibility
-                primary_layer = layer_names[0]
                 tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
-                # Note: Only the first layer will be rendered.
-                # Full multi-layer support requires generate_multi_layer_mvt()
             
             # Build TileJSON response
             tilejson = {
@@ -3416,7 +3412,7 @@ def get_system_stats():
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆçµ±è¨ˆ
+                # Ã£â€šÂ¿Ã£â€šÂ¤Ã£Æ’Â«Ã£â€šÂ»Ã£Æ’Æ’Ã£Æ’Ë†Ã§ÂµÂ±Ã¨Â¨Ë†
                 cur.execute("""
                     SELECT 
                         type,
@@ -3440,7 +3436,7 @@ def get_system_stats():
                     tileset_stats["public"] += row[2]
                     tileset_stats["private"] += row[3]
                 
-                # ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼çµ±è¨ˆ
+                # Ã£Æ’â€¢Ã£â€šÂ£Ã£Æ’Â¼Ã£Æ’ÂÃ£Æ’Â£Ã£Æ’Â¼Ã§ÂµÂ±Ã¨Â¨Ë†
                 cur.execute("""
                     SELECT 
                         COUNT(*) as total,
@@ -3460,7 +3456,7 @@ def get_system_stats():
                     }
                 }
                 
-                # ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆåˆ¥ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼æ•°ï¼ˆä¸Šä½10ä»¶ï¼‰
+                # Ã£â€šÂ¿Ã£â€šÂ¤Ã£Æ’Â«Ã£â€šÂ»Ã£Æ’Æ’Ã£Æ’Ë†Ã¥Ë†Â¥Ã£Æ’â€¢Ã£â€šÂ£Ã£Æ’Â¼Ã£Æ’ÂÃ£Æ’Â£Ã£Æ’Â¼Ã¦â€¢Â°Ã¯Â¼Ë†Ã¤Â¸Å Ã¤Â½Â10Ã¤Â»Â¶Ã¯Â¼â€°
                 cur.execute("""
                     SELECT 
                         t.id,
@@ -3486,7 +3482,7 @@ def get_system_stats():
                     for row in top_tilesets
                 ]
                 
-                # ãƒ‡ãƒ¼ã‚¿ã‚½ãƒ¼ã‚¹çµ±è¨ˆ
+                # Ã£Æ’â€¡Ã£Æ’Â¼Ã£â€šÂ¿Ã£â€šÂ½Ã£Æ’Â¼Ã£â€šÂ¹Ã§ÂµÂ±Ã¨Â¨Ë†
                 cur.execute("""
                     SELECT 
                         (SELECT COUNT(*) FROM pmtiles_sources) as pmtiles_count,
@@ -3537,7 +3533,7 @@ def get_tileset_stats(
         
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆå­˜åœ¨ç¢ºèªã¨ã‚¢ã‚¯ã‚»ã‚¹æ¨©ãƒã‚§ãƒƒã‚¯
+                # Ã£â€šÂ¿Ã£â€šÂ¤Ã£Æ’Â«Ã£â€šÂ»Ã£Æ’Æ’Ã£Æ’Ë†Ã¥Â­ËœÃ¥Å“Â¨Ã§Â¢ÂºÃ¨ÂªÂÃ£ÂÂ¨Ã£â€šÂ¢Ã£â€šÂ¯Ã£â€šÂ»Ã£â€šÂ¹Ã¦Â¨Â©Ã£Æ’ÂÃ£â€šÂ§Ã£Æ’Æ’Ã£â€šÂ¯
                 cur.execute("""
                     SELECT id, name, type, is_public, user_id
                     FROM tilesets
@@ -3548,14 +3544,14 @@ def get_tileset_stats(
                 if not tileset:
                     raise HTTPException(status_code=404, detail="Tileset not found")
                 
-                # éžå…¬é–‹ã‚¿ã‚¤ãƒ«ã‚»ãƒƒãƒˆã®å ´åˆã¯ã‚ªãƒ¼ãƒŠãƒ¼ãƒã‚§ãƒƒã‚¯
+                # Ã©ÂÅ¾Ã¥â€¦Â¬Ã©â€“â€¹Ã£â€šÂ¿Ã£â€šÂ¤Ã£Æ’Â«Ã£â€šÂ»Ã£Æ’Æ’Ã£Æ’Ë†Ã£ÂÂ®Ã¥Â Â´Ã¥ÂË†Ã£ÂÂ¯Ã£â€šÂªÃ£Æ’Â¼Ã£Æ’Å Ã£Æ’Â¼Ã£Æ’ÂÃ£â€šÂ§Ã£Æ’Æ’Ã£â€šÂ¯
                 if not tileset[3]:  # is_public
                     if not user:
                         raise HTTPException(status_code=401, detail="Authentication required")
                     if tileset[4] and str(tileset[4]) != user.id:  # user_id
                         raise HTTPException(status_code=403, detail="Access denied")
                 
-                # vectorã‚¿ã‚¤ãƒ—ã®ã¿ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼çµ±è¨ˆã‚’è¿”ã™
+                # vectorÃ£â€šÂ¿Ã£â€šÂ¤Ã£Æ’â€”Ã£ÂÂ®Ã£ÂÂ¿Ã£Æ’â€¢Ã£â€šÂ£Ã£Æ’Â¼Ã£Æ’ÂÃ£Æ’Â£Ã£Æ’Â¼Ã§ÂµÂ±Ã¨Â¨Ë†Ã£â€šâ€™Ã¨Â¿â€Ã£Ââ„¢
                 if tileset[2] != "vector":  # type
                     return {
                         "tileset_id": tileset_id,
@@ -3568,7 +3564,7 @@ def get_tileset_stats(
                         "message": "Feature statistics are only available for vector tilesets"
                     }
                 
-                # ãƒ•ã‚£ãƒ¼ãƒãƒ£ãƒ¼çµ±è¨ˆ
+                # Ã£Æ’â€¢Ã£â€šÂ£Ã£Æ’Â¼Ã£Æ’ÂÃ£Æ’Â£Ã£Æ’Â¼Ã§ÂµÂ±Ã¨Â¨Ë†
                 cur.execute("""
                     SELECT 
                         COUNT(*) as total,
@@ -3581,7 +3577,7 @@ def get_tileset_stats(
                 """, (str(uuid_obj),))
                 stats_row = cur.fetchone()
                 
-                # Boundsè¨ˆç®—
+                # BoundsÃ¨Â¨Ë†Ã§Â®â€”
                 cur.execute("""
                     SELECT 
                         ST_XMin(ST_Extent(geom)) as min_x,
@@ -3681,12 +3677,12 @@ PREVIEW_HTML = """
             .then(response => response.json())
             .then(data => {
                 const el = document.getElementById('db-status');
-                el.textContent = data.status === 'ok' ? 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Connected' : 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ ' + data.database;
+                el.textContent = data.status === 'ok' ? 'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Connected' : 'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ ' + data.database;
                 el.className = 'status ' + (data.status === 'ok' ? 'ok' : 'error');
             })
             .catch(() => {
                 const el = document.getElementById('db-status');
-                el.textContent = 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Error';
+                el.textContent = 'ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Error';
                 el.className = 'status error';
             });
 
@@ -3774,6 +3770,7 @@ PREVIEW_HTML = """
 def preview_page():
     """Tile preview page with MapLibre GL JS."""
     return PREVIEW_HTML
+
 
 
 
