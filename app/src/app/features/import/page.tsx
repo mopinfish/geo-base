@@ -26,6 +26,7 @@ import {
   MapPin,
   Map,
   Layers,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -43,6 +44,9 @@ interface BoundsResult {
   bounds: number[] | null;
   center: number[] | null;
 }
+
+// バルクインサートのチャンクサイズ
+const BULK_CHUNK_SIZE = 500;
 
 export default function GeoJSONImportPage() {
   const router = useRouter();
@@ -62,6 +66,7 @@ export default function GeoJSONImportPage() {
     errors: [],
   });
   const [boundsResult, setBoundsResult] = useState<BoundsResult | null>(null);
+  const [importTime, setImportTime] = useState<number | null>(null);
 
   // タイルセット一覧の取得（vectorタイプのみ）
   useEffect(() => {
@@ -95,6 +100,7 @@ export default function GeoJSONImportPage() {
     setStatus("idle");
     setProgress({ total: 0, completed: 0, failed: 0, errors: [] });
     setBoundsResult(null);
+    setImportTime(null);
   };
 
   // ファイル読み込みエラー時
@@ -103,7 +109,7 @@ export default function GeoJSONImportPage() {
     setParsedGeoJSON(null);
   };
 
-  // インポート実行
+  // バルクインポート実行
   const handleImport = async () => {
     if (!parsedGeoJSON || !selectedTilesetId) return;
 
@@ -117,7 +123,9 @@ export default function GeoJSONImportPage() {
     setStatus("importing");
     setError(null);
     setBoundsResult(null);
+    setImportTime(null);
     
+    const startTime = Date.now();
     const features = parsedGeoJSON.data.features;
     const total = features.length;
     let completed = 0;
@@ -126,28 +134,56 @@ export default function GeoJSONImportPage() {
 
     setProgress({ total, completed, failed, errors });
 
-    // バッチサイズ（同時に送信する数）
-    const batchSize = 5;
+    // チャンクに分割してバルクインサート
+    const chunks: GeoJSONFeature[][] = [];
+    for (let i = 0; i < features.length; i += BULK_CHUNK_SIZE) {
+      chunks.push(features.slice(i, i + BULK_CHUNK_SIZE));
+    }
 
-    for (let i = 0; i < features.length; i += batchSize) {
-      const batch = features.slice(i, i + batchSize);
+    console.log(`[GeoJSONImport] Starting bulk import: ${total} features in ${chunks.length} chunks`);
+
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex];
       
-      const results = await Promise.allSettled(
-        batch.map((feature) => createFeature(feature, trimmedLayerName))
-      );
+      try {
+        // バルクインサートAPIを呼び出し
+        const response = await api.createFeaturesBulk({
+          tileset_id: selectedTilesetId,
+          layer_name: trimmedLayerName,
+          features: chunk,
+        });
 
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          completed++;
-        } else {
-          failed++;
-          const featureIndex = i + index;
-          errors.push(`フィーチャー #${featureIndex + 1}: ${result.reason}`);
+        completed += response.success_count;
+        failed += response.failed_count;
+        
+        // エラーメッセージを収集
+        if (response.errors && response.errors.length > 0) {
+          const chunkOffset = chunkIndex * BULK_CHUNK_SIZE;
+          response.errors.forEach((err: string) => {
+            // エラーメッセージにチャンクオフセットを加算
+            errors.push(err.replace(/Feature #(\d+)/, (_, num) => 
+              `Feature #${parseInt(num) + chunkOffset}`
+            ));
+          });
         }
-      });
 
+        console.log(`[GeoJSONImport] Chunk ${chunkIndex + 1}/${chunks.length}: ${response.success_count} success, ${response.failed_count} failed`);
+
+      } catch (err) {
+        // チャンク全体が失敗した場合
+        console.error(`[GeoJSONImport] Chunk ${chunkIndex + 1} failed:`, err);
+        failed += chunk.length;
+        errors.push(`Chunk ${chunkIndex + 1}: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+
+      // プログレスを更新
       setProgress({ total, completed, failed, errors: [...errors] });
     }
+
+    const endTime = Date.now();
+    setImportTime(endTime - startTime);
+
+    console.log(`[GeoJSONImport] Completed: ${completed} success, ${failed} failed in ${endTime - startTime}ms`);
 
     // インポート完了後、boundsを計算
     if (completed > 0) {
@@ -171,24 +207,6 @@ export default function GeoJSONImportPage() {
     }
   };
 
-  // 単一フィーチャーの作成
-  const createFeature = async (feature: GeoJSONFeature, layer: string): Promise<void> => {
-    try {
-      const response = await api.createFeature({
-        tileset_id: selectedTilesetId,
-        geometry: feature.geometry,
-        properties: feature.properties || {},
-        layer_name: layer,
-      });
-
-      if (!response) {
-        throw new Error("作成に失敗しました");
-      }
-    } catch (err) {
-      throw new Error(err instanceof Error ? err.message : "作成に失敗しました");
-    }
-  };
-
   // リセット
   const handleReset = () => {
     setParsedGeoJSON(null);
@@ -196,6 +214,7 @@ export default function GeoJSONImportPage() {
     setStatus("idle");
     setProgress({ total: 0, completed: 0, failed: 0, errors: [] });
     setBoundsResult(null);
+    setImportTime(null);
   };
 
   // 進捗率の計算
@@ -220,8 +239,9 @@ export default function GeoJSONImportPage() {
               <FileJson className="h-8 w-8" />
               GeoJSONインポート
             </h1>
-            <p className="text-muted-foreground">
-              GeoJSONファイルからフィーチャーを一括インポート
+            <p className="text-muted-foreground flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-500" />
+              バルクインサートで高速インポート（{BULK_CHUNK_SIZE}件/リクエスト）
             </p>
           </div>
         </div>
@@ -255,6 +275,15 @@ export default function GeoJSONImportPage() {
                       )}
                     </p>
                   </div>
+                  {importTime !== null && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Zap className="h-4 w-4 text-yellow-500" />
+                      <span>
+                        処理時間: {(importTime / 1000).toFixed(2)}秒
+                        （{(progress.completed / (importTime / 1000)).toFixed(0)}件/秒）
+                      </span>
+                    </div>
+                  )}
                   {boundsResult && boundsResult.bounds && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Map className="h-4 w-4" />
@@ -428,8 +457,8 @@ export default function GeoJSONImportPage() {
                         </>
                       ) : (
                         <>
-                          <Upload className="mr-2 h-4 w-4" />
-                          {parsedGeoJSON.data.features.length}件のフィーチャーをインポート
+                          <Zap className="mr-2 h-4 w-4" />
+                          {parsedGeoJSON.data.features.length}件のフィーチャーを高速インポート
                         </>
                       )}
                     </Button>

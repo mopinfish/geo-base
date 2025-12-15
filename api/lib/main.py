@@ -162,6 +162,27 @@ class FeatureUpdate(BaseModel):
     properties: Optional[Dict[str, Any]] = Field(None, description="Feature properties")
 
 
+
+
+class BulkFeatureCreate(BaseModel):
+    """Request model for bulk creating features."""
+    tileset_id: str = Field(..., description="Parent tileset UUID")
+    layer_name: str = Field("default", description="Layer name for all features")
+    features: List[Dict[str, Any]] = Field(
+        ..., 
+        description="List of GeoJSON features to import",
+        min_length=1,
+        max_length=10000  # 一度に最大10000件まで
+    )
+
+
+class BulkFeatureResponse(BaseModel):
+    """Response model for bulk feature creation."""
+    success_count: int = Field(..., description="Number of successfully created features")
+    failed_count: int = Field(..., description="Number of failed features")
+    feature_ids: List[str] = Field(default_factory=list, description="List of created feature IDs")
+    errors: List[str] = Field(default_factory=list, description="List of error messages")
+
 class FeatureResponse(BaseModel):
     """Response model for a feature."""
     id: str
@@ -2182,6 +2203,154 @@ def create_feature(
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating feature: {str(e)}")
+
+
+
+
+@app.post("/api/features/bulk", status_code=201, response_model=BulkFeatureResponse)
+def create_features_bulk(
+    data: BulkFeatureCreate,
+    user: User = Depends(require_auth),
+    conn=Depends(get_connection),
+):
+    """
+    Create multiple features in a tileset at once.
+    
+    This endpoint is optimized for bulk imports and uses batch INSERT
+    for significantly better performance compared to individual inserts.
+    
+    Maximum 10,000 features per request.
+    
+    Requires authentication and ownership of the parent tileset.
+    """
+    from psycopg2.extras import execute_values
+    
+    try:
+        with conn.cursor() as cur:
+            # Check if tileset exists and user owns it
+            cur.execute(
+                "SELECT id, user_id FROM tilesets WHERE id = %s",
+                (data.tileset_id,),
+            )
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+            
+            if str(row[1]) != user.id:
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Not authorized to add features to this tileset"
+                )
+            
+            # Prepare data for bulk insert
+            success_count = 0
+            failed_count = 0
+            feature_ids = []
+            errors = []
+            
+            # Validate and prepare features
+            valid_features = []
+            for idx, feature in enumerate(data.features):
+                try:
+                    # Validate feature structure
+                    if not isinstance(feature, dict):
+                        raise ValueError("Feature must be a dictionary")
+                    
+                    geometry = feature.get("geometry")
+                    if not geometry:
+                        raise ValueError("Feature must have a geometry")
+                    
+                    properties = feature.get("properties", {})
+                    if properties is None:
+                        properties = {}
+                    
+                    valid_features.append({
+                        "geometry": json.dumps(geometry),
+                        "properties": json.dumps(properties),
+                    })
+                except Exception as e:
+                    failed_count += 1
+                    errors.append(f"Feature #{idx + 1}: {str(e)}")
+            
+            if not valid_features:
+                return BulkFeatureResponse(
+                    success_count=0,
+                    failed_count=failed_count,
+                    feature_ids=[],
+                    errors=errors,
+                )
+            
+            # Batch insert using execute_values for performance
+            # This is much faster than individual INSERTs
+            insert_query = """
+                INSERT INTO features (tileset_id, layer_name, geom, properties)
+                VALUES %s
+                RETURNING id
+            """
+            
+            # Prepare values template
+            values_template = f"('{data.tileset_id}', '{data.layer_name}', ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s)"
+            
+            # Convert to list of tuples for execute_values
+            values_list = [(f["geometry"], f["properties"]) for f in valid_features]
+            
+            try:
+                # Use execute_values for efficient bulk insert
+                result = execute_values(
+                    cur,
+                    insert_query,
+                    values_list,
+                    template=values_template,
+                    fetch=True,
+                )
+                
+                # Collect created feature IDs
+                for row in result:
+                    feature_ids.append(str(row[0]))
+                    success_count += 1
+                
+                conn.commit()
+                
+            except Exception as e:
+                conn.rollback()
+                # If batch insert fails, try one by one to identify problematic features
+                # This is slower but allows partial success
+                for idx, values in enumerate(values_list):
+                    try:
+                        cur.execute(
+                            """
+                            INSERT INTO features (tileset_id, layer_name, geom, properties)
+                            VALUES (%s, %s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s)
+                            RETURNING id
+                            """,
+                            (data.tileset_id, data.layer_name, values[0], values[1]),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            feature_ids.append(str(row[0]))
+                            success_count += 1
+                        conn.commit()
+                    except Exception as inner_e:
+                        conn.rollback()
+                        failed_count += 1
+                        errors.append(f"Feature #{idx + 1}: {str(inner_e)}")
+            
+            return BulkFeatureResponse(
+                success_count=success_count,
+                failed_count=failed_count,
+                feature_ids=feature_ids,
+                errors=errors[:100],  # Limit errors to first 100
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error creating features: {str(e)}"
+        )
 
 
 @app.patch("/api/features/{feature_id}")
