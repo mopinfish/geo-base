@@ -262,20 +262,29 @@ export function TilesetMapPreview({
    * ソースレイヤー名を決定
    * 
    * vectorタイプ:
-   *   - タイルURLに layer パラメータがない場合、MVT内のレイヤー名は常に "features"
-   *   - マッププレビューでは全フィーチャーを表示するため "features" を使用
+   *   - TileJSONのtiles URLにlayerパラメータが含まれるため、
+   *     MVT内のレイヤー名はvector_layers[0].idになる
+   *   - TileJSONがない場合は "features" にフォールバック
    * 
    * pmtiles:
    *   - TileJSONのvector_layersから取得（PMTilesに含まれるレイヤー名）
    */
   const getSourceLayerName = useCallback((): string => {
+    // TileJSONのvector_layersから取得を試みる
+    const vectorLayers = getVectorLayers();
+    
     if (tileset.type === "vector") {
-      // vectorタイプでlayerパラメータなしの場合、MVTレイヤー名は "features"
+      // vectorタイプ: TileJSONのvector_layers[0].idを使用
+      // TileJSONのtiles URLにlayerパラメータが含まれるため、
+      // MVTレイヤー名はそのlayer名になる
+      if (vectorLayers.length > 0 && vectorLayers[0].id) {
+        return vectorLayers[0].id;
+      }
+      // フォールバック: TileJSONがない場合は "features"
       return "features";
     }
     
     if (tileset.type === "pmtiles") {
-      const vectorLayers = getVectorLayers();
       if (vectorLayers.length > 0 && vectorLayers[0].id) {
         return vectorLayers[0].id;
       }
