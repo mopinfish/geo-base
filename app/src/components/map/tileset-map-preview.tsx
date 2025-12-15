@@ -297,32 +297,6 @@ export function TilesetMapPreview({
     return "default";
   }, [tileset.type, getVectorLayers]);
 
-  /**
-   * レイヤー名から色を取得するためのmatch式を生成
-   */
-  const getLayerColorExpression = useCallback((colorType: 'fill' | 'line' | 'point', defaultColor: string): maplibregl.ExpressionSpecification => {
-    const vectorLayers = getVectorLayers();
-    
-    if (vectorLayers.length <= 1) {
-      // 単一レイヤーの場合はデフォルト色を使用
-      return defaultColor as unknown as maplibregl.ExpressionSpecification;
-    }
-    
-    // 複数レイヤーの場合はmatch式でlayer_nameごとに色を設定
-    const matchExpr: (string | string[])[] = ["match", ["get", "layer_name"]];
-    
-    vectorLayers.forEach((layer, idx) => {
-      const colors = LAYER_COLORS[idx % LAYER_COLORS.length];
-      matchExpr.push(layer.id);
-      matchExpr.push(colors[colorType]);
-    });
-    
-    // デフォルト色（マッチしない場合）
-    matchExpr.push(defaultColor);
-    
-    return matchExpr as unknown as maplibregl.ExpressionSpecification;
-  }, [getVectorLayers]);
-
   // boundsにフィット
   const fitToBounds = useCallback(() => {
     if (!map.current || !isLoaded) return;
@@ -370,7 +344,9 @@ export function TilesetMapPreview({
         maxzoom: tileJSON?.maxzoom ?? tileset.max_zoom ?? 22,
       });
 
-      // ソースレイヤー名を決定
+      // ソースレイヤー名を決定（MVT内のレイヤー名）
+      // vector: "features"（全データを含む単一レイヤー）
+      // pmtiles: TileJSONから取得
       const sourceLayer = getSourceLayerName();
       const vectorLayers = getVectorLayers();
       
@@ -380,63 +356,80 @@ export function TilesetMapPreview({
       console.log(`[TilesetMapPreview] tileUrl: ${tileUrl}`);
       console.log(`[TilesetMapPreview] vector_layers:`, vectorLayers.map(l => l.id));
 
-      // レイヤー別スタイリング用の色を取得
-      const fillColorExpr = getLayerColorExpression('fill', fillColor);
-      const lineColorExpr = getLayerColorExpression('line', lineColor);
-      const pointColorExpr = getLayerColorExpression('point', pointColor);
+      // 各layer_name（TileJSON vector_layers[].id）ごとに個別のMapLibreレイヤーを作成
+      // これにより、各データレイヤーを異なる色でスタイリングできる
+      vectorLayers.forEach((layer, idx) => {
+        const layerId = layer.id;
+        const colors = LAYER_COLORS[idx % LAYER_COLORS.length];
+        
+        // フィルター条件: 
+        // - vectorタイプ: layer_nameプロパティでフィルタリング
+        // - pmtilesタイプ: フィルタリング不要（各レイヤーが独立）
+        const layerFilter = tileset.type === "vector" 
+          ? ["==", ["get", "layer_name"], layerId]
+          : undefined;
 
-      // ポリゴンレイヤー
-      mapInstance.addLayer({
-        id: "tileset-polygon",
-        type: "fill",
-        source: "tileset",
-        "source-layer": sourceLayer,
-        filter: ["==", ["geometry-type"], "Polygon"],
-        paint: {
-          "fill-color": fillColorExpr,
-          "fill-opacity": 0.4,
-        },
-      });
+        // ポリゴンレイヤー
+        mapInstance.addLayer({
+          id: `tileset-polygon-${layerId}`,
+          type: "fill",
+          source: "tileset",
+          "source-layer": sourceLayer,
+          filter: layerFilter 
+            ? ["all", ["==", ["geometry-type"], "Polygon"], layerFilter]
+            : ["==", ["geometry-type"], "Polygon"],
+          paint: {
+            "fill-color": colors.fill,
+            "fill-opacity": 0.4,
+          },
+        });
 
-      // ポリゴンの境界線
-      mapInstance.addLayer({
-        id: "tileset-polygon-outline",
-        type: "line",
-        source: "tileset",
-        "source-layer": sourceLayer,
-        filter: ["==", ["geometry-type"], "Polygon"],
-        paint: {
-          "line-color": lineColorExpr,
-          "line-width": 1.5,
-        },
-      });
+        // ポリゴンの境界線
+        mapInstance.addLayer({
+          id: `tileset-polygon-outline-${layerId}`,
+          type: "line",
+          source: "tileset",
+          "source-layer": sourceLayer,
+          filter: layerFilter 
+            ? ["all", ["==", ["geometry-type"], "Polygon"], layerFilter]
+            : ["==", ["geometry-type"], "Polygon"],
+          paint: {
+            "line-color": colors.line,
+            "line-width": 1.5,
+          },
+        });
 
-      // ラインレイヤー
-      mapInstance.addLayer({
-        id: "tileset-line",
-        type: "line",
-        source: "tileset",
-        "source-layer": sourceLayer,
-        filter: ["==", ["geometry-type"], "LineString"],
-        paint: {
-          "line-color": lineColorExpr,
-          "line-width": 2,
-        },
-      });
+        // ラインレイヤー
+        mapInstance.addLayer({
+          id: `tileset-line-${layerId}`,
+          type: "line",
+          source: "tileset",
+          "source-layer": sourceLayer,
+          filter: layerFilter 
+            ? ["all", ["==", ["geometry-type"], "LineString"], layerFilter]
+            : ["==", ["geometry-type"], "LineString"],
+          paint: {
+            "line-color": colors.line,
+            "line-width": 2,
+          },
+        });
 
-      // ポイントレイヤー
-      mapInstance.addLayer({
-        id: "tileset-point",
-        type: "circle",
-        source: "tileset",
-        "source-layer": sourceLayer,
-        filter: ["==", ["geometry-type"], "Point"],
-        paint: {
-          "circle-radius": 6,
-          "circle-color": pointColorExpr,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
-        },
+        // ポイントレイヤー
+        mapInstance.addLayer({
+          id: `tileset-point-${layerId}`,
+          type: "circle",
+          source: "tileset",
+          "source-layer": sourceLayer,
+          filter: layerFilter 
+            ? ["all", ["==", ["geometry-type"], "Point"], layerFilter]
+            : ["==", ["geometry-type"], "Point"],
+          paint: {
+            "circle-radius": 6,
+            "circle-color": colors.point,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
       });
 
       // クリックでポップアップ表示（MapLayerMouseEvent型を使用）
@@ -508,20 +501,29 @@ export function TilesetMapPreview({
           .addTo(mapInstance);
       };
 
-      mapInstance.on("click", "tileset-point", createPopupHandler("tileset-point"));
-      mapInstance.on("click", "tileset-polygon", createPopupHandler("tileset-polygon"));
-
       // ホバーでカーソル変更
       const setCursor = (cursor: string) => () => {
         mapInstance.getCanvas().style.cursor = cursor;
       };
 
-      mapInstance.on("mouseenter", "tileset-point", setCursor("pointer"));
-      mapInstance.on("mouseleave", "tileset-point", setCursor(""));
-      mapInstance.on("mouseenter", "tileset-polygon", setCursor("pointer"));
-      mapInstance.on("mouseleave", "tileset-polygon", setCursor(""));
+      // 各レイヤーにイベントリスナーを登録
+      vectorLayers.forEach((layer) => {
+        const layerId = layer.id;
+        const pointLayerId = `tileset-point-${layerId}`;
+        const polygonLayerId = `tileset-polygon-${layerId}`;
+
+        // クリックでポップアップ
+        mapInstance.on("click", pointLayerId, createPopupHandler(pointLayerId));
+        mapInstance.on("click", polygonLayerId, createPopupHandler(polygonLayerId));
+
+        // ホバーでカーソル変更
+        mapInstance.on("mouseenter", pointLayerId, setCursor("pointer"));
+        mapInstance.on("mouseleave", pointLayerId, setCursor(""));
+        mapInstance.on("mouseenter", polygonLayerId, setCursor("pointer"));
+        mapInstance.on("mouseleave", polygonLayerId, setCursor(""));
+      });
     }
-  }, [tileset, tileJSON, getSourceLayerName, getVectorLayers, getLayerColorExpression, fillColor, lineColor, pointColor]);
+  }, [tileset, tileJSON, getSourceLayerName, getVectorLayers, fillColor, lineColor, pointColor]);
 
   /**
    * 地図のベーススタイルを生成

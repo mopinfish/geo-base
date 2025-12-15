@@ -1599,11 +1599,10 @@ def get_tileset_tilejson(
             # Get vector_layers information from features
             vector_layers = []
             
-            # Determine how to handle layers based on 'layer' query parameter
+            # Get all layer names from DB
             with conn.cursor() as cur:
                 if layer:
-                    # Specific layer requested via ?layer=xxx query parameter
-                    # Check if the layer exists
+                    # Specific layer requested - filter to that layer only
                     cur.execute(
                         """
                         SELECT DISTINCT layer_name
@@ -1613,20 +1612,29 @@ def get_tileset_tilejson(
                         """,
                         (tileset_id, layer),
                     )
-                    layer_rows = cur.fetchall()
-                    
-                    if not layer_rows:
-                        raise HTTPException(
-                            status_code=404, 
-                            detail=f"Layer '{layer}' not found in tileset"
-                        )
-                    
-                    # Single layer mode: use the specified layer name
-                    # tiles URL will include &layer=xxx, MVT layer name will be 'xxx'
-                    # vector_layers[0].id must match the MVT layer name
-                    layer_name_to_use = layer
-                    
-                    # Get field information for this layer
+                else:
+                    # Get all layers
+                    cur.execute(
+                        """
+                        SELECT DISTINCT layer_name
+                        FROM features
+                        WHERE tileset_id = %s
+                        ORDER BY layer_name
+                        """,
+                        (tileset_id,),
+                    )
+                db_layer_names = [row[0] for row in cur.fetchall()]
+                
+                # If specific layer requested but not found
+                if layer and not db_layer_names:
+                    raise HTTPException(
+                        status_code=404, 
+                        detail=f"Layer '{layer}' not found in tileset"
+                    )
+                
+                # Build vector_layers array with each DB layer_name
+                # This provides metadata about available layers
+                for db_layer_name in db_layer_names:
                     cur.execute(
                         """
                         SELECT properties
@@ -1634,7 +1642,7 @@ def get_tileset_tilejson(
                         WHERE tileset_id = %s AND layer_name = %s
                         LIMIT 1
                         """,
-                        (tileset_id, layer_name_to_use),
+                        (tileset_id, db_layer_name),
                     )
                     props_row = cur.fetchone()
                     
@@ -1652,90 +1660,32 @@ def get_tileset_tilejson(
                                 fields[key] = "String"
                     
                     vector_layers.append({
-                        "id": layer_name_to_use,  # Matches MVT layer name when ?layer=xxx is used
+                        "id": db_layer_name,  # Use DB layer_name
                         "fields": fields,
                         "minzoom": min_zoom or 0,
                         "maxzoom": max_zoom or 22,
                         "description": ""
                     })
-                    
-                    # Build tiles URL with layer parameter
-                    tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}&layer={layer_name_to_use}"
-                    
-                else:
-                    # No layer specified: return all features as "features" layer
-                    # This is the default mode for map preview and general use
-                    # tiles URL will NOT include &layer, MVT layer name will be "features"
-                    # vector_layers[0].id must be "features" to match
-                    
-                    # First, get all layer names from DB for description
-                    cur.execute(
-                        """
-                        SELECT DISTINCT layer_name
-                        FROM features
-                        WHERE tileset_id = %s
-                        ORDER BY layer_name
-                        """,
-                        (tileset_id,),
-                    )
-                    db_layer_names = [row[0] for row in cur.fetchall()]
-                    
-                    # Merge fields from all layers
-                    all_fields = {}
-                    for db_layer_name in db_layer_names:
-                        cur.execute(
-                            """
-                            SELECT properties
-                            FROM features
-                            WHERE tileset_id = %s AND layer_name = %s
-                            LIMIT 1
-                            """,
-                            (tileset_id, db_layer_name),
-                        )
-                        props_row = cur.fetchone()
-                        
-                        if props_row and props_row[0]:
-                            properties = props_row[0]
-                            for key, value in properties.items():
-                                if key not in all_fields:
-                                    if isinstance(value, bool):
-                                        all_fields[key] = "Boolean"
-                                    elif isinstance(value, int):
-                                        all_fields[key] = "Number"
-                                    elif isinstance(value, float):
-                                        all_fields[key] = "Number"
-                                    else:
-                                        all_fields[key] = "String"
-                    
-                    # Add layer_name field (always present in MVT output)
-                    all_fields["layer_name"] = "String"
-                    
-                    # Single "features" layer that contains all data
-                    # This matches the MVT layer name when no ?layer param is provided
-                    layer_description = ""
-                    if db_layer_names:
-                        layer_description = f"Contains data from {len(db_layer_names)} layer(s): {', '.join(db_layer_names)}"
-                    
-                    vector_layers.append({
-                        "id": "features",  # CRITICAL: Must match MVT layer name when no ?layer param
-                        "fields": all_fields,
-                        "minzoom": min_zoom or 0,
-                        "maxzoom": max_zoom or 22,
-                        "description": layer_description
-                    })
-                    
-                    # Build tiles URL without layer parameter
-                    tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
             
             # If no layers found at all, add a default layer
             if not vector_layers:
+                db_layer_names = ["default"]
                 vector_layers.append({
-                    "id": "features",
+                    "id": "default",
                     "fields": {},
                     "minzoom": min_zoom or 0,
                     "maxzoom": max_zoom or 22,
                     "description": ""
                 })
+            
+            # Build tiles URL
+            # - With ?layer=xxx: returns only that layer's features
+            # - Without ?layer: returns all features with layer_name property
+            # MVT layer name is always "features" (single layer containing all data)
+            # MapLibre can filter by layer_name property for styling
+            if layer:
+                tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}&layer={layer}"
+            else:
                 tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
             
             # Build TileJSON response
