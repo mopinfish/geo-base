@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Set test environment variables
-os.environ.setdefault("TILE_SERVER_URL", "https://geo-base-puce.vercel.app")
+os.environ.setdefault("TILE_SERVER_URL", "https://geo-base-api.fly.dev")
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("LOG_LEVEL", "DEBUG")
 

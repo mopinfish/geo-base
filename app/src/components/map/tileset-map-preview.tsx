@@ -244,7 +244,7 @@ export function TilesetMapPreview({
    */
   const getTileUrl = useCallback((cacheBuster?: number | string) => {
     const apiBaseUrl =
-      process.env.NEXT_PUBLIC_API_URL || "https://geo-base-puce.vercel.app";
+      process.env.NEXT_PUBLIC_API_URL || "https://geo-base-api.fly.dev";
 
     const bustParam = cacheBuster ? `&_t=${cacheBuster}` : "";
 

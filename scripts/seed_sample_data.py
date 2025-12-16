@@ -11,7 +11,7 @@ geo-base サンプルデータ投入スクリプト
   python scripts/seed_sample_data.py --api-url http://localhost:8000 --token YOUR_SUPABASE_TOKEN
 
   # 本番環境
-  python scripts/seed_sample_data.py --api-url https://geo-base-puce.vercel.app --token YOUR_SUPABASE_TOKEN
+  python scripts/seed_sample_data.py --api-url https://geo-base-api.fly.dev --token YOUR_SUPABASE_TOKEN
 
 トークンの取得方法:
   1. ブラウザで geo-base-app にログイン

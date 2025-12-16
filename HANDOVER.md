@@ -4,7 +4,7 @@
 **最終更新**: 2025-12-14  
 **プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
 **リポジトリ**: https://github.com/mopinfish/geo-base  
-**本番URL (API)**: https://geo-base-puce.vercel.app/  
+**本番URL (API)**: https://geo-base-api.fly.dev/  
 **本番URL (MCP)**: https://geo-base-mcp.fly.dev/  
 **本番URL (Admin)**: https://geo-base-app.vercel.app/  
 **APIバージョン**: 0.4.0  
