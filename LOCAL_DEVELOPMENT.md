@@ -42,7 +42,7 @@ npm run dev
 cd app
 
 # .env.local を本番向けに設定
-echo 'NEXT_PUBLIC_API_URL=https://geo-base-puce.vercel.app' > .env.local
+echo 'NEXT_PUBLIC_API_URL=https://geo-base-api.fly.dev' > .env.local
 
 npm run dev
 ```
@@ -91,7 +91,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_MCP_URL=http://localhost:8001
 
 # 本番APIを使う場合
-# NEXT_PUBLIC_API_URL=https://geo-base-puce.vercel.app
+# NEXT_PUBLIC_API_URL=https://geo-base-api.fly.dev
 # NEXT_PUBLIC_MCP_URL=https://geo-base-mcp.fly.dev
 ```
 
@@ -104,7 +104,7 @@ NEXT_PUBLIC_MCP_URL=http://localhost:8001
 curl http://localhost:8000/api/health
 
 # 本番
-curl https://geo-base-puce.vercel.app/api/health
+curl https://geo-base-api.fly.dev/api/health
 ```
 
 ### タイルセット一覧
@@ -158,7 +158,7 @@ Supabaseを使用する場合:
 
 | Vercelプロジェクト | Root Directory | URL | 説明 |
 |------------------|----------------|-----|------|
-| `geo-base` | `.`（ルート） | geo-base-puce.vercel.app | FastAPI タイルサーバー |
+| `geo-base` | `.`（ルート） | geo-base-api.fly.dev | FastAPI タイルサーバー |
 | `geo-base-admin` | `app` | geo-base-admin.vercel.app | Next.js 管理画面 |
 
 ## 既存APIプロジェクト（変更不要）
@@ -188,7 +188,7 @@ Supabaseを使用する場合:
 
 | 変数名 | 値 | 説明 |
 |--------|-----|------|
-| `NEXT_PUBLIC_API_URL` | `https://geo-base-puce.vercel.app` | 本番API URL |
+| `NEXT_PUBLIC_API_URL` | `https://geo-base-api.fly.dev` | 本番API URL |
 | `NEXT_PUBLIC_MCP_URL` | `https://geo-base-mcp.fly.dev` | 本番MCP URL |
 
 ### 4. デプロイ
@@ -199,7 +199,7 @@ Supabaseを使用する場合:
 
 デプロイ完了後、以下のURLで動作確認：
 - Admin UI: `https://geo-base-admin.vercel.app`
-- API: `https://geo-base-puce.vercel.app/api/health`
+- API: `https://geo-base-api.fly.dev/api/health`
 
 ---
 
@@ -208,5 +208,5 @@ Supabaseを使用する場合:
 | サービス | URL | プラットフォーム |
 |---------|-----|----------------|
 | Admin UI | https://geo-base-admin.vercel.app | Vercel |
-| API | https://geo-base-puce.vercel.app | Vercel |
+| API | https://geo-base-api.fly.dev | Vercel |
 | MCP Server | https://geo-base-mcp.fly.dev | Fly.io |

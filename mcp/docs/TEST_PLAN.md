@@ -177,7 +177,7 @@ geo-baseサーバーの設定情報を教えて
 ```
 
 **期待される結果**:
-- tile_server_url: "https://geo-base-puce.vercel.app"
+- tile_server_url: "https://geo-base-api.fly.dev"
 - mcp_server_name: "geo-base"
 - environment: "production"
 

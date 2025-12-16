@@ -1,0 +1,90 @@
+# =============================================================================
+# geo-base API Server - Fly.io Configuration
+# =============================================================================
+# FastAPI Tile Server with GDAL/rasterio support
+# 
+# Deploy command:
+#   fly deploy --app geo-base-api
+#
+# First time setup:
+#   fly apps create geo-base-api
+#   fly secrets set DATABASE_URL="postgresql://..."
+#   fly secrets set SUPABASE_URL="https://..."
+#   fly secrets set SUPABASE_ANON_KEY="..."
+#   fly secrets set SUPABASE_JWT_SECRET="..."
+#   fly deploy
+# =============================================================================
+
+app = "geo-base-api"
+primary_region = "nrt"  # Tokyo region for low latency in Japan
+
+[build]
+  dockerfile = "Dockerfile"
+
+# -----------------------------------------------------------------------------
+# Environment variables (non-sensitive)
+# -----------------------------------------------------------------------------
+[env]
+  ENVIRONMENT = "production"
+  LOG_LEVEL = "INFO"
+  # Port is automatically set by Fly.io
+  # Sensitive variables should be set via `fly secrets set`
+
+# -----------------------------------------------------------------------------
+# HTTP service configuration
+# -----------------------------------------------------------------------------
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+# -----------------------------------------------------------------------------
+# Machine configuration
+# -----------------------------------------------------------------------------
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# -----------------------------------------------------------------------------
+# Health checks
+# -----------------------------------------------------------------------------
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/api/health"
+    protocol = "http"
+
+# -----------------------------------------------------------------------------
+# Deployment configuration
+# -----------------------------------------------------------------------------
+[deploy]
+  strategy = "rolling"

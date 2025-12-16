@@ -848,7 +848,7 @@ MCPサーバーの設定情報を取得します。
 
 ```json
 {
-  "tile_server_url": "https://geo-base-puce.vercel.app",
+  "tile_server_url": "https://geo-base-api.fly.dev",
   "mcp_server_name": "geo-base",
   "mcp_server_version": "1.0.0",
   "environment": "production"

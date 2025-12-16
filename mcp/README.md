@@ -61,7 +61,7 @@ cp .env.example .env
 
 # .envを編集してTILE_SERVER_URLを設定
 # ローカル開発: http://localhost:3000
-# 本番環境: https://geo-base-puce.vercel.app
+# 本番環境: https://geo-base-api.fly.dev
 
 # 依存関係をインストール
 uv sync
@@ -110,7 +110,7 @@ Claude Desktop の設定ファイルに以下を追加してください：
         "server.py"
       ],
       "env": {
-        "TILE_SERVER_URL": "https://geo-base-puce.vercel.app"
+        "TILE_SERVER_URL": "https://geo-base-api.fly.dev"
       }
     }
   }
@@ -281,7 +281,7 @@ uv run pytest
 uv run pytest -v
 
 # ライブテスト（本番サーバーに対して実行）
-TILE_SERVER_URL=https://geo-base-puce.vercel.app uv run python tests/live_test.py
+TILE_SERVER_URL=https://geo-base-api.fly.dev uv run python tests/live_test.py
 ```
 
 ### コードフォーマット

@@ -10,7 +10,7 @@
         "server.py"
       ],
       "env": {
-        "TILE_SERVER_URL": "https://geo-base-puce.vercel.app"
+        "TILE_SERVER_URL": "https://geo-base-api.fly.dev"
       }
     }
   }

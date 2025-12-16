@@ -9,7 +9,7 @@ Usage:
     TILE_SERVER_URL=http://localhost:3000 uv run python tests/live_test.py
 
     # Test against production server
-    TILE_SERVER_URL=https://geo-base-puce.vercel.app uv run python tests/live_test.py
+    TILE_SERVER_URL=https://geo-base-api.fly.dev uv run python tests/live_test.py
 """
 
 import asyncio

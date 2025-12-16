@@ -298,7 +298,7 @@ export default function DashboardPage() {
                 </Button>
               </Link>
               <a
-                href="https://geo-base-puce.vercel.app/api/health"
+                href="https://geo-base-api.fly.dev/api/health"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -366,7 +366,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <span className="font-medium">本番URL:</span>
                 <code className="rounded bg-muted px-2 py-1">
-                  https://geo-base-puce.vercel.app
+                  https://geo-base-api.fly.dev
                 </code>
               </div>
               <div className="flex items-center gap-2">

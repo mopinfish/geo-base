@@ -408,7 +408,7 @@ Claude: フィーチャーを作成します...
         "server.py"
       ],
       "env": {
-        "TILE_SERVER_URL": "https://geo-base-puce.vercel.app"
+        "TILE_SERVER_URL": "https://geo-base-api.fly.dev"
       }
     }
   }
@@ -556,7 +556,7 @@ Phase 4: 分析（5分）
 | コンポーネント | バージョン | URL |
 |---------------|-----------|-----|
 | MCP Server | 0.2.5 | https://geo-base-mcp.fly.dev |
-| API Server | 0.4.0 | https://geo-base-puce.vercel.app |
+| API Server | 0.4.0 | https://geo-base-api.fly.dev |
 | Admin UI | - | https://geo-base-admin.vercel.app |
 
 ### 8.2 機能マトリックス

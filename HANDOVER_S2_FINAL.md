@@ -27,7 +27,7 @@ geo-baseプロジェクトのセカンドシーズンでは、以下の主要目
 
 | コンポーネント | ステータス | URL | バージョン |
 |---------------|-----------|-----|-----------|
-| API Server | ✅ 稼働中 | https://geo-base-puce.vercel.app | 0.4.0 |
+| API Server | ✅ 稼働中 | https://geo-base-api.fly.dev | 0.4.0 |
 | MCP Server | ✅ 稼働中 | https://geo-base-mcp.fly.dev | 0.2.5 |
 | Admin UI | ✅ 稼働中 | https://geo-base-admin.vercel.app | 0.4.0 |
 

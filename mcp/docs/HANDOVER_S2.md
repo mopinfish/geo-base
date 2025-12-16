@@ -46,7 +46,7 @@ geo-base MCPサーバーの機能を拡充し、以下を実現する：
 
 | コンポーネント | ステータス | URL |
 |---------------|-----------|-----|
-| API Server | ✅ 稼働中 | https://geo-base-puce.vercel.app |
+| API Server | ✅ 稼働中 | https://geo-base-api.fly.dev |
 | MCP Server | ✅ 稼働中 | https://geo-base-mcp.fly.dev |
 | Admin UI | ✅ 稼働中 | https://geo-base-admin.vercel.app |
 
@@ -339,7 +339,7 @@ class ValidationResult:
 
 ```bash
 # 必須
-TILE_SERVER_URL=https://geo-base-puce.vercel.app
+TILE_SERVER_URL=https://geo-base-api.fly.dev
 
 # オプション
 API_TOKEN=xxxxx           # CRUD操作に必要

@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 
 // 環境変数からAPI URLを取得（クライアントサイドで参照可能なもののみ）
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://geo-base-puce.vercel.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://geo-base-api.fly.dev";
 const MCP_URL = "https://geo-base-mcp.fly.dev";
 
 // バージョン情報

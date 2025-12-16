@@ -3,7 +3,7 @@
  */
 
 // 環境変数からAPIのベースURLを取得
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://geo-base-puce.vercel.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://geo-base-api.fly.dev';
 
 // ============================
 // 型定義

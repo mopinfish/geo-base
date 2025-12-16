@@ -186,29 +186,29 @@ Claude Desktopを再起動後、以下のようなプロンプトでテスト：
 
 | サービス | URL |
 |---------|-----|
-| API (Vercel) | https://geo-base-puce.vercel.app |
+| API (Vercel) | https://geo-base-api.fly.dev |
 | MCP (Fly.io) | https://geo-base-mcp.fly.dev |
 
 ### 3.2 APIサーバーの確認
 
 ```fish
 # ヘルスチェック
-curl https://geo-base-puce.vercel.app/api/health
+curl https://geo-base-api.fly.dev/api/health
 
 # DBヘルスチェック
-curl https://geo-base-puce.vercel.app/api/health/db
+curl https://geo-base-api.fly.dev/api/health/db
 
 # タイルセット一覧
-curl https://geo-base-puce.vercel.app/api/tilesets
+curl https://geo-base-api.fly.dev/api/tilesets
 
 # フィーチャー検索
-curl "https://geo-base-puce.vercel.app/api/features?bbox=139.5,35.5,140.0,36.0&limit=5"
+curl "https://geo-base-api.fly.dev/api/features?bbox=139.5,35.5,140.0,36.0&limit=5"
 
 # 特定のタイルセット情報
-curl https://geo-base-puce.vercel.app/api/tilesets/{tileset_id}
+curl https://geo-base-api.fly.dev/api/tilesets/{tileset_id}
 
 # TileJSON
-curl https://geo-base-puce.vercel.app/api/tilesets/{tileset_id}/tilejson
+curl https://geo-base-api.fly.dev/api/tilesets/{tileset_id}/tilejson
 ```
 
 ### 3.3 MCPサーバーの確認
@@ -231,7 +231,7 @@ fly logs
 cd /path/to/geo-base/mcp
 
 # 本番サーバーに対してテスト
-TILE_SERVER_URL=https://geo-base-puce.vercel.app uv run python tests/live_test.py
+TILE_SERVER_URL=https://geo-base-api.fly.dev uv run python tests/live_test.py
 ```
 
 ### 3.5 Claude Desktop でのリモートテスト
@@ -275,7 +275,7 @@ Supabase Authでログイン後、セッションから `access_token` を取得
 
 ```fish
 # タイルセット作成
-curl -X POST https://geo-base-puce.vercel.app/api/tilesets \
+curl -X POST https://geo-base-api.fly.dev/api/tilesets \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -289,7 +289,7 @@ curl -X POST https://geo-base-puce.vercel.app/api/tilesets \
   }'
 
 # タイルセット更新
-curl -X PATCH https://geo-base-puce.vercel.app/api/tilesets/{tileset_id} \
+curl -X PATCH https://geo-base-api.fly.dev/api/tilesets/{tileset_id} \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -297,7 +297,7 @@ curl -X PATCH https://geo-base-puce.vercel.app/api/tilesets/{tileset_id} \
   }'
 
 # タイルセット削除
-curl -X DELETE https://geo-base-puce.vercel.app/api/tilesets/{tileset_id} \
+curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/{tileset_id} \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
@@ -305,7 +305,7 @@ curl -X DELETE https://geo-base-puce.vercel.app/api/tilesets/{tileset_id} \
 
 ```fish
 # フィーチャー作成
-curl -X POST https://geo-base-puce.vercel.app/api/features \
+curl -X POST https://geo-base-api.fly.dev/api/features \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -322,7 +322,7 @@ curl -X POST https://geo-base-puce.vercel.app/api/features \
   }'
 
 # フィーチャー更新
-curl -X PATCH https://geo-base-puce.vercel.app/api/features/{feature_id} \
+curl -X PATCH https://geo-base-api.fly.dev/api/features/{feature_id} \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -332,7 +332,7 @@ curl -X PATCH https://geo-base-puce.vercel.app/api/features/{feature_id} \
   }'
 
 # フィーチャー削除
-curl -X DELETE https://geo-base-puce.vercel.app/api/features/{feature_id} \
+curl -X DELETE https://geo-base-api.fly.dev/api/features/{feature_id} \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
@@ -358,7 +358,7 @@ cd /path/to/geo-base/mcp
 fly logs
 
 # Vercel (API サーバー)
-vercel logs https://geo-base-puce.vercel.app
+vercel logs https://geo-base-api.fly.dev
 ```
 
 ### 5.3 デバッグモード
@@ -388,7 +388,7 @@ fly deploy
 
 # シークレットの設定（必要に応じて）
 fly secrets set API_TOKEN=your-jwt-token
-fly secrets set TILE_SERVER_URL=https://geo-base-puce.vercel.app
+fly secrets set TILE_SERVER_URL=https://geo-base-api.fly.dev
 ```
 
 ---
@@ -402,7 +402,7 @@ fly secrets set TILE_SERVER_URL=https://geo-base-puce.vercel.app
 - [ ] Claude Desktop で動作確認
 
 ### 本番環境
-- [ ] APIヘルスチェック成功 (`curl https://geo-base-puce.vercel.app/api/health`)
+- [ ] APIヘルスチェック成功 (`curl https://geo-base-api.fly.dev/api/health`)
 - [ ] MCPサーバーが稼働 (`fly status`)
 - [ ] ライブテスト（本番）が成功
 - [ ] Claude Desktop（リモート）で動作確認

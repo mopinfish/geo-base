@@ -24,7 +24,7 @@ primary_region = "nrt"  # Tokyo region
 # Environment variables
 # Set these via `fly secrets set KEY=VALUE`
 [env]
-  TILE_SERVER_URL = "https://geo-base-puce.vercel.app"
+  TILE_SERVER_URL = "https://geo-base-api.fly.dev"
   ENVIRONMENT = "production"
   SERVER_NAME = "geo-base"
   MCP_TRANSPORT = "sse"

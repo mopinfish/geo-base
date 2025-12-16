@@ -252,7 +252,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   }
 
   const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_URL || "https://geo-base-puce.vercel.app";
+    process.env.NEXT_PUBLIC_API_URL || "https://geo-base-api.fly.dev";
   const tileUrl = getTileUrl(tileset, apiBaseUrl);
   const tileJsonUrl = `${apiBaseUrl}/api/tilesets/${id}/tilejson.json`;
   const tileUrlLabel = getTileUrlLabel(tileset.type);

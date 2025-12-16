@@ -59,7 +59,7 @@ npm run dev
 
 `.env.local` を本番API向けに設定:
 ```env
-NEXT_PUBLIC_API_URL=https://geo-base-puce.vercel.app
+NEXT_PUBLIC_API_URL=https://geo-base-api.fly.dev
 NEXT_PUBLIC_MCP_URL=https://geo-base-mcp.fly.dev
 ```
 
@@ -71,7 +71,7 @@ npm run dev
 
 - Admin UI: http://localhost:3000
 - API (ローカル): http://localhost:8000/api/health
-- API (本番): https://geo-base-puce.vercel.app/api/health
+- API (本番): https://geo-base-api.fly.dev/api/health
 
 ## ビルドとデプロイ
 
@@ -153,7 +153,7 @@ app/
 | 環境 | API URL | MCP URL |
 |-----|---------|---------|
 | ローカル | http://localhost:8000 | http://localhost:8001 |
-| 本番 | https://geo-base-puce.vercel.app | https://geo-base-mcp.fly.dev |
+| 本番 | https://geo-base-api.fly.dev | https://geo-base-mcp.fly.dev |
 
 ## ライセンス
 
