@@ -77,12 +77,12 @@ tileset:{tileset_id}
 
 #### Step 3.2-C.3: Docker Compose設定
 
-**新規ファイル**: `docker-compose.yml`
+**更新ファイル**: `docker/docker-compose.yml`
 
-サービス:
-- `postgres`: PostGIS対応PostgreSQL 15
+既存のPostgreSQL設定にRedisを追加:
 - `redis`: Redis 7 Alpine
-- `redis-commander`: Web UI（オプション）
+- `redis-commander`: Web UI（オプション、`--profile tools`で起動）
+- `redis_data`: 永続化ボリューム
 
 #### Step 3.2-C.4: セットアップドキュメント
 
@@ -138,8 +138,12 @@ tileset:{tileset_id}
 ### 3.1 ローカル開発
 
 ```fish
-# サービス起動
-docker-compose up -d
+# サービス起動（docker/ディレクトリから）
+cd docker
+docker compose up -d
+
+# または、プロジェクトルートから
+docker compose -f docker/docker-compose.yml up -d
 
 # 環境変数設定
 set -x REDIS_ENABLED true
@@ -181,9 +185,11 @@ api/
     ├── test_redis_client.py  # 新規 (250行) - Redisテスト
     └── test_tile_cache.py    # 新規 (300行) - キャッシュテスト
 
-docker-compose.yml            # 新規 - ローカル開発環境
+docker/
+└── docker-compose.yml        # 更新 - Redisサービス追加
+
 docs/
-└── REDIS_SETUP.md           # 新規 - セットアップガイド
+└── REDIS_SETUP.md            # 新規 - セットアップガイド
 ```
 
 **合計**: 約1,650行の新規コード、46テストケース
@@ -260,7 +266,7 @@ Step 3.2-C.2: タイルキャッシュ
 - Redis + メモリキャッシュのハイブリッド設計
 
 Step 3.2-C.3: 開発環境
-- docker-compose.yml: PostgreSQL + Redis
+- docker/docker-compose.yml: Redisサービス追加
 - docs/REDIS_SETUP.md: セットアップガイド
 
 テストコード:

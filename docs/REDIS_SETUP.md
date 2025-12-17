@@ -24,16 +24,29 @@ Redisが利用できない場合は、インメモリキャッシュにフォー
 ### 1. Docker Composeでの起動
 
 ```fish
-cd /path/to/geo-base
+cd /path/to/geo-base/docker
 
 # PostgreSQL + Redis を起動
-docker-compose up -d
+docker compose up -d
 
 # ログ確認
-docker-compose logs -f redis
+docker compose logs -f redis
 
 # 停止
-docker-compose down
+docker compose down
+
+# ステータス確認
+docker compose ps
+```
+
+または、プロジェクトルートから:
+
+```fish
+cd /path/to/geo-base
+
+# -f オプションでファイル指定
+docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml down
 ```
 
 ### 2. 環境変数の設定
@@ -126,8 +139,10 @@ redis-cli KEYS "geo-base:*" | xargs redis-cli DEL
 オプションでRedis管理UIを起動できます：
 
 ```fish
+cd /path/to/geo-base/docker
+
 # Redis Commander を含めて起動
-docker-compose --profile tools up -d
+docker compose --profile tools up -d
 
 # ブラウザでアクセス
 open http://localhost:8081
@@ -279,7 +294,8 @@ fly secrets set REDIS_SSL="true"
 **解決策**:
 1. Redisサービスが起動しているか確認
    ```fish
-   docker-compose ps
+   cd docker
+   docker compose ps
    ```
 2. ポートが正しいか確認
    ```fish
@@ -360,7 +376,8 @@ docker exec -it geo-base-redis redis-cli INFO stats | grep keyspace
 - `api/lib/tile_cache.py` - タイルキャッシュモジュール
 - `api/tests/test_redis_client.py` - Redisクライアントテスト
 - `api/tests/test_tile_cache.py` - タイルキャッシュテスト
-- `docker-compose.yml` - ローカル開発環境設定
+- `docker/docker-compose.yml` - ローカル開発環境設定
+- `docker/postgis-init/` - PostgreSQL初期化スクリプト
 
 ---
 
