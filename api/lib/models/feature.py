@@ -31,6 +31,14 @@ class BulkFeatureCreate(BaseModel):
         min_length=1,
         max_length=10000  # Maximum 10000 features at once
     )
+    update_bounds: bool = Field(
+        True, 
+        description="Automatically update tileset bounds after import"
+    )
+    validate_geometry: bool = Field(
+        True,
+        description="Validate geometry structure before import"
+    )
 
 
 class BulkFeatureResponse(BaseModel):
@@ -39,6 +47,16 @@ class BulkFeatureResponse(BaseModel):
     failed_count: int = Field(..., description="Number of failed features")
     feature_ids: List[str] = Field(default_factory=list, description="List of created feature IDs")
     errors: List[str] = Field(default_factory=list, description="List of error messages")
+    warnings: List[str] = Field(default_factory=list, description="List of warning messages")
+    bounds_updated: bool = Field(False, description="Whether tileset bounds were updated")
+    bounds: Optional[List[float]] = Field(
+        None, 
+        description="Updated bounds [west, south, east, north]"
+    )
+    center: Optional[List[float]] = Field(
+        None, 
+        description="Updated center [longitude, latitude]"
+    )
 
 
 class FeatureResponse(BaseModel):
