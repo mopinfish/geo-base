@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -25,8 +26,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useApi } from "@/hooks/use-api";
-import type { Feature, Tileset } from "@/lib/api";
+import type { Feature, Tileset, BatchOperationResponse } from "@/lib/api";
 import { 
   Plus, 
   RefreshCw, 
@@ -39,6 +48,9 @@ import {
   FileJson,
   Trash2,
   Loader2,
+  Download,
+  Edit,
+  FileText,
 } from "lucide-react";
 
 export default function FeaturesPage() {
@@ -48,6 +60,7 @@ export default function FeaturesPage() {
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTileset, setSelectedTileset] = useState<string>("all");
   const [limit, setLimit] = useState(50);
@@ -58,6 +71,24 @@ export default function FeaturesPage() {
   // 一括削除ダイアログの状態
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deletePreview, setDeletePreview] = useState<BatchOperationResponse | null>(null);
+  
+  // エクスポートダイアログの状態（タイルセット単位）
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'geojson' | 'csv'>('geojson');
+  
+  // 選択エクスポートダイアログの状態（選択フィーチャー単位）
+  const [exportSelectedDialogOpen, setExportSelectedDialogOpen] = useState(false);
+  const [isExportingSelected, setIsExportingSelected] = useState(false);
+  const [exportSelectedFormat, setExportSelectedFormat] = useState<'geojson' | 'csv'>('geojson');
+  
+  // バッチ更新ダイアログの状態
+  const [batchUpdateDialogOpen, setBatchUpdateDialogOpen] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateLayerName, setUpdateLayerName] = useState("");
+  const [updateProperties, setUpdateProperties] = useState("");
+  const [mergeProperties, setMergeProperties] = useState(true);
 
   // GeoJSON Feature を Admin UI の Feature 型に変換
   const convertGeoJsonFeature = (geoJsonFeature: {
@@ -157,6 +188,14 @@ export default function FeaturesPage() {
     fetchData();
   }, [selectedTileset, limit, isReady]);
 
+  // 成功メッセージの自動消去
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
   // 安全にフィルタリング（配列でない場合に備える）
   const safeFeatures = Array.isArray(features) ? features : [];
   const filteredFeatures = safeFeatures.filter((feature) => {
@@ -210,6 +249,22 @@ export default function FeaturesPage() {
     }
   };
 
+  // 一括削除のプレビュー取得
+  const handleBulkDeletePreview = async () => {
+    if (selectedIds.size === 0) return;
+    
+    try {
+      const result = await api.batchDeleteFeatures({
+        feature_ids: Array.from(selectedIds),
+        dry_run: true,
+      });
+      setDeletePreview(result);
+      setBulkDeleteDialogOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "プレビュー取得に失敗しました");
+    }
+  };
+
   // 一括削除の実行
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
@@ -218,27 +273,188 @@ export default function FeaturesPage() {
     setError(null);
     
     try {
-      // 並列で削除を実行
-      const deletePromises = Array.from(selectedIds).map(id => 
-        api.deleteFeature(id).catch(err => ({ id, error: err }))
-      );
+      const result = await api.batchDeleteFeatures({
+        feature_ids: Array.from(selectedIds),
+      });
       
-      const results = await Promise.all(deletePromises);
-      
-      // エラーがあったものをチェック
-      const errors = results.filter(r => r && typeof r === 'object' && 'error' in r);
-      
-      if (errors.length > 0) {
-        setError(`${errors.length}件の削除に失敗しました`);
+      if (result.failed_count > 0) {
+        setError(`${result.failed_count}件の削除に失敗しました: ${result.errors.join(', ')}`);
+      } else {
+        setSuccessMessage(`${result.success_count}件のフィーチャーを削除しました`);
       }
       
       // データを再取得
       await fetchData();
       setBulkDeleteDialogOpen(false);
+      setDeletePreview(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "削除に失敗しました");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // エクスポートの実行
+  const handleExport = async () => {
+    if (selectedTileset === "all") {
+      setError("エクスポートにはタイルセットを選択してください");
+      return;
+    }
+
+    setIsExporting(true);
+    setError(null);
+
+    try {
+      if (exportFormat === 'geojson') {
+        const result = await api.exportFeatures({
+          tileset_id: selectedTileset,
+        });
+        
+        // ダウンロード
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/geo+json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedTileset}.geojson`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setSuccessMessage(`${result.features.length}件のフィーチャーをエクスポートしました`);
+      } else {
+        const blob = await api.exportFeaturesCsv({
+          tileset_id: selectedTileset,
+        });
+        
+        // ダウンロード
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedTileset}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setSuccessMessage('CSVエクスポートが完了しました');
+      }
+      
+      setExportDialogOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エクスポートに失敗しました");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // 選択フィーチャーのエクスポート
+  const handleExportSelected = async () => {
+    if (selectedIds.size === 0) {
+      setError("エクスポートするフィーチャーを選択してください");
+      return;
+    }
+
+    setIsExportingSelected(true);
+    setError(null);
+
+    try {
+      const featureIds = Array.from(selectedIds);
+      
+      if (exportSelectedFormat === 'geojson') {
+        const result = await api.exportFeatures({
+          feature_ids: featureIds,
+        });
+        
+        // ダウンロード
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/geo+json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `selected_features_${featureIds.length}.geojson`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setSuccessMessage(`${result.features.length}件のフィーチャーをエクスポートしました`);
+      } else {
+        const blob = await api.exportFeaturesCsv({
+          feature_ids: featureIds,
+        });
+        
+        // ダウンロード
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `selected_features_${featureIds.length}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setSuccessMessage('CSVエクスポートが完了しました');
+      }
+      
+      setExportSelectedDialogOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エクスポートに失敗しました");
+    } finally {
+      setIsExportingSelected(false);
+    }
+  };
+
+  // バッチ更新の実行
+  const handleBatchUpdate = async () => {
+    if (selectedIds.size === 0) return;
+
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const updates: { layer_name?: string; properties?: Record<string, unknown> } = {};
+      
+      if (updateLayerName.trim()) {
+        updates.layer_name = updateLayerName.trim();
+      }
+      
+      if (updateProperties.trim()) {
+        try {
+          updates.properties = JSON.parse(updateProperties);
+        } catch {
+          setError("プロパティのJSON形式が不正です");
+          setIsUpdating(false);
+          return;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        setError("更新内容を入力してください");
+        setIsUpdating(false);
+        return;
+      }
+
+      const result = await api.batchUpdateFeatures({
+        feature_ids: Array.from(selectedIds),
+        updates,
+        merge_properties: mergeProperties,
+      });
+
+      if (result.failed_count > 0) {
+        setError(`${result.failed_count}件の更新に失敗しました: ${result.errors.join(', ')}`);
+      } else {
+        setSuccessMessage(`${result.success_count}件のフィーチャーを更新しました`);
+      }
+
+      // データを再取得
+      await fetchData();
+      setBatchUpdateDialogOpen(false);
+      setUpdateLayerName("");
+      setUpdateProperties("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "更新に失敗しました");
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -260,12 +476,23 @@ export default function FeaturesPage() {
             </Button>
             <Button 
               variant="outline" 
+              size="sm"
+              onClick={() => setExportDialogOpen(true)}
+              disabled={selectedTileset === "all"}
+              title={selectedTileset === "all" ? "タイルセットを選択してください" : "フィーチャーをエクスポート"}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              エクスポート
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
               onClick={() => router.push("/features/import")}
             >
               <FileJson className="mr-2 h-4 w-4" />
-              GeoJSONインポート
+              インポート
             </Button>
-            <Button onClick={() => router.push("/features/new")}>
+            <Button size="sm" onClick={() => router.push("/features/new")}>
               <Plus className="mr-2 h-4 w-4" />
               新規作成
             </Button>
@@ -314,8 +541,22 @@ export default function FeaturesPage() {
                 <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
               </div>
             </div>
+            {selectedTileset === "all" && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                ※ エクスポートするには、上のドロップダウンからタイルセットを選択してください
+              </p>
+            )}
           </CardContent>
         </Card>
+
+        {/* 成功メッセージ */}
+        {successMessage && (
+          <Card className="border-green-500 bg-green-50 dark:bg-green-950">
+            <CardContent className="py-3">
+              <p className="text-green-700 dark:text-green-300">{successMessage}</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* エラー表示 */}
         {error && (
@@ -343,9 +584,25 @@ export default function FeaturesPage() {
                     選択解除
                   </Button>
                   <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setExportSelectedDialogOpen(true)}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    選択をエクスポート
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBatchUpdateDialogOpen(true)}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    一括更新
+                  </Button>
+                  <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => setBulkDeleteDialogOpen(true)}
+                    onClick={handleBulkDeletePreview}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     一括削除
@@ -366,6 +623,11 @@ export default function FeaturesPage() {
                 {filteredFeatures.length} 件
               </Badge>
             </CardTitle>
+            {filteredFeatures.length > 0 && selectedIds.size === 0 && (
+              <p className="text-xs text-muted-foreground">
+                ※ チェックボックスでフィーチャーを選択すると、一括更新・一括削除ができます
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -498,8 +760,17 @@ export default function FeaturesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>フィーチャーを一括削除しますか？</AlertDialogTitle>
             <AlertDialogDescription>
-              選択した {selectedIds.size} 件のフィーチャーを削除します。
-              この操作は取り消せません。
+              {deletePreview ? (
+                <span>
+                  {deletePreview.total_count}件のフィーチャーを削除します。
+                  この操作は取り消せません。
+                </span>
+              ) : (
+                <span>
+                  選択した {selectedIds.size} 件のフィーチャーを削除します。
+                  この操作は取り消せません。
+                </span>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -524,6 +795,195 @@ export default function FeaturesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* エクスポートダイアログ */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>フィーチャーをエクスポート</DialogTitle>
+            <DialogDescription>
+              選択したタイルセットのフィーチャーをエクスポートします。
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>タイルセット</Label>
+              <p className="text-sm text-muted-foreground">
+                {getTilesetName(selectedTileset)}
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>フォーマット</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={exportFormat === 'geojson'}
+                    onChange={() => setExportFormat('geojson')}
+                  />
+                  <FileJson className="h-4 w-4" />
+                  GeoJSON
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={exportFormat === 'csv'}
+                    onChange={() => setExportFormat('csv')}
+                  />
+                  <FileText className="h-4 w-4" />
+                  CSV
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleExport} disabled={isExporting}>
+              {isExporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  エクスポート中...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  エクスポート
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* バッチ更新ダイアログ */}
+      <Dialog open={batchUpdateDialogOpen} onOpenChange={setBatchUpdateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>フィーチャーを一括更新</DialogTitle>
+            <DialogDescription>
+              選択した {selectedIds.size} 件のフィーチャーを更新します。
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="layer-name">レイヤー名（任意）</Label>
+              <Input
+                id="layer-name"
+                placeholder="新しいレイヤー名"
+                value={updateLayerName}
+                onChange={(e) => setUpdateLayerName(e.target.value)}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="properties">プロパティ（JSON形式、任意）</Label>
+              <textarea
+                id="properties"
+                className="min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder='{"status": "reviewed", "category": "landmark"}'
+                value={updateProperties}
+                onChange={(e) => setUpdateProperties(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="merge-properties"
+                checked={mergeProperties}
+                onChange={(e) => setMergeProperties(e.target.checked)}
+              />
+              <Label htmlFor="merge-properties">
+                既存のプロパティとマージする（オフの場合は置換）
+              </Label>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchUpdateDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleBatchUpdate} disabled={isUpdating}>
+              {isUpdating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  更新中...
+                </>
+              ) : (
+                <>
+                  <Edit className="mr-2 h-4 w-4" />
+                  {selectedIds.size}件を更新
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 選択エクスポートダイアログ */}
+      <Dialog open={exportSelectedDialogOpen} onOpenChange={setExportSelectedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>選択したフィーチャーをエクスポート</DialogTitle>
+            <DialogDescription>
+              選択した {selectedIds.size} 件のフィーチャーをエクスポートします。
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>フォーマット</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={exportSelectedFormat === 'geojson'}
+                    onChange={() => setExportSelectedFormat('geojson')}
+                    className="h-4 w-4"
+                  />
+                  <FileJson className="h-4 w-4" />
+                  GeoJSON
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={exportSelectedFormat === 'csv'}
+                    onChange={() => setExportSelectedFormat('csv')}
+                    className="h-4 w-4"
+                  />
+                  <FileText className="h-4 w-4" />
+                  CSV
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportSelectedDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleExportSelected} disabled={isExportingSelected}>
+              {isExportingSelected ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  エクスポート中...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  {selectedIds.size}件をエクスポート
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

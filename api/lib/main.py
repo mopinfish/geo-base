@@ -18,6 +18,7 @@ from lib.database import close_pool
 from lib.routers.health import router as health_router
 from lib.routers.tilesets import router as tilesets_router
 from lib.routers.features import router as features_router
+from lib.routers.batch_features import router as batch_features_router
 from lib.routers.datasources import router as datasources_router
 from lib.routers.colormaps import router as colormaps_router
 from lib.routers.stats import router as stats_router
@@ -37,7 +38,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="geo-base Tile Server",
     description="Geospatial tile server API for vector and raster data distribution",
-    version="0.4.0",
+    version="0.4.4",
     lifespan=lifespan,
 )
 
@@ -64,6 +65,9 @@ app.include_router(tilesets_router)
 
 # Feature CRUD endpoints
 app.include_router(features_router)
+
+# Batch operations endpoints (export, bulk update/delete)
+app.include_router(batch_features_router)
 
 # Datasource CRUD endpoints
 app.include_router(datasources_router)
@@ -112,6 +116,8 @@ def preview_page():
         h1 { color: #333; }
         .endpoint { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
         .method { color: #0066cc; font-weight: bold; }
+        .method-post { color: #009933; }
+        .method-delete { color: #cc0000; }
         a { color: #0066cc; }
     </style>
 </head>
@@ -146,8 +152,19 @@ def preview_page():
         <span class="method">GET</span> /api/tiles/raster/{tileset_id}/{z}/{x}/{y}.png - Raster tiles
     </div>
     
+    <h3>Batch Operations</h3>
+    <div class="endpoint">
+        <span class="method method-post">POST</span> /api/features/export - Export features (GeoJSON/CSV)
+    </div>
+    <div class="endpoint">
+        <span class="method method-post">POST</span> /api/features/bulk/update - Batch update features
+    </div>
+    <div class="endpoint">
+        <span class="method method-delete">POST</span> /api/features/bulk/delete - Batch delete features
+    </div>
+    
     <h2>Version</h2>
-    <p>v0.4.0</p>
+    <p>v0.4.4</p>
 </body>
 </html>
 """
