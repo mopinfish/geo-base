@@ -34,10 +34,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useApi } from "@/hooks/use-api";
 import type { Tileset } from "@/lib/api";
-import { 
-  Plus, 
-  RefreshCw, 
-  Search, 
+import {
+  Plus,
+  RefreshCw,
+  Search,
   Layers,
   Eye,
   Pencil,
@@ -49,7 +49,7 @@ import {
 
 export default function TilesetsPage() {
   const { api, isReady } = useApi();
-  
+
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [filteredTilesets, setFilteredTilesets] = useState<Tileset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,7 +60,7 @@ export default function TilesetsPage() {
 
   // 選択状態の管理
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  
+
   // 一括削除ダイアログの状態
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -70,33 +70,35 @@ export default function TilesetsPage() {
       console.log("API not ready yet, skipping fetch");
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
     try {
       console.log("Fetching tilesets...");
       const data = await api.listTilesets();
       console.log("API Response:", data);
-      
+
       // APIレスポンスの形式に対応
       // - 配列の場合: data そのもの
       // - オブジェクトの場合: data.tilesets
       let tilesetsArray: Tileset[] = [];
       if (Array.isArray(data)) {
         tilesetsArray = data;
-      } else if (data && typeof data === 'object' && 'tilesets' in data) {
+      } else if (data && typeof data === "object" && "tilesets" in data) {
         tilesetsArray = (data as { tilesets: Tileset[] }).tilesets;
       }
       console.log("Tilesets array:", tilesetsArray);
-      
+
       setTilesets(tilesetsArray);
       setFilteredTilesets(tilesetsArray);
-      
+
       // 選択状態をクリア
       setSelectedIds(new Set());
     } catch (err) {
       console.error("Fetch error:", err);
-      setError(err instanceof Error ? err.message : "タイルセットの取得に失敗しました");
+      setError(
+        err instanceof Error ? err.message : "タイルセットの取得に失敗しました"
+      );
       setTilesets([]);
       setFilteredTilesets([]);
     } finally {
@@ -165,7 +167,7 @@ export default function TilesetsPage() {
     if (selectedIds.size === filteredTilesets.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredTilesets.map(t => t.id)));
+      setSelectedIds(new Set(filteredTilesets.map((t) => t.id)));
     }
   };
 
@@ -175,22 +177,24 @@ export default function TilesetsPage() {
 
     setIsDeleting(true);
     setError(null);
-    
+
     try {
       // 並列で削除を実行
-      const deletePromises = Array.from(selectedIds).map(id => 
-        api.deleteTileset(id).catch(err => ({ id, error: err }))
+      const deletePromises = Array.from(selectedIds).map((id) =>
+        api.deleteTileset(id).catch((err) => ({ id, error: err }))
       );
-      
+
       const results = await Promise.all(deletePromises);
-      
+
       // エラーがあったものをチェック
-      const errors = results.filter(r => r && typeof r === 'object' && 'error' in r);
-      
+      const errors = results.filter(
+        (r) => r && typeof r === "object" && "error" in r
+      );
+
       if (errors.length > 0) {
         setError(`${errors.length}件の削除に失敗しました`);
       }
-      
+
       // データを再取得
       await fetchTilesets();
       setBulkDeleteDialogOpen(false);
@@ -208,13 +212,18 @@ export default function TilesetsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">タイルセット</h1>
-            <p className="text-muted-foreground">
-              タイルセットの一覧と管理
-            </p>
+            <p className="text-muted-foreground">タイルセットの一覧と管理</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={fetchTilesets} variant="outline" size="sm" disabled={!isReady}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            <Button
+              onClick={fetchTilesets}
+              variant="outline"
+              size="sm"
+              disabled={!isReady}
+            >
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+              />
               更新
             </Button>
             <Link href="/tilesets/new">
@@ -331,7 +340,10 @@ export default function TilesetsPage() {
                     <TableHead className="w-12">
                       <input
                         type="checkbox"
-                        checked={selectedIds.size === filteredTilesets.length && filteredTilesets.length > 0}
+                        checked={
+                          selectedIds.size === filteredTilesets.length &&
+                          filteredTilesets.length > 0
+                        }
                         onChange={toggleAllSelection}
                         className="h-4 w-4 rounded border-gray-300"
                       />
@@ -346,9 +358,11 @@ export default function TilesetsPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredTilesets.map((tileset) => (
-                    <TableRow 
+                    <TableRow
                       key={tileset.id}
-                      className={selectedIds.has(tileset.id) ? "bg-muted/50" : ""}
+                      className={
+                        selectedIds.has(tileset.id) ? "bg-muted/50" : ""
+                      }
                     >
                       <TableCell>
                         <input
@@ -359,7 +373,7 @@ export default function TilesetsPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <Link 
+                        <Link
                           href={`/tilesets/${tileset.id}`}
                           className="hover:underline"
                         >
@@ -420,10 +434,15 @@ export default function TilesetsPage() {
       </div>
 
       {/* 一括削除確認ダイアログ */}
-      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+      <AlertDialog
+        open={bulkDeleteDialogOpen}
+        onOpenChange={setBulkDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>タイルセットを一括削除しますか？</AlertDialogTitle>
+            <AlertDialogTitle>
+              タイルセットを一括削除しますか？
+            </AlertDialogTitle>
             <AlertDialogDescription>
               選択した {selectedIds.size} 件のタイルセットを削除します。
               タイルセットに含まれるフィーチャーやデータソースも削除されます。
@@ -431,7 +450,9 @@ export default function TilesetsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>
+              キャンセル
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
               disabled={isDeleting}

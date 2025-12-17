@@ -227,7 +227,8 @@ export interface TilesetStats {
 // ============================
 
 export interface ExportRequest {
-  tileset_id: string;
+  tileset_id?: string;
+  feature_ids?: string[];
   layer_name?: string;
   bbox?: number[];
   properties_filter?: Record<string, unknown>;

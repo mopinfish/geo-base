@@ -82,7 +82,8 @@ class BatchResult:
 
 def export_features_geojson(
     conn,
-    tileset_id: str,
+    tileset_id: Optional[str] = None,
+    feature_ids: Optional[List[str]] = None,
     layer_name: Optional[str] = None,
     bbox: Optional[Tuple[float, float, float, float]] = None,
     properties_filter: Optional[Dict[str, Any]] = None,
@@ -94,7 +95,8 @@ def export_features_geojson(
     
     Args:
         conn: Database connection
-        tileset_id: Tileset UUID to export
+        tileset_id: Tileset UUID to export (optional if feature_ids provided)
+        feature_ids: List of specific feature UUIDs to export (optional)
         layer_name: Filter by layer name (optional)
         bbox: Bounding box filter (minx, miny, maxx, maxy) (optional)
         properties_filter: Filter by properties (key=value) (optional)
@@ -107,8 +109,19 @@ def export_features_geojson(
     try:
         with conn.cursor() as cur:
             # Build query
-            conditions = ["f.tileset_id = %s"]
-            params: List[Any] = [tileset_id]
+            conditions: List[str] = []
+            params: List[Any] = []
+            
+            if feature_ids:
+                # Export specific features by ID
+                conditions.append("f.id = ANY(%s::uuid[])")
+                params.append(feature_ids)
+            elif tileset_id:
+                # Export all features from tileset
+                conditions.append("f.tileset_id = %s")
+                params.append(tileset_id)
+            else:
+                raise ValueError("Either tileset_id or feature_ids must be provided")
             
             if layer_name:
                 conditions.append("f.layer_name = %s")
@@ -127,7 +140,7 @@ def export_features_geojson(
                     conditions.append("f.properties @> %s::jsonb")
                     params.append(json.dumps({key: value}))
             
-            where_clause = " AND ".join(conditions)
+            where_clause = " AND ".join(conditions) if conditions else "TRUE"
             
             # Get total count
             cur.execute(
@@ -140,6 +153,7 @@ def export_features_geojson(
             query = f"""
                 SELECT 
                     f.id,
+                    f.tileset_id,
                     f.layer_name,
                     ST_AsGeoJSON(f.geom)::json as geometry,
                     f.properties,
@@ -158,14 +172,17 @@ def export_features_geojson(
             
             # Build features
             features = []
+            tileset_ids_found = set()
             for row in rows:
-                feature_id, layer, geometry, properties, created_at, updated_at = row
+                feature_id, feat_tileset_id, layer, geometry, properties, created_at, updated_at = row
+                tileset_ids_found.add(str(feat_tileset_id))
                 
                 feature_props = properties.copy() if properties else {}
                 feature_props["_layer"] = layer
                 
                 if include_metadata:
                     feature_props["_id"] = str(feature_id)
+                    feature_props["_tileset_id"] = str(feat_tileset_id)
                     feature_props["_created_at"] = created_at.isoformat() if created_at else None
                     feature_props["_updated_at"] = updated_at.isoformat() if updated_at else None
                 
@@ -184,6 +201,8 @@ def export_features_geojson(
             if include_metadata:
                 result["metadata"] = {
                     "tileset_id": tileset_id,
+                    "tileset_ids": list(tileset_ids_found) if feature_ids else None,
+                    "feature_ids": feature_ids,
                     "total_count": total_count,
                     "exported_count": len(features),
                     "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -295,7 +314,8 @@ def export_features_geojson_streaming(
 
 def export_features_csv(
     conn,
-    tileset_id: str,
+    tileset_id: Optional[str] = None,
+    feature_ids: Optional[List[str]] = None,
     layer_name: Optional[str] = None,
     bbox: Optional[Tuple[float, float, float, float]] = None,
     properties_columns: Optional[List[str]] = None,
@@ -306,7 +326,8 @@ def export_features_csv(
     
     Args:
         conn: Database connection
-        tileset_id: Tileset UUID to export
+        tileset_id: Tileset UUID to export (optional if feature_ids provided)
+        feature_ids: List of specific feature UUIDs to export (optional)
         layer_name: Filter by layer name (optional)
         bbox: Bounding box filter (optional)
         properties_columns: Specific property columns to include (optional)
@@ -318,8 +339,19 @@ def export_features_csv(
     try:
         with conn.cursor() as cur:
             # Build query
-            conditions = ["f.tileset_id = %s"]
-            params: List[Any] = [tileset_id]
+            conditions: List[str] = []
+            params: List[Any] = []
+            
+            if feature_ids:
+                # Export specific features by ID
+                conditions.append("f.id = ANY(%s::uuid[])")
+                params.append(feature_ids)
+            elif tileset_id:
+                # Export all features from tileset
+                conditions.append("f.tileset_id = %s")
+                params.append(tileset_id)
+            else:
+                raise ValueError("Either tileset_id or feature_ids must be provided")
             
             if layer_name:
                 conditions.append("f.layer_name = %s")
@@ -332,7 +364,7 @@ def export_features_csv(
                 )
                 params.extend([minx, miny, maxx, maxy])
             
-            where_clause = " AND ".join(conditions)
+            where_clause = " AND ".join(conditions) if conditions else "TRUE"
             
             # Determine columns
             geom_col = "ST_AsText(f.geom) as wkt" if include_wkt else "NULL as wkt"
@@ -340,6 +372,7 @@ def export_features_csv(
             query = f"""
                 SELECT 
                     f.id,
+                    f.tileset_id,
                     f.layer_name,
                     ST_X(ST_Centroid(f.geom)) as longitude,
                     ST_Y(ST_Centroid(f.geom)) as latitude,
@@ -360,8 +393,8 @@ def export_features_csv(
                 # Auto-detect from first 100 rows
                 prop_cols = set()
                 for row in rows[:100]:
-                    if row[5]:
-                        prop_cols.update(row[5].keys())
+                    if row[6]:  # properties is now at index 6
+                        prop_cols.update(row[6].keys())
                 prop_cols = sorted(prop_cols)
             
             # Build CSV
@@ -369,7 +402,7 @@ def export_features_csv(
             writer = csv.writer(output)
             
             # Header
-            header = ["id", "layer_name", "longitude", "latitude"]
+            header = ["id", "tileset_id", "layer_name", "longitude", "latitude"]
             if include_wkt:
                 header.append("wkt")
             header.extend(prop_cols)
@@ -377,9 +410,9 @@ def export_features_csv(
             
             # Data rows
             for row in rows:
-                feature_id, layer, lon, lat, wkt, properties = row
+                feature_id, feat_tileset_id, layer, lon, lat, wkt, properties = row
                 
-                csv_row = [str(feature_id), layer, lon, lat]
+                csv_row = [str(feature_id), str(feat_tileset_id), layer, lon, lat]
                 if include_wkt:
                     csv_row.append(wkt)
                 
@@ -644,9 +677,9 @@ def batch_delete_features(
     
     try:
         with conn.cursor() as cur:
-            # Use ANY for efficient batch delete
+            # Use ANY for efficient batch delete with UUID cast
             cur.execute(
-                "DELETE FROM features WHERE id = ANY(%s) RETURNING id",
+                "DELETE FROM features WHERE id = ANY(%s::uuid[]) RETURNING id",
                 (feature_ids,),
             )
             

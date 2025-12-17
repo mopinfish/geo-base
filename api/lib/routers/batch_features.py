@@ -43,7 +43,12 @@ router = APIRouter(prefix="/api/features", tags=["features-batch"])
 
 class ExportRequest(BaseModel):
     """Request model for export endpoint."""
-    tileset_id: str = Field(..., description="Tileset UUID to export")
+    tileset_id: Optional[str] = Field(None, description="Tileset UUID to export")
+    feature_ids: Optional[List[str]] = Field(
+        None,
+        description="List of specific feature UUIDs to export (max 10000)",
+        max_length=10000,
+    )
     layer_name: Optional[str] = Field(None, description="Filter by layer name")
     bbox: Optional[List[float]] = Field(
         None,
@@ -156,7 +161,7 @@ def _check_tileset_ownership(cur, tileset_id: str, user_id: str) -> bool:
 def _get_tileset_ids_for_features(cur, feature_ids: List[str]) -> set:
     """Get unique tileset IDs for given features."""
     cur.execute(
-        "SELECT DISTINCT tileset_id FROM features WHERE id = ANY(%s)",
+        "SELECT DISTINCT tileset_id FROM features WHERE id = ANY(%s::uuid[])",
         (feature_ids,),
     )
     return {str(row[0]) for row in cur.fetchall()}
@@ -174,15 +179,30 @@ def export_features(
     conn=Depends(get_connection),
 ):
     """
-    Export features from a tileset.
+    Export features from a tileset or by specific feature IDs.
     
     Supports GeoJSON and CSV formats.
-    Requires authentication and ownership of the tileset.
+    Requires authentication and ownership of the tileset(s).
+    
+    Either tileset_id or feature_ids must be provided.
     """
+    # Validate request
+    if not request.tileset_id and not request.feature_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Either tileset_id or feature_ids must be provided"
+        )
+    
     try:
         with conn.cursor() as cur:
             # Check ownership
-            _check_tileset_ownership(cur, request.tileset_id, user.id)
+            if request.tileset_id:
+                _check_tileset_ownership(cur, request.tileset_id, user.id)
+            elif request.feature_ids:
+                # Get tileset IDs for the features and check ownership
+                tileset_ids = _get_tileset_ids_for_features(cur, request.feature_ids)
+                for tileset_id in tileset_ids:
+                    _check_tileset_ownership(cur, tileset_id, user.id)
         
         # Parse bbox if provided
         bbox = None
@@ -194,15 +214,17 @@ def export_features(
             csv_content = export_features_csv(
                 conn,
                 tileset_id=request.tileset_id,
+                feature_ids=request.feature_ids,
                 layer_name=request.layer_name,
                 bbox=bbox,
             )
             
+            filename = request.tileset_id or "selected_features"
             return Response(
                 content=csv_content,
                 media_type="text/csv",
                 headers={
-                    "Content-Disposition": f"attachment; filename={request.tileset_id}.csv"
+                    "Content-Disposition": f"attachment; filename={filename}.csv"
                 },
             )
         
@@ -211,6 +233,7 @@ def export_features(
             geojson = export_features_geojson(
                 conn,
                 tileset_id=request.tileset_id,
+                feature_ids=request.feature_ids,
                 layer_name=request.layer_name,
                 bbox=bbox,
                 properties_filter=request.properties_filter,

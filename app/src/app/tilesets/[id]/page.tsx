@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { DeleteTilesetDialog } from "@/components/tilesets/delete-tileset-dialog";
 import { TilesetMapPreview } from "@/components/map";
+import { ExportFeaturesButton } from "@/components/features";
 import { useApi } from "@/hooks/use-api";
 import type { Tileset, TileJSON, TilesetStats } from "@/lib/api";
 import {
@@ -73,7 +74,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
     if (refreshMap) {
       setIsRefreshing(true);
     }
-    
+
     try {
       const data = await api.getTileset(id);
       console.log("Tileset data:", data);
@@ -169,7 +170,9 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const formatBounds = (bounds: unknown) => {
     const nums = parseCoordinates(bounds);
     if (!nums || nums.length !== 4) return "-";
-    return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}, ${nums[2].toFixed(4)}, ${nums[3].toFixed(4)}`;
+    return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}, ${nums[2].toFixed(
+      4
+    )}, ${nums[3].toFixed(4)}`;
   };
 
   const formatCenter = (center: unknown) => {
@@ -294,13 +297,15 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button 
-              onClick={handleRefresh} 
-              variant="outline" 
+            <Button
+              onClick={handleRefresh}
+              variant="outline"
               size="sm"
               disabled={isRefreshing}
             >
-              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
               更新
             </Button>
             <Link href={`/tilesets/${id}/edit`}>
@@ -313,6 +318,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               tilesetName={tileset.name}
               onConfirm={handleDelete}
             />
+            <ExportFeaturesButton tilesetId={id} tilesetName={tileset.name} />
           </div>
         </div>
 
@@ -374,7 +380,9 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                   <div className="text-2xl font-bold">
                     {tilesetStats.feature_count.toLocaleString()}
                   </div>
-                  <div className="text-sm text-muted-foreground">総フィーチャー数</div>
+                  <div className="text-sm text-muted-foreground">
+                    総フィーチャー数
+                  </div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold">
@@ -384,20 +392,23 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold">
-                    {tilesetStats.geometry_types?.LineString?.toLocaleString() ?? 0}
+                    {tilesetStats.geometry_types?.LineString?.toLocaleString() ??
+                      0}
                   </div>
                   <div className="text-sm text-muted-foreground">ライン</div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold">
-                    {tilesetStats.geometry_types?.Polygon?.toLocaleString() ?? 0}
+                    {tilesetStats.geometry_types?.Polygon?.toLocaleString() ??
+                      0}
                   </div>
                   <div className="text-sm text-muted-foreground">ポリゴン</div>
                 </div>
               </div>
               {tilesetStats.latest_update && (
                 <div className="mt-4 text-sm text-muted-foreground">
-                  最終更新: {new Date(tilesetStats.latest_update).toLocaleString("ja-JP")}
+                  最終更新:{" "}
+                  {new Date(tilesetStats.latest_update).toLocaleString("ja-JP")}
                 </div>
               )}
             </CardContent>
@@ -574,11 +585,14 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground mb-3">
-                      QGISで使用する場合は、各レイヤーごとのTileJSON URLを使用してください。
+                      QGISで使用する場合は、各レイヤーごとのTileJSON
+                      URLを使用してください。
                     </p>
                     <div className="space-y-2">
                       {vectorLayers.map((layer) => {
-                        const layerTileJsonUrl = `${apiBaseUrl}/api/tilesets/${id}/tilejson.json?layer=${encodeURIComponent(layer.id)}`;
+                        const layerTileJsonUrl = `${apiBaseUrl}/api/tilesets/${id}/tilejson.json?layer=${encodeURIComponent(
+                          layer.id
+                        )}`;
                         const copyKey = `layer-${layer.id}`;
                         return (
                           <div
@@ -604,7 +618,9 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                               variant="ghost"
                               size="sm"
                               className="ml-2 shrink-0"
-                              onClick={() => copyToClipboard(layerTileJsonUrl, copyKey)}
+                              onClick={() =>
+                                copyToClipboard(layerTileJsonUrl, copyKey)
+                              }
                             >
                               {copiedUrl === copyKey ? (
                                 <Check className="h-4 w-4 text-green-500" />

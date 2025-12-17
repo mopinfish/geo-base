@@ -73,10 +73,15 @@ export default function FeaturesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletePreview, setDeletePreview] = useState<BatchOperationResponse | null>(null);
   
-  // エクスポートダイアログの状態
+  // エクスポートダイアログの状態（タイルセット単位）
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'geojson' | 'csv'>('geojson');
+  
+  // 選択エクスポートダイアログの状態（選択フィーチャー単位）
+  const [exportSelectedDialogOpen, setExportSelectedDialogOpen] = useState(false);
+  const [isExportingSelected, setIsExportingSelected] = useState(false);
+  const [exportSelectedFormat, setExportSelectedFormat] = useState<'geojson' | 'csv'>('geojson');
   
   // バッチ更新ダイアログの状態
   const [batchUpdateDialogOpen, setBatchUpdateDialogOpen] = useState(false);
@@ -343,6 +348,62 @@ export default function FeaturesPage() {
     }
   };
 
+  // 選択フィーチャーのエクスポート
+  const handleExportSelected = async () => {
+    if (selectedIds.size === 0) {
+      setError("エクスポートするフィーチャーを選択してください");
+      return;
+    }
+
+    setIsExportingSelected(true);
+    setError(null);
+
+    try {
+      const featureIds = Array.from(selectedIds);
+      
+      if (exportSelectedFormat === 'geojson') {
+        const result = await api.exportFeatures({
+          feature_ids: featureIds,
+        });
+        
+        // ダウンロード
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/geo+json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `selected_features_${featureIds.length}.geojson`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setSuccessMessage(`${result.features.length}件のフィーチャーをエクスポートしました`);
+      } else {
+        const blob = await api.exportFeaturesCsv({
+          feature_ids: featureIds,
+        });
+        
+        // ダウンロード
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `selected_features_${featureIds.length}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setSuccessMessage('CSVエクスポートが完了しました');
+      }
+      
+      setExportSelectedDialogOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "エクスポートに失敗しました");
+    } finally {
+      setIsExportingSelected(false);
+    }
+  };
+
   // バッチ更新の実行
   const handleBatchUpdate = async () => {
     if (selectedIds.size === 0) return;
@@ -415,20 +476,23 @@ export default function FeaturesPage() {
             </Button>
             <Button 
               variant="outline" 
+              size="sm"
               onClick={() => setExportDialogOpen(true)}
               disabled={selectedTileset === "all"}
+              title={selectedTileset === "all" ? "タイルセットを選択してください" : "フィーチャーをエクスポート"}
             >
               <Download className="mr-2 h-4 w-4" />
               エクスポート
             </Button>
             <Button 
               variant="outline" 
+              size="sm"
               onClick={() => router.push("/features/import")}
             >
               <FileJson className="mr-2 h-4 w-4" />
-              GeoJSONインポート
+              インポート
             </Button>
-            <Button onClick={() => router.push("/features/new")}>
+            <Button size="sm" onClick={() => router.push("/features/new")}>
               <Plus className="mr-2 h-4 w-4" />
               新規作成
             </Button>
@@ -477,6 +541,11 @@ export default function FeaturesPage() {
                 <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
               </div>
             </div>
+            {selectedTileset === "all" && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                ※ エクスポートするには、上のドロップダウンからタイルセットを選択してください
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -517,6 +586,14 @@ export default function FeaturesPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setExportSelectedDialogOpen(true)}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    選択をエクスポート
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setBatchUpdateDialogOpen(true)}
                   >
                     <Edit className="mr-2 h-4 w-4" />
@@ -546,6 +623,11 @@ export default function FeaturesPage() {
                 {filteredFeatures.length} 件
               </Badge>
             </CardTitle>
+            {filteredFeatures.length > 0 && selectedIds.size === 0 && (
+              <p className="text-xs text-muted-foreground">
+                ※ チェックボックスでフィーチャーを選択すると、一括更新・一括削除ができます
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -837,6 +919,65 @@ export default function FeaturesPage() {
                 <>
                   <Edit className="mr-2 h-4 w-4" />
                   {selectedIds.size}件を更新
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 選択エクスポートダイアログ */}
+      <Dialog open={exportSelectedDialogOpen} onOpenChange={setExportSelectedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>選択したフィーチャーをエクスポート</DialogTitle>
+            <DialogDescription>
+              選択した {selectedIds.size} 件のフィーチャーをエクスポートします。
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>フォーマット</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={exportSelectedFormat === 'geojson'}
+                    onChange={() => setExportSelectedFormat('geojson')}
+                    className="h-4 w-4"
+                  />
+                  <FileJson className="h-4 w-4" />
+                  GeoJSON
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={exportSelectedFormat === 'csv'}
+                    onChange={() => setExportSelectedFormat('csv')}
+                    className="h-4 w-4"
+                  />
+                  <FileText className="h-4 w-4" />
+                  CSV
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportSelectedDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleExportSelected} disabled={isExportingSelected}>
+              {isExportingSelected ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  エクスポート中...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  {selectedIds.size}件をエクスポート
                 </>
               )}
             </Button>
