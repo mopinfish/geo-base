@@ -42,10 +42,11 @@ def mock_conn():
 
 @pytest.fixture
 def sample_feature_rows():
-    """Sample feature rows from database."""
+    """Sample feature rows from database (7 columns: id, tileset_id, layer, geometry, properties, created_at, updated_at)."""
     return [
         (
             "uuid-1",
+            "tileset-uuid",  # tileset_id
             "layer1",
             {"type": "Point", "coordinates": [139.7, 35.6]},
             {"name": "Feature 1", "type": "point"},
@@ -54,11 +55,37 @@ def sample_feature_rows():
         ),
         (
             "uuid-2",
+            "tileset-uuid",  # tileset_id
             "layer1",
             {"type": "Point", "coordinates": [139.8, 35.7]},
             {"name": "Feature 2", "type": "point"},
             datetime(2024, 1, 1, 13, 0, 0),
             datetime(2024, 1, 2, 13, 0, 0),
+        ),
+    ]
+
+
+@pytest.fixture
+def sample_csv_rows():
+    """Sample CSV rows from database (7 columns: id, tileset_id, layer, lon, lat, wkt, properties)."""
+    return [
+        (
+            "uuid-1",
+            "tileset-uuid",
+            "layer1",
+            139.7,
+            35.6,
+            "POINT(139.7 35.6)",
+            {"name": "Feature 1", "type": "point"},
+        ),
+        (
+            "uuid-2",
+            "tileset-uuid",
+            "layer1",
+            139.8,
+            35.7,
+            "POINT(139.8 35.7)",
+            {"name": "Feature 2", "type": "point"},
         ),
     ]
 
@@ -212,25 +239,26 @@ class TestExportFeaturesGeojson:
 class TestExportFeaturesCsv:
     """Tests for export_features_csv function."""
     
-    def test_basic_csv_export(self, mock_conn):
+    def test_basic_csv_export(self, mock_conn, sample_csv_rows):
         """Test basic CSV export."""
         conn, cursor = mock_conn
-        cursor.fetchall.return_value = [
-            ("uuid-1", "layer1", 139.7, 35.6, "POINT(139.7 35.6)", {"name": "Test"}),
-        ]
+        cursor.fetchall.return_value = sample_csv_rows
         
         result = export_features_csv(conn, "tileset-uuid")
         
-        assert "id,layer_name,longitude,latitude" in result
+        assert "id,tileset_id,layer_name,longitude,latitude" in result
         assert "uuid-1" in result
         assert "layer1" in result
     
-    def test_csv_without_wkt(self, mock_conn):
+    def test_csv_without_wkt(self, mock_conn, sample_csv_rows):
         """Test CSV export without WKT column."""
         conn, cursor = mock_conn
-        cursor.fetchall.return_value = [
-            ("uuid-1", "layer1", 139.7, 35.6, None, {"name": "Test"}),
+        # Modify sample to have None for WKT
+        rows_no_wkt = [
+            (row[0], row[1], row[2], row[3], row[4], None, row[6])
+            for row in sample_csv_rows
         ]
+        cursor.fetchall.return_value = rows_no_wkt
         
         result = export_features_csv(conn, "tileset-uuid", include_wkt=False)
         
