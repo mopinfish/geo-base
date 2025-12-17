@@ -79,6 +79,25 @@
 | POST | `/api/features/bulk/delete` | バッチ削除 |
 | DELETE | `/api/features/bulk` | シンプルバッチ削除（GET）|
 
+#### Step 3.2-D.3: 管理画面UI
+
+**更新ファイル**: `app/src/lib/api.ts`
+- `ExportRequest`, `BatchUpdateRequest`, `BatchDeleteRequest` 型定義追加
+- `exportFeatures()` - GeoJSONエクスポート
+- `exportFeaturesCsv()` - CSVエクスポート（Blob返却）
+- `batchUpdateFeatures()` - バッチ更新
+- `batchDeleteFeatures()` - バッチ削除
+
+**更新ファイル**: `app/src/app/features/page.tsx`
+- エクスポートダイアログ（GeoJSON/CSV選択）
+- バッチ更新ダイアログ（レイヤー名、プロパティ変更）
+- バッチ削除機能（APIを使用した一括削除）
+- 成功/エラーメッセージ表示
+
+**新規ファイル**: `app/src/components/features/export-features-button.tsx`
+- 再利用可能なエクスポートボタンコンポーネント
+- タイルセット詳細ページなどで使用可能
+
 ### 2.3 テストコード
 
 **新規ファイル**: `api/tests/test_batch.py` (~400行)
@@ -192,6 +211,8 @@ curl -X DELETE "http://localhost:8000/api/features/bulk?feature_ids=uuid-1&featu
 
 ### 追加・更新ファイル
 
+#### API側
+
 ```
 api/
 ├── lib/
@@ -203,7 +224,20 @@ api/
     └── test_batch.py               # 新規 (400行) - バッチテスト
 ```
 
-**合計**: 約1,550行の新規コード、27テストケース
+#### Admin UI側
+
+```
+app/src/
+├── lib/
+│   └── api.ts                      # 更新 - バッチ操作API追加
+├── app/features/
+│   └── page.tsx                    # 更新 - エクスポート/バッチ更新/バッチ削除UI
+└── components/features/
+    ├── export-features-button.tsx  # 新規 - エクスポートボタンコンポーネント
+    └── index.ts                    # 更新 - エクスポート追加
+```
+
+**合計**: 約2,500行の新規・更新コード、27テストケース
 
 ---
 

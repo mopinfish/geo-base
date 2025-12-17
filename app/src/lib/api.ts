@@ -223,6 +223,76 @@ export interface TilesetStats {
 }
 
 // ============================
+// バッチ操作 型定義
+// ============================
+
+export interface ExportRequest {
+  tileset_id: string;
+  layer_name?: string;
+  bbox?: number[];
+  properties_filter?: Record<string, unknown>;
+  limit?: number;
+  format?: 'geojson' | 'csv';
+  include_metadata?: boolean;
+}
+
+export interface ExportResult {
+  type: 'FeatureCollection';
+  features: GeoJSON.Feature[];
+  metadata?: {
+    tileset_id: string;
+    total_count: number;
+    exported_count: number;
+    exported_at: string;
+    filters: {
+      layer_name?: string;
+      bbox?: number[];
+      properties_filter?: Record<string, unknown>;
+      limit?: number;
+    };
+  };
+}
+
+export interface BatchUpdateRequest {
+  feature_ids?: string[];
+  tileset_id?: string;
+  filter?: {
+    layer_name?: string;
+    bbox?: number[];
+    properties?: Record<string, unknown>;
+  };
+  updates: {
+    layer_name?: string;
+    properties?: Record<string, unknown>;
+    geometry?: GeoJSON.Geometry;
+  };
+  merge_properties?: boolean;
+  limit?: number;
+}
+
+export interface BatchDeleteRequest {
+  feature_ids?: string[];
+  tileset_id?: string;
+  filter?: {
+    layer_name?: string;
+    bbox?: number[];
+    properties?: Record<string, unknown>;
+  };
+  limit?: number;
+  dry_run?: boolean;
+}
+
+export interface BatchOperationResponse {
+  success_count: number;
+  failed_count: number;
+  total_count: number;
+  errors: string[];
+  warnings: string[];
+  status: string;
+  duration_seconds?: number;
+}
+
+// ============================
 // API クライアント
 // ============================
 
@@ -299,6 +369,36 @@ class ApiClient {
     } catch {
       return null as T;
     }
+  }
+
+  /**
+   * Blobとしてリクエスト（CSVダウンロード用）
+   */
+  private async requestBlob(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<Blob> {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...this.getHeaders(),
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const error: ApiError = await response.json();
+        errorDetail = error.detail || errorDetail;
+      } catch {
+        // ignore
+      }
+      throw new Error(errorDetail);
+    }
+
+    return response.blob();
   }
 
   // ============================
@@ -430,6 +530,50 @@ class ApiClient {
   async deleteFeature(id: string): Promise<void> {
     await this.request<null>(`/api/features/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ============================
+  // バッチ操作 API
+  // ============================
+
+  /**
+   * フィーチャーをエクスポート（GeoJSON）
+   */
+  async exportFeatures(data: ExportRequest): Promise<ExportResult> {
+    return this.request<ExportResult>('/api/features/export', {
+      method: 'POST',
+      body: JSON.stringify({ ...data, format: 'geojson' }),
+    });
+  }
+
+  /**
+   * フィーチャーをエクスポート（CSV、Blobで返す）
+   */
+  async exportFeaturesCsv(data: ExportRequest): Promise<Blob> {
+    return this.requestBlob('/api/features/export', {
+      method: 'POST',
+      body: JSON.stringify({ ...data, format: 'csv' }),
+    });
+  }
+
+  /**
+   * フィーチャーを一括更新
+   */
+  async batchUpdateFeatures(data: BatchUpdateRequest): Promise<BatchOperationResponse> {
+    return this.request<BatchOperationResponse>('/api/features/bulk/update', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * フィーチャーを一括削除
+   */
+  async batchDeleteFeatures(data: BatchDeleteRequest): Promise<BatchOperationResponse> {
+    return this.request<BatchOperationResponse>('/api/features/bulk/delete', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
