@@ -5,7 +5,7 @@ import maplibregl from "maplibre-gl";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { TileJSON, Tileset } from "@/lib/api";
-import { Maximize2, X, Eye, EyeOff } from "lucide-react";
+import { Maximize2, X, Eye, EyeOff, Layers, Palette, SlidersHorizontal } from "lucide-react";
 
 export interface TilesetMapPreviewProps {
   /** タイルセット情報 */
@@ -40,6 +40,18 @@ const LAYER_COLORS = [
   { fill: "#84cc16", line: "#65a30d", point: "#84cc16" }, // lime
   { fill: "#f43f5e", line: "#e11d48", point: "#f43f5e" }, // rose
   { fill: "#6366f1", line: "#4f46e5", point: "#6366f1" }, // indigo
+];
+
+// ラスター用カラーマッププリセット
+const COLORMAP_PRESETS = [
+  { value: "", label: "デフォルト" },
+  { value: "viridis", label: "Viridis" },
+  { value: "terrain", label: "地形 (Terrain)" },
+  { value: "ndvi", label: "植生指数 (NDVI)" },
+  { value: "temperature", label: "温度" },
+  { value: "precipitation", label: "降水量" },
+  { value: "bathymetry", label: "水深" },
+  { value: "grayscale", label: "グレースケール" },
 ];
 
 /**
@@ -148,7 +160,7 @@ interface TileJSONWithLayers extends TileJSON {
  * タイルセットのタイプに応じて適切な表示を行う：
  * - vector: PostGISベースのMVTタイルを表示（全レイヤー表示・レイヤー別スタイリング対応）
  * - pmtiles: PMTilesファイルからタイルを表示
- * - raster: COGベースのラスタータイルを表示
+ * - raster: COGベースのラスタータイルを表示（opacity調整・カラーマップ対応）
  */
 export function TilesetMapPreview({
   tileset,
@@ -170,6 +182,11 @@ export function TilesetMapPreview({
   const [hasFittedBounds, setHasFittedBounds] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [visibleLayers, setVisibleLayers] = useState<Set<string>>(new Set());
+  
+  // ラスター用の状態
+  const [rasterOpacity, setRasterOpacity] = useState(0.8);
+  const [colormap, setColormap] = useState("");
+  const [showRasterControls, setShowRasterControls] = useState(false);
 
   // 有効なboundsを取得
   const getValidBounds = useCallback((): number[] | null => {
@@ -260,17 +277,22 @@ export function TilesetMapPreview({
           return cacheBuster ? `${baseUrl}${separator}_t=${cacheBuster}` : baseUrl;
         }
         return `${apiBaseUrl}/api/tiles/pmtiles/${tileset.id}/{z}/{x}/{y}.pbf${cacheBuster ? `?_t=${cacheBuster}` : ""}`;
-      case "raster":
+      case "raster": {
+        // カラーマップパラメータを含める
+        const colormapParam = colormap ? `colormap=${colormap}&` : "";
         if (tileJSON?.tiles && tileJSON.tiles.length > 0) {
           const baseUrl = tileJSON.tiles[0];
           const separator = baseUrl.includes("?") ? "&" : "?";
-          return cacheBuster ? `${baseUrl}${separator}_t=${cacheBuster}` : baseUrl;
+          return cacheBuster 
+            ? `${baseUrl}${separator}${colormapParam}_t=${cacheBuster}` 
+            : (colormapParam ? `${baseUrl}${separator}${colormapParam.slice(0, -1)}` : baseUrl);
         }
-        return `${apiBaseUrl}/api/tiles/raster/${tileset.id}/{z}/{x}/{y}.${tileset.format || "png"}${cacheBuster ? `?_t=${cacheBuster}` : ""}`;
+        return `${apiBaseUrl}/api/tiles/raster/${tileset.id}/{z}/{x}/{y}.${tileset.format || "png"}?${colormapParam}${cacheBuster ? `_t=${cacheBuster}` : ""}`;
+      }
       default:
         return null;
     }
-  }, [tileset, tileJSON]);
+  }, [tileset, tileJSON, colormap]);
 
   /**
    * ソースレイヤー名を決定
@@ -280,7 +302,7 @@ export function TilesetMapPreview({
    *     MVT内のレイヤー名は常に "features"
    * 
    * pmtiles:
-   *   - TileJSONのvector_layersから取得（PMTilesに含まれるレイヤー名）
+   *   - TileJSONのvector_layers[].idがレイヤー名
    */
   const getSourceLayerName = useCallback((): string => {
     if (tileset.type === "vector") {
@@ -385,6 +407,20 @@ export function TilesetMapPreview({
     });
   }, [getVectorLayers]);
 
+  /**
+   * ラスターopacityを更新
+   */
+  const updateRasterOpacity = useCallback((opacity: number) => {
+    setRasterOpacity(opacity);
+    
+    if (map.current?.getLayer("tileset-raster")) {
+      map.current.setPaintProperty("tileset-raster", "raster-opacity", opacity);
+    }
+    if (fullscreenMap.current?.getLayer("tileset-raster")) {
+      fullscreenMap.current.setPaintProperty("tileset-raster", "raster-opacity", opacity);
+    }
+  }, []);
+
   // boundsにフィット
   const fitToBounds = useCallback(() => {
     if (!map.current || !isLoaded) return;
@@ -420,7 +456,7 @@ export function TilesetMapPreview({
         type: "raster",
         source: "tileset",
         paint: {
-          "raster-opacity": 0.8,
+          "raster-opacity": rasterOpacity,
         },
       });
     } else {
@@ -603,7 +639,7 @@ export function TilesetMapPreview({
         mapInstance.on("mouseleave", polygonLayerId, setCursor(""));
       });
     }
-  }, [tileset, tileJSON, getVectorLayers, fillColor, lineColor, pointColor]);
+  }, [tileset, tileJSON, getVectorLayers, fillColor, lineColor, pointColor, rasterOpacity]);
 
   /**
    * 地図のベーススタイルを生成
@@ -740,6 +776,40 @@ export function TilesetMapPreview({
     }
   }, [isLoaded, getVectorLayers, visibleLayers.size]);
 
+  // カラーマップ変更時にタイルを再読み込み
+  useEffect(() => {
+    if (!isLoaded || !map.current || tileset.type !== "raster") return;
+    
+    const tileUrl = getTileUrl(refreshKey);
+    if (!tileUrl) return;
+    
+    // 既存のソースとレイヤーを削除
+    if (map.current.getLayer("tileset-raster")) {
+      map.current.removeLayer("tileset-raster");
+    }
+    if (map.current.getSource("tileset")) {
+      map.current.removeSource("tileset");
+    }
+    
+    // 新しいソースとレイヤーを追加
+    map.current.addSource("tileset", {
+      type: "raster",
+      tiles: [tileUrl],
+      tileSize: 256,
+      minzoom: tileJSON?.minzoom ?? tileset.min_zoom ?? 0,
+      maxzoom: tileJSON?.maxzoom ?? tileset.max_zoom ?? 22,
+    });
+    
+    map.current.addLayer({
+      id: "tileset-raster",
+      type: "raster",
+      source: "tileset",
+      paint: {
+        "raster-opacity": rasterOpacity,
+      },
+    });
+  }, [colormap]);
+
   // 全画面表示の切り替え
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev);
@@ -829,6 +899,7 @@ export function TilesetMapPreview({
   const validBounds = getValidBounds();
   const hasBounds = validBounds !== null;
   const vectorLayers = getVectorLayers();
+  const isRaster = tileset.type === "raster";
 
   return (
     <>
@@ -839,6 +910,58 @@ export function TilesetMapPreview({
           className="w-full rounded-md border"
           style={{ height }}
         />
+
+        {/* ラスターコントロールパネル */}
+        {isLoaded && isRaster && (
+          <div className="absolute top-2 left-2">
+            <button
+              onClick={() => setShowRasterControls(!showRasterControls)}
+              className="bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-md border border-gray-200 flex items-center gap-1.5 hover:bg-gray-50"
+              title="ラスター設定"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              ラスター設定
+            </button>
+            
+            {showRasterControls && (
+              <div className="mt-2 bg-white/95 backdrop-blur-sm rounded-md px-3 py-3 text-xs shadow-md border border-gray-200 min-w-[200px]">
+                {/* 不透明度スライダー */}
+                <div className="mb-3">
+                  <label className="block text-gray-700 font-medium mb-1.5">
+                    不透明度: {Math.round(rasterOpacity * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={rasterOpacity * 100}
+                    onChange={(e) => updateRasterOpacity(Number(e.target.value) / 100)}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                {/* カラーマップ選択 */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1.5">
+                    <Palette className="w-3 h-3 inline mr-1" />
+                    カラーマップ
+                  </label>
+                  <select
+                    value={colormap}
+                    onChange={(e) => setColormap(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs bg-white"
+                  >
+                    {COLORMAP_PRESETS.map((cm) => (
+                      <option key={cm.value} value={cm.value}>
+                        {cm.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* レイヤー凡例（vectorタイプで複数レイヤーがある場合） */}
         {isLoaded && tileset.type === "vector" && vectorLayers.length > 0 && (
@@ -958,6 +1081,45 @@ export function TilesetMapPreview({
               <p className="text-sm text-gray-600 mt-1 max-w-md truncate">{tileset.description}</p>
             )}
           </div>
+
+          {/* ラスターコントロール（全画面モード） */}
+          {isRaster && (
+            <div className="absolute bottom-20 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-md px-3 py-3 text-xs shadow-lg border border-gray-200 min-w-[200px]">
+              <div className="flex items-center gap-1.5 font-semibold text-gray-700 mb-2">
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                ラスター設定
+              </div>
+              <div className="mb-3">
+                <label className="block text-gray-600 mb-1">
+                  不透明度: {Math.round(rasterOpacity * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={rasterOpacity * 100}
+                  onChange={(e) => updateRasterOpacity(Number(e.target.value) / 100)}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-600 mb-1">
+                  カラーマップ
+                </label>
+                <select
+                  value={colormap}
+                  onChange={(e) => setColormap(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs bg-white"
+                >
+                  {COLORMAP_PRESETS.map((cm) => (
+                    <option key={cm.value} value={cm.value}>
+                      {cm.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* レイヤー凡例（全画面モード） */}
           {tileset.type === "vector" && vectorLayers.length > 0 && (
