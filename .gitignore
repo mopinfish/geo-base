@@ -107,3 +107,6 @@ temp/
 # dumprepo
 dumprepo.json
 geo-base.txt
+
+# data
+api/data/*.png
