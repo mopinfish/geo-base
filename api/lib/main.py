@@ -1045,13 +1045,15 @@ def get_raster_tilejson(
         
         base_url = get_base_url(request)
         
-        # Try to get bounds from COG if available
+        # Try to get bounds and band_count from COG if available
         bounds = None
         center = None
+        band_count = None
         if cog_url and is_rasterio_available():
             try:
                 cog_info = get_cog_info(cog_url)
                 bounds = list(cog_info["bounds"])
+                band_count = cog_info.get("band_count")
                 # Calculate center
                 center_lng = (bounds[0] + bounds[2]) / 2
                 center_lat = (bounds[1] + bounds[3]) / 2
@@ -1070,6 +1072,7 @@ def get_raster_tilejson(
             center=center,
             description=description,
             attribution=attribution,
+            band_count=band_count,
         )
         
     except HTTPException:

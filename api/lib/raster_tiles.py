@@ -685,6 +685,9 @@ def generate_raster_tilejson(
     description: Optional[str] = None,
     attribution: Optional[str] = None,
     colormap: Optional[str] = None,
+    band_count: Optional[int] = None,
+    scale_min: Optional[float] = None,
+    scale_max: Optional[float] = None,
 ) -> dict[str, Any]:
     """
     Generate TileJSON for a raster tileset.
@@ -701,6 +704,9 @@ def generate_raster_tilejson(
         description: Tileset description
         attribution: Data attribution
         colormap: Optional default colormap for the tileset
+        band_count: Number of bands in the raster (used for auto-scaling)
+        scale_min: Minimum scale value (auto-detected if not provided)
+        scale_max: Maximum scale value (auto-detected if not provided)
         
     Returns:
         TileJSON specification dictionary
@@ -711,10 +717,33 @@ def generate_raster_tilejson(
     if center is None:
         center = [0, 0, 2]
     
-    # Build tile URL with optional colormap parameter
+    # Auto-detect scale based on band count
+    # RGB images (3+ bands) typically use 0-255 range
+    # Single-band images (DEMs, etc.) use wider ranges
+    if scale_min is None or scale_max is None:
+        if band_count is not None and band_count >= 3:
+            # RGB/RGBA image - likely 8-bit values
+            scale_min = scale_min if scale_min is not None else 0
+            scale_max = scale_max if scale_max is not None else 255
+        else:
+            # Single-band or unknown - use defaults
+            # Don't set scale parameters, let the tile endpoint handle it
+            pass
+    
+    # Build tile URL with parameters
     tile_url = f"{base_url}/api/tiles/raster/{tileset_id}/{{z}}/{{x}}/{{y}}.{tile_format}"
+    
+    # Build query parameters
+    params = []
+    if scale_min is not None:
+        params.append(f"scale_min={scale_min}")
+    if scale_max is not None:
+        params.append(f"scale_max={scale_max}")
     if colormap:
-        tile_url += f"?colormap={colormap}"
+        params.append(f"colormap={colormap}")
+    
+    if params:
+        tile_url += "?" + "&".join(params)
     
     tilejson = {
         "tilejson": "3.0.0",
