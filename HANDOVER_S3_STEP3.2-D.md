@@ -190,12 +190,13 @@ curl -X DELETE "http://localhost:8000/api/features/bulk?feature_ids=uuid-1&featu
 
 ## 4. ファイル一覧
 
-### 追加ファイル
+### 追加・更新ファイル
 
 ```
 api/
 ├── lib/
 │   ├── batch.py                    # 新規 (700行) - バッチ処理モジュール
+│   ├── main.py                     # 更新 - batch_featuresルーター追加
 │   └── routers/
 │       └── batch_features.py       # 新規 (450行) - バッチエンドポイント
 └── tests/
@@ -206,22 +207,7 @@ api/
 
 ---
 
-## 5. main.pyへの統合
-
-`batch_features`ルーターをmain.pyに追加する必要があります：
-
-```python
-# main.py
-from lib.routers.batch_features import router as batch_features_router
-
-# ...
-
-app.include_router(batch_features_router)
-```
-
----
-
-## 6. テスト実行
+## 5. テスト実行
 
 ```fish
 cd api
@@ -237,7 +223,7 @@ uv run pytest tests/test_batch.py -v
 
 ---
 
-## 7. Phase 2 完了サマリー
+## 6. Phase 2 完了サマリー
 
 ### 7.1 Step 3.2-A: バリデーション強化
 - ジオメトリバリデーション
@@ -273,7 +259,7 @@ uv run pytest tests/test_batch.py -v
 
 ---
 
-## 8. 次のフェーズ: Phase 3 チーム機能
+## 7. 次のフェーズ: Phase 3 チーム機能
 
 ### 8.1 計画内容
 
@@ -287,7 +273,7 @@ uv run pytest tests/test_batch.py -v
 
 ---
 
-## 9. デプロイ手順
+## 8. デプロイ手順
 
 ```fish
 cd /path/to/geo-base
@@ -319,7 +305,7 @@ git push origin develop
 
 ---
 
-## 10. 参考リソース
+## 9. 参考リソース
 
 ### プロジェクトドキュメント
 
