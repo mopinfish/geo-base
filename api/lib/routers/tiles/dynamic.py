@@ -21,14 +21,39 @@ router = APIRouter(tags=["tiles"])
 
 
 def get_base_url(request: Request) -> str:
-    """Get base URL from request headers."""
-    forwarded_proto = request.headers.get("x-forwarded-proto", "http")
-    forwarded_host = request.headers.get("x-forwarded-host")
+    """
+    Get base URL from request headers.
+    
+    Handles various proxy configurations including Fly.io and Vercel.
+    Always uses HTTPS in production (non-localhost).
+    """
+    # Get protocol - prefer x-forwarded-proto, also check fly-forwarded-proto
+    forwarded_proto = (
+        request.headers.get("x-forwarded-proto") or
+        request.headers.get("fly-forwarded-proto") or
+        "http"
+    )
+    
+    # Get host - prefer x-forwarded-host, fallback to host header
+    forwarded_host = (
+        request.headers.get("x-forwarded-host") or
+        request.headers.get("host")
+    )
     
     if forwarded_host:
+        # Force HTTPS for non-localhost hosts
+        if "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
+            forwarded_proto = "https"
         return f"{forwarded_proto}://{forwarded_host}"
     
-    return str(request.base_url).rstrip("/")
+    # Fallback to request.base_url
+    base_url = str(request.base_url).rstrip("/")
+    
+    # Force HTTPS for production URLs
+    if base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
+        base_url = base_url.replace("http://", "https://", 1)
+    
+    return base_url
 
 
 # ============================================================================
