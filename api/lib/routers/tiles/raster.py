@@ -152,11 +152,10 @@ async def get_raster_tile(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid band indexes format")
     
-    # Use defaults if not specified
-    if scale_min is None:
-        scale_min = settings.raster_default_scale_min
-    if scale_max is None:
-        scale_max = settings.raster_default_scale_max
+    # NOTE: scale_min/scale_max are passed as-is (None allowed)
+    # get_raster_tile_async will auto-detect appropriate scaling:
+    # - RGB images (3+ bands) or uint8 data: 0-255
+    # - Single-band or other types: use settings defaults
     
     # Generate tile
     try:
@@ -351,11 +350,8 @@ async def get_raster_preview(
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid band indexes")
         
-        # Use defaults if not specified
-        if scale_min is None:
-            scale_min = settings.raster_default_scale_min
-        if scale_max is None:
-            scale_max = settings.raster_default_scale_max
+        # NOTE: scale_min/scale_max are passed as-is (None allowed)
+        # get_raster_preview_async will auto-detect appropriate scaling
         
         # Generate preview
         preview_data = await get_raster_preview_async(
