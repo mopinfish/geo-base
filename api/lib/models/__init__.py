@@ -5,6 +5,7 @@ Pydantic models for geo-base API.
 from lib.models.tileset import (
     TilesetCreate,
     TilesetUpdate,
+    TilesetResponse,
 )
 from lib.models.feature import (
     FeatureCreate,
@@ -24,6 +25,7 @@ __all__ = [
     # Tileset models
     "TilesetCreate",
     "TilesetUpdate",
+    "TilesetResponse",
     # Feature models
     "FeatureCreate",
     "FeatureUpdate",

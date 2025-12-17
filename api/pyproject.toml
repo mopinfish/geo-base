@@ -1,6 +1,6 @@
 [project]
 name = "geo-base-api"
-version = "0.1.0"
+version = "0.4.1"
 description = "FastAPI Tile Server for geo-base"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,6 +31,7 @@ raster = [
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
     "httpx>=0.26.0",
     "black>=24.0.0",
     "ruff>=0.1.0",
@@ -57,3 +58,25 @@ target-version = ["py311"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["lib"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
