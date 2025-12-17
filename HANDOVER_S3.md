@@ -1,6 +1,6 @@
 # geo-base Season 3 引き継ぎドキュメント
 
-**作成日**: 2025-12-17  
+**更新日**: 2025-12-17  
 **プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
 **リポジトリ**: https://github.com/mopinfish/geo-base  
 **現在のブランチ**: `develop`
@@ -13,7 +13,7 @@
 
 | コンポーネント | ステータス | URL | バージョン |
 |---------------|-----------|-----|-----------|
-| API Server (Fly.io) | ✅ 稼働中 | https://geo-base-api.fly.dev | 0.4.0 |
+| API Server (Fly.io) | ✅ 稼働中 | https://geo-base-api.fly.dev | 0.4.0 → **0.4.1** |
 | MCP Server (Fly.io) | ✅ 稼働中 | https://geo-base-mcp.fly.dev | 0.2.5 |
 | Admin UI (Vercel) | ✅ 稼働中 | https://geo-base-admin.vercel.app | 0.4.0 |
 
@@ -21,158 +21,171 @@
 
 ### 1.2 Season 3 進捗サマリー
 
-| ステップ | 内容 | ステータス |
-|---------|------|-----------|
-| Step 3.1-A | Fly.io移行準備（Dockerfile, fly.toml） | ✅ 完了 |
-| Step 3.1-B | API移行・動作確認 | ✅ 完了 |
-| Step 3.1-C | COGサポート | ✅ 完了 |
-| Step 3.1-D | ラスター分析 | ✅ 完了 |
-| Step 3.1-E | Admin UI更新 | ✅ 完了 |
-| **main.pyリファクタリング** | 4,124行 → 150行にモジュール分割 | ✅ **完了** |
-| Step 3.2 | データ品質・キャッシュ | 🔜 次のステップ |
+| フェーズ | ステップ | 内容 | ステータス |
+|---------|---------|------|-----------|
+| Phase 1 | Step 3.1-A | Fly.io移行準備（Dockerfile, fly.toml） | ✅ 完了 |
+| Phase 1 | Step 3.1-B | API移行・動作確認 | ✅ 完了 |
+| Phase 1 | Step 3.1-C | COGサポート | ✅ 完了 |
+| Phase 1 | Step 3.1-D | ラスター分析 | ✅ 完了 |
+| Phase 1 | Step 3.1-E | Admin UI更新 | ✅ 完了 |
+| - | main.pyリファクタリング | 4,124行 → 150行にモジュール分割 | ✅ 完了 |
+| **Phase 2** | **Step 3.2-A** | **バリデーション強化** | ✅ **完了** |
+| Phase 2 | Step 3.2-B | リトライ機能統合 | 🔜 次のステップ |
+| Phase 2 | Step 3.2-C | Redisキャッシュ導入 | 📋 計画中 |
+| Phase 2 | Step 3.2-D | バッチ処理最適化 | 📋 計画中 |
 
 ---
 
-## 2. 完了した作業
+## 2. 今回完了した作業: Step 3.2-A バリデーション強化
 
-### 2.1 Phase 1: Fly.io移行 & ラスター機能 ✅
+### 2.1 概要
 
-#### Step 3.1-A ~ 3.1-E（前回セッション完了）
+bounds/center計算の改善とジオメトリバリデーション機能を実装しました。
 
-- Dockerfile作成（GDAL 3.8 + Python 3.11 + uv環境）
-- fly.toml設定（東京リージョン、auto-scaling）
-- API移行・動作確認完了
-- COGサポート実装
-- ラスター分析機能（カラーマップ、プレビュー、統計）
-- Admin UI ラスター対応
+### 2.2 実装内容
 
-### 2.2 main.py リファクタリング ✅ **（今回完了）**
+#### Step 3.2-A.1: ジオメトリバリデーションユーティリティ
 
-`api/lib/main.py`を**4,124行から約150行**に軽量化し、モジュール構造に分割しました。
+**新規ファイル**: `api/lib/validators.py` (~650行)
 
-#### 新しいファイル構造
+- `ValidationResult` データクラス（エラー・警告の追跡）
+- 座標バリデーション: `validate_longitude`, `validate_latitude`, `validate_coordinate_pair`
+- Bounds/Center: `validate_bounds`, `validate_center`（アンチ子午線対応）
+- GeoJSONジオメトリ: `validate_geometry`（全タイプ対応）
+- Feature/FeatureCollection: `validate_feature`, `validate_feature_collection`
+- PostGIS統合: `validate_geometry_with_postgis`, `calculate_bounds_from_geometry`
+- バッチ処理: `validate_features_batch`
+- 便利関数: `is_valid_geometry`, `normalize_bounds`, `normalize_center`
+
+#### Step 3.2-A.2: bulk import時の自動bounds計算
+
+**更新ファイル**: `api/lib/routers/features.py` (~590行)
+
+- bulk import完了後にタイルセットのbounds/centerを自動計算
+- `update_bounds=true`（デフォルト）で有効
+- バリデーション統合（`validate_geometry=true`）
+- レスポンスに計算後のbounds/center値を含む
+
+**更新ファイル**: `api/lib/models/feature.py` (~65行)
+
+- `BulkFeatureCreate`: `update_bounds`, `validate_geometry`フラグ追加
+- `BulkFeatureResponse`: `bounds`, `center`, `warnings`, `bounds_updated`追加
+
+#### Step 3.2-A.3: bounds/centerのPydanticバリデーション
+
+**更新ファイル**: `api/lib/models/tileset.py` (~310行)
+
+- `validate_bounds_values`, `validate_center_values`ヘルパー関数
+- `TilesetCreate`: Pydantic `field_validator`でbounds/center検証
+- `TilesetUpdate`: 同様のバリデーション
+- `TilesetResponse`: 新規追加（将来のAPI型安全性向上用）
+- 座標範囲チェック（-180〜180, -90〜90）
+- min_zoom ≤ max_zoom の検証
+- type/formatの大文字小文字正規化
+
+#### Step 3.2-A.4: 既存データ修正スクリプト
+
+**新規ファイル**: `scripts/fix_bounds.py` (~520行)
 
 ```
-api/lib/
-├── main.py                 # エントリポイント (~150行)
-├── models/
-│   ├── __init__.py         # モデルexport
-│   ├── tileset.py          # TilesetCreate, TilesetUpdate
-│   ├── feature.py          # FeatureCreate, FeatureUpdate, BulkFeature系
-│   └── datasource.py       # DatasourceCreate, DatasourceUpdate, Enums
-├── routers/
-│   ├── __init__.py         # ルーター説明
-│   ├── health.py           # Health/Auth endpoints (~100行)
-│   ├── tilesets.py         # Tilesets CRUD (~650行)
-│   ├── features.py         # Features CRUD (~500行)
-│   ├── datasources.py      # Datasources CRUD (~750行)
-│   ├── colormaps.py        # Colormap endpoints (~80行)
-│   ├── stats.py            # Statistics endpoints (~120行)
-│   └── tiles/
-│       ├── __init__.py     # Tiles router統合
-│       ├── mbtiles.py      # MBTiles endpoints (~70行)
-│       ├── dynamic.py      # Dynamic vector tiles (~160行)
-│       ├── pmtiles.py      # PMTiles endpoints (~250行)
-│       └── raster.py       # Raster tiles endpoints (~400行)
+機能:
+- 全タイルセットのスキャン
+- bounds/center異常値の検出
+- vectorタイルセットの自動修正（featuresから再計算）
+- ドライランモードで安全にプレビュー
+- 特定タイルセットのみ修正可能
+
+検出する問題:
+- invalid_bounds: 範囲外の座標値
+- invalid_center: 範囲外のcenter値
+- center_outside_bounds: centerがbounds外
+- missing_bounds: boundsがない（features有り）
+- missing_center: centerがない（features有り）
+- bounds_mismatch: 計算値と保存値の差異
+- empty_tileset_with_bounds: boundsあるがfeatures無し
 ```
 
-#### 修正したバグ
+### 2.3 テストコード
 
-1. **ラスタータイルのスケーリング問題**
-   - 問題: RGB画像が暗く表示される
-   - 原因: router側で`scale_min`/`scale_max`にデフォルト値（0-3000）を強制設定
-   - 解決: Noneのまま渡し、`raster_tiles.py`内で自動検出させる
+**新規ディレクトリ**: `api/tests/`
 
-2. **HTTPS Mixed Content問題**
-   - 問題: TileJSONがhttp://で返され、HTTPSページからブロックされる
-   - 原因: `get_base_url`関数がFly.io環境で正しくプロトコルを検出できない
-   - 解決: 非localhost環境では強制的にHTTPSを使用
+| ファイル | テスト数 | 内容 |
+|---------|---------|------|
+| `conftest.py` | - | 共通フィクスチャ（GeoJSON、bounds、center等） |
+| `test_validators.py` | 61 | バリデーションユーティリティテスト |
+| `test_tileset_models.py` | 37 | Pydanticモデルテスト |
+| `test_fix_bounds.py` | 34 | スクリプトテスト |
+| `README.md` | - | テストドキュメント |
 
----
-
-## 3. 現在のAPI エンドポイント一覧
-
-### Health & Auth
+**テスト結果**:
 ```
-GET  /api/health
-GET  /api/health/db
-GET  /api/health/cache
-POST /api/admin/cache/clear
-GET  /api/auth/me
-GET  /api/auth/status
+132 passed, 1 skipped in 0.52s
 ```
 
-### Tilesets CRUD
-```
-GET    /api/tilesets
-GET    /api/tilesets/{tileset_id}
-GET    /api/tilesets/{tileset_id}/tilejson.json
-GET    /api/tilesets/{tileset_id}/stats
-POST   /api/tilesets
-POST   /api/tilesets/{tileset_id}/calculate-bounds
-PATCH  /api/tilesets/{tileset_id}
-DELETE /api/tilesets/{tileset_id}
-```
+### 2.4 追加・更新ファイル一覧
 
-### Features CRUD
 ```
-POST   /api/features
-POST   /api/features/bulk
-GET    /api/features
-GET    /api/features/{feature_id}
-PATCH  /api/features/{feature_id}
-DELETE /api/features/{feature_id}
-```
+api/
+├── lib/
+│   ├── validators.py           # 新規 (650行)
+│   ├── models/
+│   │   ├── __init__.py         # 更新
+│   │   ├── datasource.py       # 既存
+│   │   ├── feature.py          # 更新 (65行)
+│   │   └── tileset.py          # 更新 (310行)
+│   └── routers/
+│       └── features.py         # 更新 (590行)
+├── tests/
+│   ├── __init__.py             # 新規
+│   ├── conftest.py             # 新規 (280行)
+│   ├── test_validators.py      # 新規 (380行)
+│   ├── test_tileset_models.py  # 新規 (240行)
+│   ├── test_fix_bounds.py      # 新規 (220行)
+│   └── README.md               # 新規
+└── pyproject.toml              # 更新 (pytest設定追加, version 0.4.1)
 
-### Tiles
-```
-GET  /api/tiles/mbtiles/{tileset_name}/{z}/{x}/{y}.{format}
-GET  /api/tiles/mbtiles/{tileset_name}/metadata.json
-GET  /api/tiles/dynamic/{layer_name}/{z}/{x}/{y}.pbf
-GET  /api/tiles/dynamic/{layer_name}/tilejson.json
-GET  /api/tiles/features/{z}/{x}/{y}.pbf
-GET  /api/tiles/features/tilejson.json
-GET  /api/tiles/pmtiles/{tileset_id}/{z}/{x}/{y}.{format}
-GET  /api/tiles/pmtiles/{tileset_id}/tilejson.json
-GET  /api/tiles/pmtiles/{tileset_id}/metadata
-GET  /api/tiles/raster/{tileset_id}/{z}/{x}/{y}.{format}
-GET  /api/tiles/raster/{tileset_id}/tilejson.json
-GET  /api/tiles/raster/{tileset_id}/preview
-GET  /api/tiles/raster/{tileset_id}/info
-GET  /api/tiles/raster/{tileset_id}/statistics
-```
-
-### Datasources
-```
-GET    /api/datasources
-GET    /api/datasources/{datasource_id}
-POST   /api/datasources
-POST   /api/datasources/cog/upload
-POST   /api/datasources/{datasource_id}/test
-DELETE /api/datasources/{datasource_id}
-```
-
-### Other
-```
-GET  /api/colormaps
-GET  /api/colormaps/{name}
-GET  /api/stats
+scripts/
+└── fix_bounds.py               # 新規 (520行)
 ```
 
 ---
 
-## 4. 次のステップ: Phase 2（データ品質 & パフォーマンス最適化）
+## 3. APIレスポンスの変更点
 
-### 4.1 Step 3.2-A: バリデーション強化
+### POST /api/features/bulk
 
-| タスク | 詳細 | 見積もり |
-|--------|------|----------|
-| bounds計算修正 | GeoJSONインポート時の正確な計算 | 1日 |
-| center計算改善 | 重心計算の精度向上 | 0.5日 |
-| 既存データ修正 | マイグレーションスクリプト | 0.5日 |
-| バリデーション強化 | インポート前の検証 | 1日 |
+リクエストに新しいオプションが追加:
 
-### 4.2 Step 3.2-B: リトライ機能の完全統合
+```json
+{
+  "tileset_id": "uuid",
+  "layer_name": "default",
+  "features": [...],
+  "update_bounds": true,      // 新規: 自動bounds計算
+  "validate_geometry": true   // 新規: ジオメトリ検証
+}
+```
+
+レスポンスに新しいフィールドが追加:
+
+```json
+{
+  "success_count": 100,
+  "failed_count": 2,
+  "feature_ids": ["uuid1", "uuid2", ...],
+  "errors": ["Feature #5: Invalid geometry: ..."],
+  "warnings": ["Feature #3: Polygon exterior ring is not closed"],  // 新規
+  "bounds_updated": true,                                           // 新規
+  "bounds": [139.5, 35.5, 140.0, 36.0],                            // 新規
+  "center": [139.75, 35.75]                                         // 新規
+}
+```
+
+---
+
+## 4. 次のステップ: Step 3.2-B リトライ機能統合
+
+### 4.1 タスク一覧
 
 | タスク | 詳細 | 見積もり |
 |--------|------|----------|
@@ -181,42 +194,42 @@ GET  /api/stats
 | API層リトライ | FastAPIレベルでのリトライ | 1日 |
 | テスト追加 | リトライシナリオのテスト | 0.5日 |
 
-### 4.3 Step 3.2-C: Redisキャッシュ導入
+### 4.2 参考: 既存のリトライ実装
 
-| タスク | 詳細 | 見積もり |
-|--------|------|----------|
-| Redis/Upstash設定 | Fly.ioでのRedis設定 | 0.5日 |
-| タイルキャッシュ | MVT/ラスタータイルのキャッシュ | 1.5日 |
-| TileJSONキャッシュ | メタデータのキャッシュ | 0.5日 |
-| キャッシュ無効化 | データ更新時の自動クリア | 1日 |
+MCPサーバーには既に `mcp/lib/retry.py` が実装済み:
 
-### 4.4 Step 3.2-D: バッチ処理最適化
+```python
+# mcp/lib/retry.py の主要関数
+- with_retry(): デコレータ形式のリトライ
+- execute_with_retry(): 関数実行のリトライラッパー
+- RetryConfig: リトライ設定（max_attempts, delay, backoff等）
+```
 
-| タスク | 詳細 | 見積もり |
-|--------|------|----------|
-| 一括作成API最適化 | POST `/api/features/bulk` のパフォーマンス改善 | 1日 |
-| 一括更新API | PATCH `/api/features/bulk` | 1日 |
-| 一括削除API | DELETE `/api/features/bulk` | 0.5日 |
-| MCPツール追加 | バッチ操作用ツール | 1日 |
+API側でも同様のパターンを適用予定。
 
 ---
 
-## 5. 今後のロードマップ（Season 3 残り）
+## 5. 今後のロードマップ（Phase 2 残り）
 
-### Phase 2: データ品質・キャッシュ（2-3週間）
-- Step 3.2-A: バリデーション強化
-- Step 3.2-B: リトライ機能統合
-- Step 3.2-C: Redisキャッシュ導入
-- Step 3.2-D: バッチ処理最適化
-- Step 3.2-E: クエリ最適化
+### Phase 2: データ品質・キャッシュ（残り2-3週間）
+
+| ステップ | 内容 | ステータス |
+|---------|------|-----------|
+| Step 3.2-A | バリデーション強化 | ✅ 完了 |
+| Step 3.2-B | リトライ機能統合 | 🔜 次 |
+| Step 3.2-C | Redisキャッシュ導入 | 📋 計画中 |
+| Step 3.2-D | バッチ処理最適化 | 📋 計画中 |
+| Step 3.2-E | クエリ最適化 | 📋 計画中 |
 
 ### Phase 3: インポート/エクスポート（2-3週間）
+
 - Step 3.3-A: Shapefile/GeoPackageインポート
 - Step 3.3-B: エクスポート機能
 - Step 3.3-C: タイルセット管理強化
 - Step 3.3-D: 履歴・バージョン管理
 
 ### Phase 4: エンタープライズ機能（3-4週間）
+
 - Step 3.4-A: チーム/組織管理
 - Step 3.4-B: 権限管理
 - Step 3.4-C: APIキー管理
@@ -226,78 +239,109 @@ GET  /api/stats
 
 ## 6. 技術メモ
 
-### 6.1 Fly.io環境情報
+### 6.1 テスト実行方法
 
-```toml
-# fly.toml 主要設定
-app = "geo-base-api"
-primary_region = "nrt"  # 東京リージョン
+```fish
+cd api
 
-[http_service]
-  internal_port = 8080
-  auto_stop_machines = "stop"
-  auto_start_machines = true
+# 全テスト実行
+uv run pytest tests/ -v
 
-[[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
-  cpus = 1
+# 特定テストファイル
+uv run pytest tests/test_validators.py -v
+
+# カバレッジ付き
+uv run pytest tests/ --cov=lib --cov-report=term-missing
 ```
 
-### 6.2 シークレット設定済み（Fly.io API）
+### 6.2 fix_bounds.py 使用方法
 
+```fish
+# 環境変数設定
+set -x DATABASE_URL "postgresql://user:pass@host:5432/dbname"
+
+# ドライラン（プレビュー）
+python scripts/fix_bounds.py --dry-run --verbose
+
+# 実際に修正
+python scripts/fix_bounds.py --verbose
+
+# 特定タイルセットのみ
+python scripts/fix_bounds.py --tileset-id <uuid> --verbose
+
+# スキャンのみ
+python scripts/fix_bounds.py --scan-only --verbose
 ```
-DATABASE_URL        - Supabase PostgreSQL接続文字列
-SUPABASE_URL        - Supabaseエンドポイント
-SUPABASE_JWT_SECRET - JWT検証シークレット
-ENVIRONMENT         - production
-LOG_LEVEL           - INFO
-```
 
-### 6.3 Dockerイメージ構成
-
-- ベースイメージ: `ghcr.io/osgeo/gdal:ubuntu-small-3.8.5`
-- Python: 3.11
-- パッケージ管理: uv
-- GDAL: 3.8.5（rasterio, rio-tiler対応）
-
-### 6.4 get_base_url 関数（HTTPS対応済み）
+### 6.3 conftest.py の主なフィクスチャ
 
 ```python
-def get_base_url(request: Request) -> str:
-    """
-    Get base URL from request headers.
-    
-    Handles various proxy configurations including Fly.io and Vercel.
-    Always uses HTTPS in production (non-localhost).
-    """
-    forwarded_proto = (
-        request.headers.get("x-forwarded-proto") or
-        request.headers.get("fly-forwarded-proto") or
-        "http"
-    )
-    
-    forwarded_host = (
-        request.headers.get("x-forwarded-host") or
-        request.headers.get("host")
-    )
-    
-    if forwarded_host:
-        # Force HTTPS for non-localhost hosts
-        if "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
-            forwarded_proto = "https"
-        return f"{forwarded_proto}://{forwarded_host}"
-    
-    base_url = str(request.base_url).rstrip("/")
-    if base_url.startswith("http://") and "localhost" not in base_url:
-        base_url = base_url.replace("http://", "https://", 1)
-    
-    return base_url
+# GeoJSONジオメトリ
+sample_point, sample_linestring, sample_polygon
+sample_multipoint, sample_multilinestring, sample_multipolygon
+sample_geometry_collection, sample_polygon_with_hole
+
+# Feature/FeatureCollection
+sample_feature, sample_feature_collection
+
+# Bounds/Center
+sample_bounds_tokyo      # [139.5, 35.5, 140.0, 36.0]
+sample_bounds_world      # [-180, -90, 180, 90]
+sample_bounds_antimeridian  # 日付変更線をまたぐ
+sample_center_tokyo      # [139.75, 35.75]
+sample_center_with_zoom  # [139.75, 35.75, 10]
+
+# 無効データ（エラーテスト用）
+invalid_geometry_no_type, invalid_geometry_bad_type
+invalid_bounds_south_greater, invalid_center_out_of_range
 ```
 
 ---
 
-## 7. 参考リソース
+## 7. デプロイ手順（今回の変更を適用）
+
+```fish
+cd /path/to/geo-base
+
+# zipを解凍して上書き
+unzip -o ~/Downloads/geo-base-step3.2-A.zip -d .
+
+# テスト実行確認
+cd api
+uv run pytest tests/ -v
+
+# コミット & プッシュ
+cd ..
+git add .
+git commit -m "feat(api): Step 3.2-A - バリデーション強化と自動bounds計算
+
+Step 3.2-A.1: ジオメトリバリデーションユーティリティ
+- api/lib/validators.py: GeoJSON構造・座標範囲バリデーション
+
+Step 3.2-A.2: bulk import時の自動bounds計算
+- api/lib/routers/features.py: インポート後の自動bounds/center更新
+- api/lib/models/feature.py: BulkFeatureResponseにbounds情報追加
+
+Step 3.2-A.3: bounds/centerのPydanticバリデーション
+- api/lib/models/tileset.py: field_validator追加
+
+Step 3.2-A.4: 既存データ修正スクリプト
+- scripts/fix_bounds.py: bounds/center再計算・修正ツール
+
+テストコード:
+- api/tests/: 132テスト（conftest.pyに共通フィクスチャ）
+- api/tests/README.md: テストドキュメント"
+
+git push origin develop
+
+# Fly.ioデプロイ（必要に応じて）
+cd api
+fly deploy
+```
+
+---
+
+## 8. 参考リソース
 
 ### プロジェクトドキュメント
 
@@ -307,17 +351,18 @@ def get_base_url(request: Request) -> str:
 | `/mnt/project/HANDOVER_MAIN_REFACTORING.md` | main.pyリファクタリング完了ドキュメント |
 | `/mnt/project/geo-base.txt` | 最新ソースコードスナップショット |
 | `/mnt/project/MCP_BEST_PRACTICES.md` | MCPサーバー実装ベストプラクティス |
+| `api/tests/README.md` | テスト実行ガイド |
 
 ### 外部ドキュメント
 
 - [Fly.io Documentation](https://fly.io/docs/)
-- [rio-tiler Documentation](https://cogeotiff.github.io/rio-tiler/)
-- [FastAPI Bigger Applications](https://fastapi.tiangolo.com/tutorial/bigger-applications/)
-- [Supabase Row Level Security](https://supabase.com/docs/guides/auth/row-level-security)
+- [Pydantic V2 Validators](https://docs.pydantic.dev/latest/concepts/validators/)
+- [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
+- [pytest Documentation](https://docs.pytest.org/)
 
 ---
 
-## 8. 次回作業の開始手順
+## 9. 次回作業の開始手順
 
 ```fish
 # 1. リポジトリを最新に更新
@@ -325,54 +370,49 @@ cd /path/to/geo-base
 git checkout develop
 git pull origin develop
 
-# 2. 新しいブランチを作成（Phase 2用）
-git checkout -b feat/s3_phase2_data-quality
+# 2. 今回の変更が適用されているか確認
+ls -la api/lib/validators.py
+ls -la api/tests/
+ls -la scripts/fix_bounds.py
 
-# 3. 動作確認
+# 3. テスト実行確認
+cd api
+uv run pytest tests/ -v
+
+# 4. 動作確認
 curl https://geo-base-api.fly.dev/api/health
-curl https://geo-base-api.fly.dev/api/tilesets
 
-# 4. Step 3.2-A の作業を開始
-# - bounds/center計算修正
-# - バリデーション強化
+# 5. Step 3.2-B の作業を開始
+# - mcp/lib/retry.py を参考にAPI側リトライ実装
+# - tilesets.py, features.py へのリトライ統合
 ```
 
 ---
 
-## 9. 成果物まとめ
+## 10. 成果物まとめ
 
 ### 今回のセッションで追加・更新されたファイル
 
-```
-api/lib/
-├── main.py                 # 更新（4,124行 → 150行）
-├── models/                 # 新規作成
-│   ├── __init__.py
-│   ├── tileset.py
-│   ├── feature.py
-│   └── datasource.py
-├── routers/                # 新規作成
-│   ├── __init__.py
-│   ├── health.py
-│   ├── tilesets.py
-│   ├── features.py
-│   ├── datasources.py
-│   ├── colormaps.py
-│   ├── stats.py
-│   └── tiles/
-│       ├── __init__.py
-│       ├── mbtiles.py
-│       ├── dynamic.py
-│       ├── pmtiles.py
-│       └── raster.py
-└── README.md               # 更新
+| カテゴリ | ファイル | 行数 | 状態 |
+|---------|---------|------|------|
+| バリデーション | `api/lib/validators.py` | 650 | 新規 |
+| モデル | `api/lib/models/__init__.py` | 35 | 更新 |
+| モデル | `api/lib/models/feature.py` | 65 | 更新 |
+| モデル | `api/lib/models/tileset.py` | 310 | 更新 |
+| ルーター | `api/lib/routers/features.py` | 590 | 更新 |
+| テスト | `api/tests/__init__.py` | 20 | 新規 |
+| テスト | `api/tests/conftest.py` | 280 | 新規 |
+| テスト | `api/tests/test_validators.py` | 380 | 新規 |
+| テスト | `api/tests/test_tileset_models.py` | 240 | 新規 |
+| テスト | `api/tests/test_fix_bounds.py` | 220 | 新規 |
+| テスト | `api/tests/README.md` | 180 | 新規 |
+| スクリプト | `scripts/fix_bounds.py` | 520 | 新規 |
+| 設定 | `api/pyproject.toml` | 75 | 更新 |
 
-HANDOVER_MAIN_REFACTORING.md  # 更新（完了版）
-HANDOVER_S3.md                # 新規作成（本ドキュメント）
-```
+**合計**: 約3,500行の新規/更新コード、132テストケース
 
 ---
 
 **作成者**: Claude (Anthropic)  
 **完了日**: 2025-12-17  
-**次回作業**: Phase 2 Step 3.2-A（バリデーション強化）
+**次回作業**: Phase 2 Step 3.2-B（リトライ機能統合）
