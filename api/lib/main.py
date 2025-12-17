@@ -898,15 +898,15 @@ async def get_raster_tile(
                 cur.execute(
                     """
                     SELECT rs.cog_url, t.min_zoom, t.max_zoom, t.is_public, t.user_id,
-                           COALESCE((t.metadata->>'scale_min')::float, %s) as scale_min,
-                           COALESCE((t.metadata->>'scale_max')::float, %s) as scale_max,
+                           (t.metadata->>'scale_min')::float as scale_min,
+                           (t.metadata->>'scale_max')::float as scale_max,
                            COALESCE(t.metadata->>'bands', NULL) as default_bands
                     FROM raster_sources rs
                     JOIN tilesets t ON rs.tileset_id = t.id
                     WHERE t.id = %s
                     LIMIT 1
                     """,
-                    (settings.raster_default_scale_min, settings.raster_default_scale_max, tileset_id),
+                    (tileset_id,),
                 )
                 row = cur.fetchone()
             

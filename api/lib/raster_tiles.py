@@ -284,8 +284,8 @@ def get_raster_tile(
     x: int,
     y: int,
     indexes: Optional[tuple[int, ...]] = None,
-    scale_min: float = DEFAULT_SCALE_MIN,
-    scale_max: float = DEFAULT_SCALE_MAX,
+    scale_min: Optional[float] = None,
+    scale_max: Optional[float] = None,
     img_format: str = "png",
     tile_size: int = DEFAULT_TILE_SIZE,
     resampling: str = DEFAULT_RESAMPLING,
@@ -300,8 +300,8 @@ def get_raster_tile(
         x: X tile coordinate
         y: Y tile coordinate
         indexes: Band indexes to read (e.g., (1, 2, 3) for RGB)
-        scale_min: Minimum value for rescaling
-        scale_max: Maximum value for rescaling
+        scale_min: Minimum value for rescaling (auto-detected if None)
+        scale_max: Maximum value for rescaling (auto-detected if None)
         img_format: Output image format (png, jpg, webp)
         tile_size: Output tile size in pixels
         resampling: Resampling method (bilinear, nearest, cubic, etc.)
@@ -327,8 +327,27 @@ def get_raster_tile(
                 resampling_method=resampling,
             )
             
+            # Auto-detect scale based on data type and band count
+            # RGB images (3+ bands) with uint8 dtype typically use 0-255
+            final_scale_min = scale_min
+            final_scale_max = scale_max
+            
+            if final_scale_min is None or final_scale_max is None:
+                # Check data type and band count for auto-scaling
+                dtype_str = str(imgdata.data.dtype)
+                band_count = imgdata.count
+                
+                if dtype_str == "uint8" or band_count >= 3:
+                    # RGB image or 8-bit data - use 0-255 scale
+                    final_scale_min = final_scale_min if final_scale_min is not None else 0
+                    final_scale_max = final_scale_max if final_scale_max is not None else 255
+                else:
+                    # Single-band or other data types - use default scale
+                    final_scale_min = final_scale_min if final_scale_min is not None else DEFAULT_SCALE_MIN
+                    final_scale_max = final_scale_max if final_scale_max is not None else DEFAULT_SCALE_MAX
+            
             # Rescale values to 0-255
-            imgdata.rescale(((scale_min, scale_max),))
+            imgdata.rescale(((final_scale_min, final_scale_max),))
             
             # Get render options
             render_options = {}
@@ -386,8 +405,8 @@ def get_raster_preview(
     cog_url: str,
     max_size: int = 512,
     indexes: Optional[tuple[int, ...]] = None,
-    scale_min: float = DEFAULT_SCALE_MIN,
-    scale_max: float = DEFAULT_SCALE_MAX,
+    scale_min: Optional[float] = None,
+    scale_max: Optional[float] = None,
     img_format: str = "png",
     colormap: Optional[str] = None,
 ) -> bytes:
@@ -398,8 +417,8 @@ def get_raster_preview(
         cog_url: URL or path to the COG file
         max_size: Maximum width/height of the preview
         indexes: Band indexes to read
-        scale_min: Minimum value for rescaling
-        scale_max: Maximum value for rescaling
+        scale_min: Minimum value for rescaling (auto-detected if None)
+        scale_max: Maximum value for rescaling (auto-detected if None)
         img_format: Output image format
         colormap: Optional colormap name
         
@@ -416,7 +435,22 @@ def get_raster_preview(
                 max_size=max_size,
             )
             
-            imgdata.rescale(((scale_min, scale_max),))
+            # Auto-detect scale based on data type and band count
+            final_scale_min = scale_min
+            final_scale_max = scale_max
+            
+            if final_scale_min is None or final_scale_max is None:
+                dtype_str = str(imgdata.data.dtype)
+                band_count = imgdata.count
+                
+                if dtype_str == "uint8" or band_count >= 3:
+                    final_scale_min = final_scale_min if final_scale_min is not None else 0
+                    final_scale_max = final_scale_max if final_scale_max is not None else 255
+                else:
+                    final_scale_min = final_scale_min if final_scale_min is not None else DEFAULT_SCALE_MIN
+                    final_scale_max = final_scale_max if final_scale_max is not None else DEFAULT_SCALE_MAX
+            
+            imgdata.rescale(((final_scale_min, final_scale_max),))
             
             render_options = {}
             if img_format.lower() in ("png", "webp"):
@@ -572,6 +606,7 @@ def get_cog_info(cog_url: str) -> dict[str, Any]:
                 "nodata_type": getattr(info, 'nodata_type', None),
                 "colorinterp": getattr(info, 'colorinterp', None),
                 "count": getattr(info, 'count', None),
+                "band_count": getattr(info, 'count', None),  # Alias for band count
                 "width": getattr(info, 'width', None),
                 "height": getattr(info, 'height', None),
                 "driver": getattr(info, 'driver', None),
