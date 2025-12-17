@@ -318,7 +318,9 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               tilesetName={tileset.name}
               onConfirm={handleDelete}
             />
-            <ExportFeaturesButton tilesetId={id} tilesetName={tileset.name} />
+            {tileset.type === "vector" && (
+              <ExportFeaturesButton tilesetId={id} tilesetName={tileset.name} />
+            )}
           </div>
         </div>
 
