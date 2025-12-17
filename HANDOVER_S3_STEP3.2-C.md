@@ -150,9 +150,9 @@ set -x REDIS_ENABLED true
 set -x REDIS_HOST localhost
 set -x REDIS_PORT 6379
 
-# APIサーバー起動
+# APIサーバー起動（デフォルトポート8000）
 cd api
-uv run uvicorn main:app --reload --port 8080
+uv run uvicorn main:app --reload
 ```
 
 ### 3.2 本番環境 (Fly.io)

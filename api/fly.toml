@@ -29,6 +29,12 @@ primary_region = "nrt"  # Tokyo region for low latency in Japan
   LOG_LEVEL = "INFO"
   # Port is automatically set by Fly.io
   # Sensitive variables should be set via `fly secrets set`
+  # for Redis
+  REDIS_ENABLED = "true"
+  REDIS_KEY_PREFIX = "geo-base:"
+  TILE_CACHE_TTL = "3600"
+  TILEJSON_CACHE_TTL = "300"
+  TILESET_INFO_CACHE_TTL = "60"
 
 # -----------------------------------------------------------------------------
 # HTTP service configuration

@@ -97,18 +97,25 @@ cd api
 # 依存関係インストール
 uv sync
 
-# サーバー起動
-uv run uvicorn main:app --reload --port 8080
+# サーバー起動（デフォルトポート8000）
+uv run uvicorn main:app --reload
 ```
 
 ### 4. 動作確認
 
 ```fish
-# ヘルスチェック（Redisステータス含む）
-curl http://localhost:8080/health
+# ヘルスチェック
+curl http://localhost:8000/api/health
 
-# キャッシュ統計
-curl http://localhost:8080/cache/stats
+# DB接続確認
+curl http://localhost:8000/api/health/db
+
+# キャッシュ状態確認
+curl http://localhost:8000/api/health/cache
+
+# キャッシュクリア（認証必要）
+curl -X POST http://localhost:8000/api/admin/cache/clear \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### 5. Redis CLIでの確認
@@ -204,10 +211,13 @@ fly deploy
 
 ```fish
 # ヘルスチェック
-curl https://geo-base-api.fly.dev/health
+curl https://geo-base-api.fly.dev/api/health
 
-# キャッシュ統計
-curl https://geo-base-api.fly.dev/cache/stats
+# DB接続確認
+curl https://geo-base-api.fly.dev/api/health/db
+
+# キャッシュ状態確認
+curl https://geo-base-api.fly.dev/api/health/cache
 ```
 
 ---
