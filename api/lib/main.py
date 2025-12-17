@@ -23,148 +23,75 @@ from lib.routers.datasources import router as datasources_router
 from lib.routers.colormaps import router as colormaps_router
 from lib.routers.stats import router as stats_router
 from lib.routers.tiles import router as tiles_router
+from lib.routers.teams import router as teams_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Startup
     yield
-    # Shutdown
     close_pool()
 
 
-# Create FastAPI app
 app = FastAPI(
     title="geo-base Tile Server",
     description="Geospatial tile server API for vector and raster data distribution",
-    version="0.4.4",
+    version="0.4.5",
     lifespan=lifespan,
 )
 
-# CORS middleware
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for tile serving
-    allow_credentials=False,  # Must be False when using "*"
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# ============================================================================
 # Include Routers
-# ============================================================================
-
-# Health and Auth endpoints
 app.include_router(health_router)
-
-# Tileset CRUD endpoints
 app.include_router(tilesets_router)
-
-# Feature CRUD endpoints
 app.include_router(features_router)
-
-# Batch operations endpoints (export, bulk update/delete)
 app.include_router(batch_features_router)
-
-# Datasource CRUD endpoints
 app.include_router(datasources_router)
-
-# Colormap endpoints
 app.include_router(colormaps_router)
-
-# Stats endpoints
 app.include_router(stats_router)
-
-# Tile serving endpoints (combines all tile types)
 app.include_router(tiles_router)
-
-
-# ============================================================================
-# Utility Functions
-# ============================================================================
+app.include_router(teams_router)
 
 
 def get_base_url(request: Request) -> str:
-    """Get base URL from request headers."""
     forwarded_proto = request.headers.get("x-forwarded-proto", "http")
     forwarded_host = request.headers.get("x-forwarded-host")
-    
     if forwarded_host:
         return f"{forwarded_proto}://{forwarded_host}"
-    
     return str(request.base_url).rstrip("/")
 
 
-# ============================================================================
-# Preview Page (Root endpoint)
-# ============================================================================
+PREVIEW_HTML = """<!DOCTYPE html>
+<html>
+<head>
+    <title>geo-base Tile Server</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; }
+        h1 { color: #333; }
+        .info { background: #f5f5f5; padding: 15px; border-radius: 8px; }
+        .info code { background: #e0e0e0; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>geo-base Tile Server v0.4.5</h1>
+    <div class="info">
+        <p>API Documentation: <a href="/docs">/docs</a> | <a href="/redoc">/redoc</a></p>
+        <p>New in v0.4.5: Team management endpoints at <code>/api/teams</code></p>
+    </div>
+</body>
+</html>"""
 
 
 @app.get("/", response_class=HTMLResponse)
 def preview_page():
-    """Serve a simple preview page for testing."""
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>geo-base Tile Server</title>
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        h1 { color: #333; }
-        .endpoint { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
-        .method { color: #0066cc; font-weight: bold; }
-        .method-post { color: #009933; }
-        .method-delete { color: #cc0000; }
-        a { color: #0066cc; }
-    </style>
-</head>
-<body>
-    <h1>🌍 geo-base Tile Server</h1>
-    <p>Geospatial tile server API for vector and raster data distribution.</p>
-    
-    <h2>Quick Links</h2>
-    <ul>
-        <li><a href="/docs">📖 API Documentation (Swagger UI)</a></li>
-        <li><a href="/redoc">📚 API Documentation (ReDoc)</a></li>
-        <li><a href="/api/health">❤️ Health Check</a></li>
-        <li><a href="/api/tilesets">📦 List Tilesets</a></li>
-        <li><a href="/api/stats">📊 Statistics</a></li>
-    </ul>
-    
-    <h2>Key Endpoints</h2>
-    
-    <div class="endpoint">
-        <span class="method">GET</span> /api/health - Health check
-    </div>
-    <div class="endpoint">
-        <span class="method">GET</span> /api/tilesets - List all tilesets
-    </div>
-    <div class="endpoint">
-        <span class="method">GET</span> /api/tiles/features/{z}/{x}/{y}.pbf - Vector tiles
-    </div>
-    <div class="endpoint">
-        <span class="method">GET</span> /api/tiles/pmtiles/{tileset_id}/{z}/{x}/{y}.pbf - PMTiles
-    </div>
-    <div class="endpoint">
-        <span class="method">GET</span> /api/tiles/raster/{tileset_id}/{z}/{x}/{y}.png - Raster tiles
-    </div>
-    
-    <h3>Batch Operations</h3>
-    <div class="endpoint">
-        <span class="method method-post">POST</span> /api/features/export - Export features (GeoJSON/CSV)
-    </div>
-    <div class="endpoint">
-        <span class="method method-post">POST</span> /api/features/bulk/update - Batch update features
-    </div>
-    <div class="endpoint">
-        <span class="method method-delete">POST</span> /api/features/bulk/delete - Batch delete features
-    </div>
-    
-    <h2>Version</h2>
-    <p>v0.4.4</p>
-</body>
-</html>
-"""
+    return PREVIEW_HTML
