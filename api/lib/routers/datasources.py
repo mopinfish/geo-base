@@ -20,6 +20,38 @@ router = APIRouter(prefix="/api/datasources", tags=["datasources"])
 
 
 # ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def safe_json_parse(value: Any) -> Any:
+    """
+    Safely parse a value that might be JSON string or already a Python object.
+    
+    PostgreSQL JSONB columns are automatically deserialized by psycopg2 to Python
+    objects. This function handles both cases:
+    - If value is a string, parse it as JSON
+    - If value is already a Python object (list/dict), return as-is
+    - If value is None, return None
+    
+    Args:
+        value: The value to parse (string, list, dict, or None)
+        
+    Returns:
+        Parsed Python object or None
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return value
+    # Already a Python object (list, dict, etc.)
+    return value
+
+
+# ============================================================================
 # Response Models
 # ============================================================================
 
@@ -99,9 +131,9 @@ def list_datasources(
                         "compression": row[5],
                         "min_zoom": row[6],
                         "max_zoom": row[7],
-                        "bounds": row[8],
-                        "center": row[9],
-                        "metadata": row[10],
+                        "bounds": safe_json_parse(row[8]),
+                        "center": safe_json_parse(row[9]),
+                        "metadata": safe_json_parse(row[10]),
                         "created_at": row[11].isoformat() if row[11] else None,
                         "updated_at": row[12].isoformat() if row[12] else None,
                         "tileset_name": row[13],
@@ -136,7 +168,7 @@ def list_datasources(
                         "native_crs": row[5],
                         "min_zoom": row[6],
                         "max_zoom": row[7],
-                        "metadata": row[8],
+                        "metadata": safe_json_parse(row[8]),
                         "created_at": row[9].isoformat() if row[9] else None,
                         "updated_at": row[10].isoformat() if row[10] else None,
                         "tileset_name": row[11],
@@ -209,10 +241,10 @@ def get_datasource(
                     "compression": row[5],
                     "min_zoom": row[6],
                     "max_zoom": row[7],
-                    "bounds": row[8],
-                    "center": row[9],
-                    "layers": row[10],
-                    "metadata": row[11],
+                    "bounds": safe_json_parse(row[8]),
+                    "center": safe_json_parse(row[9]),
+                    "layers": safe_json_parse(row[10]),
+                    "metadata": safe_json_parse(row[11]),
                     "created_at": row[12].isoformat() if row[12] else None,
                     "updated_at": row[13].isoformat() if row[13] else None,
                     "tileset_name": row[14],
@@ -260,12 +292,12 @@ def get_datasource(
                     "url": row[2],
                     "storage_provider": row[3],
                     "band_count": row[4],
-                    "band_descriptions": row[5],
+                    "band_descriptions": safe_json_parse(row[5]),
                     "native_crs": row[6],
                     "native_resolution": row[7],
                     "min_zoom": row[8],
                     "max_zoom": row[9],
-                    "metadata": row[10],
+                    "metadata": safe_json_parse(row[10]),
                     "created_at": row[11].isoformat() if row[11] else None,
                     "updated_at": row[12].isoformat() if row[12] else None,
                     "tileset_name": row[13],
@@ -424,16 +456,16 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
         "type": "pmtiles",
         "url": row[2],
         "storage_provider": row[3],
-        "metadata": row[4],
+        "metadata": safe_json_parse(row[4]),
         "created_at": row[5].isoformat() if row[5] else None,
         "updated_at": row[6].isoformat() if row[6] else None,
         "tile_type": row[7],
         "tile_compression": row[8],
         "min_zoom": row[9],
         "max_zoom": row[10],
-        "bounds": json.loads(row[11]) if row[11] else None,
-        "center": json.loads(row[12]) if row[12] else None,
-        "layers": json.loads(row[13]) if row[13] else None,
+        "bounds": safe_json_parse(row[11]),
+        "center": safe_json_parse(row[12]),
+        "layers": safe_json_parse(row[13]),
     }
 
 
@@ -527,91 +559,77 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
         "type": "cog",
         "url": row[2],
         "storage_provider": row[3],
-        "metadata": row[4],
+        "metadata": safe_json_parse(row[4]),
         "created_at": row[5].isoformat() if row[5] else None,
         "updated_at": row[6].isoformat() if row[6] else None,
         "band_count": row[7],
-        "band_descriptions": json.loads(row[8]) if row[8] else None,
+        "band_descriptions": safe_json_parse(row[8]),
         "native_crs": row[9],
         "min_zoom": row[10],
         "max_zoom": row[11],
-        "bounds": json.loads(row[12]) if row[12] else None,
-        "center": json.loads(row[13]) if row[13] else None,
+        "bounds": safe_json_parse(row[12]),
+        "center": safe_json_parse(row[13]),
     }
 
 
-def _update_tileset_from_metadata(cur, tileset_id, bounds, center, min_zoom, max_zoom):
-    """Update parent tileset with bounds/center/zoom from datasource metadata."""
-    if not (bounds or center or min_zoom is not None or max_zoom is not None):
-        return
-    
-    update_parts = []
-    update_values = []
-    
-    if bounds and len(bounds) == 4:
-        west, south, east, north = bounds
-        update_parts.append("bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)")
-        update_values.extend([west, south, east, north])
-    
-    if center and len(center) >= 2:
-        lon, lat = center[0], center[1]
-        update_parts.append("center = ST_SetSRID(ST_MakePoint(%s, %s), 4326)")
-        update_values.extend([lon, lat])
-    
-    if min_zoom is not None:
-        update_parts.append("min_zoom = %s")
-        update_values.append(min_zoom)
-    
-    if max_zoom is not None:
-        update_parts.append("max_zoom = %s")
-        update_values.append(max_zoom)
-    
-    if update_parts:
-        update_values.append(tileset_id)
-        cur.execute(
-            f"UPDATE tilesets SET {', '.join(update_parts)} WHERE id = %s",
-            update_values,
-        )
+def _update_tileset_from_metadata(cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom):
+    """Update parent tileset with metadata from datasource."""
+    if source_bounds or source_center or source_min_zoom is not None or source_max_zoom is not None:
+        update_parts = []
+        update_values = []
+        
+        if source_bounds and len(source_bounds) == 4:
+            # Convert [west, south, east, north] to PostGIS Polygon
+            west, south, east, north = source_bounds
+            update_parts.append("bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)")
+            update_values.extend([west, south, east, north])
+        
+        if source_center and len(source_center) >= 2:
+            # Convert [lon, lat, ...] to PostGIS Point
+            lon, lat = source_center[0], source_center[1]
+            update_parts.append("center = ST_SetSRID(ST_MakePoint(%s, %s), 4326)")
+            update_values.extend([lon, lat])
+        
+        if source_min_zoom is not None:
+            update_parts.append("min_zoom = %s")
+            update_values.append(source_min_zoom)
+        
+        if source_max_zoom is not None:
+            update_parts.append("max_zoom = %s")
+            update_values.append(source_max_zoom)
+        
+        if update_parts:
+            update_values.append(tileset_id)
+            cur.execute(
+                f"UPDATE tilesets SET {', '.join(update_parts)} WHERE id = %s",
+                update_values,
+            )
 
 
 # ============================================================================
-# Upload COG File
+# COG Upload
 # ============================================================================
 
 
-@router.post("/cog/upload", response_model=COGUploadResponse)
-async def upload_cog_file(
-    tileset_id: str = Query(..., description="Parent tileset UUID"),
+@router.post("/cog/upload", status_code=201, response_model=COGUploadResponse)
+async def upload_cog(
+    tileset_id: str = Query(..., description="Parent tileset ID"),
     file: UploadFile = File(..., description="COG file to upload"),
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
 ):
     """
-    Upload a Cloud Optimized GeoTIFF (COG) file and create a datasource.
+    Upload a COG file to Supabase Storage and create a datasource.
     
-    This endpoint:
-    1. Validates the file (type, size)
-    2. Uploads to Supabase Storage
-    3. Extracts COG metadata (bounds, bands, CRS)
-    4. Creates a raster_sources record
-    5. Updates the parent tileset with bounds/center
+    The file will be validated as a valid Cloud Optimized GeoTIFF,
+    uploaded to Supabase Storage, and a new datasource record will be created
+    linked to the specified tileset.
     
     Requires authentication and ownership of the parent tileset.
-    Maximum file size: 500MB
-    Supported formats: .tif, .tiff, .geotiff
     """
     try:
-        # Validate file
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="No filename provided")
-        
-        # Check file extension
-        is_valid, error_msg = validate_cog_file(file.filename, file.size or 0)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error_msg)
-        
+        # Check if tileset exists and user owns it
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id, type FROM tilesets WHERE id = %s",
                 (tileset_id,),
@@ -622,18 +640,15 @@ async def upload_cog_file(
                 raise HTTPException(status_code=404, detail="Tileset not found")
             
             if str(row[1]) != user.id:
-                raise HTTPException(
-                    status_code=403, 
-                    detail="Not authorized to upload to this tileset"
-                )
+                raise HTTPException(status_code=403, detail="Not authorized to add datasource to this tileset")
             
             if row[2] != "raster":
                 raise HTTPException(
                     status_code=400,
-                    detail="COG can only be uploaded to raster type tileset"
+                    detail="COG datasource can only be added to raster type tileset"
                 )
             
-            # Check if datasource already exists
+            # Check if datasource already exists for this tileset
             cur.execute(
                 "SELECT id FROM raster_sources WHERE tileset_id = %s",
                 (tileset_id,),
@@ -641,29 +656,41 @@ async def upload_cog_file(
             if cur.fetchone():
                 raise HTTPException(
                     status_code=400,
-                    detail="Datasource already exists for this tileset. Delete it first."
+                    detail="Datasource already exists for this tileset"
                 )
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Validate it's a valid COG
+        is_valid, validation_message = validate_cog_file(file_content)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid COG file: {validation_message}"
+            )
         
         # Upload to Supabase Storage
         storage = get_storage_client()
-        
-        upload_result = await storage.upload_file(
-            file=file.file,
-            filename=file.filename,
-            tileset_id=tileset_id,
-            user_id=user.id,
-            content_type="image/tiff",
-        )
-        
-        if not upload_result.success:
+        if not storage:
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to upload file: {upload_result.error}"
+                detail="Storage service is not available"
             )
         
-        cog_url = upload_result.url
+        # Generate storage path
+        filename = file.filename or "upload.tif"
+        storage_path = f"cog/{tileset_id}/{filename}"
         
-        # Extract COG metadata
+        # Upload file
+        cog_url = storage.upload_file(storage_path, file_content, "image/tiff")
+        if not cog_url:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to upload file to storage"
+            )
+        
+        # Get COG metadata
         source_bounds = None
         source_center = None
         source_min_zoom = None
@@ -735,13 +762,8 @@ async def upload_cog_file(
             
             conn.commit()
             
-            # Parse band descriptions from JSON
-            band_desc_list = None
-            if row[7]:
-                try:
-                    band_desc_list = json.loads(row[7]) if isinstance(row[7], str) else row[7]
-                except:
-                    pass
+            # Parse band descriptions from JSON - use safe_json_parse
+            band_desc_list = safe_json_parse(row[7])
             
             return COGUploadResponse(
                 id=str(row[0]),
@@ -755,8 +777,8 @@ async def upload_cog_file(
                 native_crs=row[8],
                 min_zoom=row[9],
                 max_zoom=row[10],
-                bounds=json.loads(row[11]) if row[11] else None,
-                center=json.loads(row[12]) if row[12] else None,
+                bounds=safe_json_parse(row[11]),
+                center=safe_json_parse(row[12]),
             )
             
     except HTTPException:
@@ -882,17 +904,16 @@ async def test_datasource_connection(
                 try:
                     metadata = await get_pmtiles_metadata(pmtiles_url)
                     return {
-                        "status": "ok",
+                        "status": "success",
                         "type": "pmtiles",
-                        "url": pmtiles_url,
+                        "message": "Successfully connected to PMTiles file",
                         "metadata": metadata,
                     }
                 except Exception as e:
                     return {
                         "status": "error",
                         "type": "pmtiles",
-                        "url": pmtiles_url,
-                        "message": str(e),
+                        "message": f"Failed to connect: {str(e)}",
                     }
             
             # Try COG
@@ -917,23 +938,22 @@ async def test_datasource_connection(
                     return {
                         "status": "error",
                         "type": "cog",
-                        "message": "Raster service is not available",
+                        "message": "Rasterio is not available",
                     }
                 
                 try:
-                    info = get_cog_info(cog_url)
+                    cog_info = get_cog_info(cog_url)
                     return {
-                        "status": "ok",
+                        "status": "success",
                         "type": "cog",
-                        "url": cog_url,
-                        "info": info,
+                        "message": "Successfully connected to COG file",
+                        "info": cog_info,
                     }
                 except Exception as e:
                     return {
                         "status": "error",
                         "type": "cog",
-                        "url": cog_url,
-                        "message": str(e),
+                        "message": f"Failed to connect: {str(e)}",
                     }
             
             raise HTTPException(status_code=404, detail="Datasource not found")
