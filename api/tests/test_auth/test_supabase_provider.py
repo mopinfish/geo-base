@@ -3,8 +3,8 @@ import pytest
 import respx
 from httpx import Response
 
-from lib._auth_pkg.providers.supabase import SupabaseAuthProvider
-from lib._auth_pkg.errors import (
+from lib.auth.providers.supabase import SupabaseAuthProvider
+from lib.auth.errors import (
     InvalidCredentials, UserAlreadyExists, InvalidToken, ProviderError,
 )
 
@@ -90,8 +90,8 @@ class TestVerifyAccessToken:
     @pytest.mark.asyncio
     async def test_uses_local_jwt_verification(self, provider):
         # Supabase mode でも JWT 検証はローカルで行われる
-        from lib._auth_pkg.jwt_utils import issue_access_token
-        from lib._auth_pkg.models import User
+        from lib.auth.jwt_utils import issue_access_token
+        from lib.auth.models import User
         u = User(id="abc", email="a@b.com", role="authenticated")
         token = issue_access_token(
             u, secret="test-jwt-secret-" + "x" * 50,

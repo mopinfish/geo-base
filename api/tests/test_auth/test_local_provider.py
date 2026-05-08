@@ -3,12 +3,12 @@ import pytest
 import secrets
 from unittest.mock import AsyncMock, patch
 
-from lib._auth_pkg.providers.local import LocalAuthProvider
-from lib._auth_pkg.errors import (
+from lib.auth.providers.local import LocalAuthProvider
+from lib.auth.errors import (
     InvalidCredentials, RateLimited, UserAlreadyExists,
     InvalidToken, WeakPassword,
 )
-from lib._auth_pkg.email_backends import NullEmailBackend
+from lib.auth.email_backends import NullEmailBackend
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def email_backend(monkeypatch):
     backend = NullEmailBackend()
     # Patch the LocalAuthProvider's reference to get_email_backend
     monkeypatch.setattr(
-        "lib._auth_pkg.providers.local.get_email_backend",
+        "lib.auth.providers.local.get_email_backend",
         lambda: backend,
     )
     return backend

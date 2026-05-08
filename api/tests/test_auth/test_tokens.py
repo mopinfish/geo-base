@@ -4,7 +4,7 @@ import hashlib
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from lib._auth_pkg.tokens import (
+from lib.auth.tokens import (
     issue_refresh_token,
     verify_and_rotate_refresh_token,
     revoke_refresh_token,
@@ -12,7 +12,7 @@ from lib._auth_pkg.tokens import (
     cleanup_expired_tokens,
     REFRESH_TOKEN_TTL_DAYS,
 )
-from lib._auth_pkg.errors import InvalidToken
+from lib.auth.errors import InvalidToken
 
 
 def _hash(token: str) -> str:

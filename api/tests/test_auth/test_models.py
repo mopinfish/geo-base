@@ -1,7 +1,7 @@
 """Tests for auth.models module."""
 import pytest
 from pydantic import ValidationError
-from lib._auth_pkg.models import User, AuthResult, TokenPair
+from lib.auth.models import User, AuthResult, TokenPair
 
 
 class TestUser:

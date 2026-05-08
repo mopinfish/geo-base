@@ -4,13 +4,13 @@ import jwt as pyjwt
 from datetime import datetime, timedelta, timezone
 from freezegun import freeze_time
 
-from lib._auth_pkg.jwt_utils import (
+from lib.auth.jwt_utils import (
     issue_access_token,
     decode_access_token,
     claims_to_user,
 )
-from lib._auth_pkg.models import User
-from lib._auth_pkg.errors import InvalidToken
+from lib.auth.models import User
+from lib.auth.errors import InvalidToken
 
 
 SECRET = "test-secret-do-not-use-in-prod-" + "x" * 40

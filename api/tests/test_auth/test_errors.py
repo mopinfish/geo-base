@@ -1,6 +1,6 @@
 """Tests for auth.errors module."""
 import pytest
-from lib._auth_pkg.errors import (
+from lib.auth.errors import (
     AuthError,
     InvalidCredentials,
     RateLimited,

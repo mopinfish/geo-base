@@ -3,7 +3,7 @@ import pytest
 import asyncio
 from unittest.mock import patch, MagicMock
 
-from lib._auth_pkg.email_backends import (
+from lib.auth.email_backends import (
     EmailBackend,
     NullEmailBackend,
     ConsoleEmailBackend,
@@ -41,7 +41,7 @@ class TestConsoleBackend:
 class TestSMTPBackend:
     @pytest.mark.asyncio
     async def test_calls_smtp(self):
-        with patch("lib._auth_pkg.email_backends.smtp_backend.smtplib.SMTP") as mock_smtp:
+        with patch("lib.auth.email_backends.smtp_backend.smtplib.SMTP") as mock_smtp:
             mock_server = MagicMock()
             mock_smtp.return_value.__enter__.return_value = mock_server
 

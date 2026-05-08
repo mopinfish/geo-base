@@ -1,6 +1,6 @@
 """Tests for auth.email_backends.templates."""
 from datetime import datetime, timezone
-from lib._auth_pkg.email_backends.templates import (
+from lib.auth.email_backends.templates import (
     render_invitation_email,
     render_password_reset_email,
 )
