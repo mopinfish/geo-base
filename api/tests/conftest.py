@@ -344,7 +344,7 @@ def database_url():
 def db_connection(database_url):
     """
     Create a database connection for testing.
-    
+
     Note: This fixture requires psycopg2 and a valid DATABASE_URL.
     It creates a connection that is rolled back after each test.
     """
@@ -352,15 +352,42 @@ def db_connection(database_url):
         import psycopg2
     except ImportError:
         pytest.skip("psycopg2 not installed")
-    
+
     conn = psycopg2.connect(database_url)
     conn.autocommit = False
-    
+
     yield conn
-    
+
     # Rollback any changes made during the test
     conn.rollback()
     conn.close()
+
+
+@pytest.fixture
+def db_conn():
+    """テスト用 DB 接続。各テスト後に rollback。"""
+    try:
+        import psycopg2
+    except ImportError:
+        pytest.skip("psycopg2 not installed")
+
+    conn = psycopg2.connect(
+        os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/geo_base")
+    )
+    yield conn
+    conn.rollback()
+    conn.close()
+
+
+@pytest.fixture
+def clean_auth_tables(db_conn):
+    """auth 関連テーブルをクリーンアップ"""
+    with db_conn.cursor() as cur:
+        cur.execute(
+            "TRUNCATE refresh_tokens, auth_login_attempts, password_reset_tokens, users CASCADE"
+        )
+    db_conn.commit()
+    yield
 
 
 # ============================================================================
