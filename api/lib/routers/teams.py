@@ -626,7 +626,7 @@ def list_team_invitations(
 
 
 @router.post("/{team_id}/invitations", response_model=TeamInvitationResponse, status_code=201)
-def create_team_invitation(
+async def create_team_invitation(
     team_id: str,
     invitation_data: TeamInvitationCreate,
     conn=Depends(get_connection),
@@ -634,25 +634,25 @@ def create_team_invitation(
 ):
     """Create a new team invitation."""
     try:
-        get_team_or_404(conn, team_id)
-        
+        team = get_team_or_404(conn, team_id)
+
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise HTTPException(status_code=403, detail="Only owners and administrators can create invitations")
-        
+
         token = generate_invitation_token()
         expires_in_days = invitation_data.expires_in_days or 7
         expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
-        
+
         with conn.cursor() as cur:
             # Check for existing pending invitation
             cur.execute(
-                """SELECT id FROM team_invitations 
+                """SELECT id FROM team_invitations
                    WHERE team_id = %s AND email = %s AND status = 'pending'""",
                 (team_id, invitation_data.email)
             )
             if cur.fetchone():
                 raise HTTPException(status_code=400, detail="A pending invitation already exists for this email")
-            
+
             cur.execute(
                 """INSERT INTO team_invitations (team_id, email, role, invited_by, message, token, expires_at)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -662,10 +662,29 @@ def create_team_invitation(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         inv = dict(zip(columns, row))
+
+        # 招待メール送信（送信失敗は招待作成自体を失敗させない）
+        try:
+            from lib.auth.email_backends import get_email_backend
+            from lib.auth.email_backends.templates import render_invitation_email
+
+            accept_url = f"{settings.invitation_base_url}/accept-invitation?token={token}"
+            inviter_name = user.name or user.email or "Unknown"
+            subject, body = render_invitation_email(
+                team_name=team['name'],
+                inviter_name=inviter_name,
+                accept_url=accept_url,
+                expires_at=expires_at,
+            )
+            await get_email_backend().send(invitation_data.email, subject, body)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send invitation email: {e}")
+
         return {
             "id": str(inv['id']),
             "team_id": str(inv['team_id']),
@@ -678,7 +697,7 @@ def create_team_invitation(
             "expires_at": inv['expires_at'].isoformat() if inv['expires_at'] else None,
             "created_at": inv['created_at'].isoformat() if inv['created_at'] else None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -707,10 +726,10 @@ def accept_team_invitation(
                 raise HTTPException(status_code=404, detail="Invitation not found")
             
             inv_id, team_id, email, role, status, expires_at = row
-            
+
             if status != 'pending':
                 raise HTTPException(status_code=400, detail=f"Invitation is {status}")
-            
+
             if expires_at and expires_at < datetime.utcnow():
                 # Update status to expired
                 cur.execute(
@@ -719,7 +738,11 @@ def accept_team_invitation(
                 )
                 conn.commit()
                 raise HTTPException(status_code=400, detail="Invitation has expired")
-            
+
+            # Email 一致検証: invitation.email と user.email が一致しないと受諾不可
+            if user.email and user.email.lower() != email.lower():
+                raise HTTPException(status_code=403, detail="Invitation email does not match your account email")
+
             # Check if already a member
             cur.execute(
                 "SELECT id FROM team_members WHERE team_id = %s AND user_id = %s",
