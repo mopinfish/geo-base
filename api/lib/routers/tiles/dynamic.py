@@ -14,7 +14,7 @@ from lib.tiles import (
     generate_features_mvt,
     get_cache_headers,
 )
-from lib.auth import User, get_current_user, check_tileset_access
+from lib.auth import AuthContext, get_auth_context_optional, check_tileset_access_v2
 
 
 router = APIRouter(tags=["tiles"])
@@ -132,7 +132,7 @@ def get_dynamic_tilejson(layer_name: str, request: Request):
 
 
 @router.get("/features/{z}/{x}/{y}.pbf")
-def get_features_vector_tile(
+async def get_features_vector_tile(
     z: int,
     x: int,
     y: int,
@@ -141,7 +141,7 @@ def get_features_vector_tile(
     filter: str = Query(None, description="Attribute filter (e.g., 'properties.type=station')"),
     simplify: bool = Query(True, description="Apply zoom-based simplification"),
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Generate a vector tile from the features table.
@@ -166,17 +166,20 @@ def get_features_vector_tile(
     if tileset_id:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT is_public, user_id FROM tilesets WHERE id = %s",
+                "SELECT id, is_public, user_id FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-        
+
         if row:
-            is_public, owner_user_id = row
-            owner_user_id = str(owner_user_id) if owner_user_id else None
-            
-            if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-                if not user:
+            tileset = {
+                "id": row[0],
+                "is_public": row[1],
+                "user_id": str(row[2]) if row[2] else None,
+            }
+
+            if not await check_tileset_access_v2(conn, tileset, auth):
+                if auth is None:
                     raise HTTPException(
                         status_code=401,
                         detail="Authentication required to access this tileset",

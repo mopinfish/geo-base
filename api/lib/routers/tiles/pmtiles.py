@@ -17,7 +17,7 @@ from lib.pmtiles import (
     generate_pmtiles_tilejson,
 )
 from lib.cache import get_cached_tileset_info, cache_tileset_info
-from lib.auth import User, get_current_user, check_tileset_access
+from lib.auth import AuthContext, get_auth_context_optional, check_tileset_access_v2
 
 
 router = APIRouter(prefix="/pmtiles", tags=["tiles"])
@@ -67,7 +67,7 @@ async def get_pmtiles_tile_endpoint(
     y: int,
     tile_format: str,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get a tile from a PMTiles archive.
@@ -142,8 +142,13 @@ async def get_pmtiles_tile_endpoint(
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
     
     # Check access
-    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-        if not user:
+    tileset_for_access = {
+        "id": tileset_id,
+        "is_public": is_public,
+        "user_id": owner_user_id,
+    }
+    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if auth is None:
             raise HTTPException(
                 status_code=401,
                 detail="Authentication required to access this tileset",
@@ -153,7 +158,7 @@ async def get_pmtiles_tile_endpoint(
             status_code=403,
             detail="You do not have permission to access this tileset"
         )
-    
+
     # Validate zoom level
     if min_zoom is not None and z < min_zoom:
         raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
@@ -188,7 +193,7 @@ async def get_pmtiles_tilejson_endpoint(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get TileJSON for a PMTiles tileset.
@@ -225,8 +230,13 @@ async def get_pmtiles_tilejson_endpoint(
         owner_user_id = str(owner_user_id) if owner_user_id else None
         
         # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": owner_user_id,
+        }
+        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
@@ -236,7 +246,7 @@ async def get_pmtiles_tilejson_endpoint(
                 status_code=403,
                 detail="You do not have permission to access this tileset"
             )
-        
+
         base_url = get_base_url(request)
         
         return generate_pmtiles_tilejson(
@@ -263,7 +273,7 @@ async def get_pmtiles_tilejson_endpoint(
 async def get_pmtiles_metadata_endpoint(
     tileset_id: str,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get metadata from a PMTiles file.
@@ -300,8 +310,13 @@ async def get_pmtiles_metadata_endpoint(
         owner_user_id = str(owner_user_id) if owner_user_id else None
         
         # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": owner_user_id,
+        }
+        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
@@ -311,7 +326,7 @@ async def get_pmtiles_metadata_endpoint(
                 status_code=403,
                 detail="You do not have permission to access this tileset"
             )
-        
+
     except HTTPException:
         raise
     except Exception as e:
