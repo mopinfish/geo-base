@@ -21,6 +21,8 @@ from .errors import (
 )
 from .models import User, AuthResult, TokenPair
 from .provider import AuthProvider
+from .context import AuthContext
+from .api_key_auth import validate_api_key, API_KEY_PREFIX, log_api_key_request
 
 
 @lru_cache(maxsize=1)
@@ -166,6 +168,46 @@ def is_auth_configured() -> bool:
     return bool(get_settings().effective_jwt_secret)
 
 
+# === Unified Auth Dependencies (Task 3.2) ===
+
+async def get_auth_context_optional(
+    authorization: Annotated[Optional[str], Header()] = None,
+) -> Optional[AuthContext]:
+    """JWT または API キーで認証。未認証なら None。"""
+    if not authorization:
+        return None
+    token = extract_token_from_header(authorization)
+    if not token:
+        return None
+
+    # API キー判別
+    if token.startswith(API_KEY_PREFIX):
+        try:
+            return await validate_api_key(token)
+        except RateLimited:
+            raise HTTPException(429, "API key rate limit exceeded")
+
+    # JWT パス
+    result = await get_auth_provider().verify_access_token(token)
+    if result.is_authenticated and result.user:
+        return AuthContext.from_jwt_user(result.user)
+    return None
+
+
+async def require_auth_context(
+    authorization: Annotated[Optional[str], Header()] = None,
+) -> AuthContext:
+    """JWT または API キーで認証必須。"""
+    ctx = await get_auth_context_optional(authorization)
+    if not ctx:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return ctx
+
+
 __all__ = [
     # Models
     "User", "AuthResult", "TokenPair",
@@ -174,10 +216,13 @@ __all__ = [
     "UserAlreadyExists", "InvalidToken", "WeakPassword", "ProviderError",
     # Provider
     "AuthProvider", "get_auth_provider",
-    # Dependencies
+    # Dependencies (legacy JWT-only)
     "get_current_user", "require_auth",
     # Helpers
     "extract_token_from_header", "verify_jwt_token",
     # Tile access (legacy)
     "check_tileset_access", "get_tileset_with_access_check", "is_auth_configured",
+    # NEW (Task 3.2): unified context for JWT + API key
+    "AuthContext", "validate_api_key", "API_KEY_PREFIX", "log_api_key_request",
+    "get_auth_context_optional", "require_auth_context",
 ]
