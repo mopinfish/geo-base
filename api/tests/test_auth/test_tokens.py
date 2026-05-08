@@ -3,7 +3,6 @@ import uuid
 import hashlib
 import pytest
 from datetime import datetime, timedelta, timezone
-from freezegun import freeze_time
 
 from lib._auth_pkg.tokens import (
     issue_refresh_token,
@@ -87,11 +86,16 @@ class TestVerifyAndRotate:
             assert row[1] == "theft_detected"
 
     def test_expired_token_raises(self, db_conn, clean_auth_tables, user_id):
-        with freeze_time("2026-01-01 00:00:00"):
-            token = issue_refresh_token(db_conn, user_id)
-        with freeze_time("2026-03-01 00:00:00"):  # 30 日以上経過
-            with pytest.raises(InvalidToken):
-                verify_and_rotate_refresh_token(db_conn, token)
+        token = issue_refresh_token(db_conn, user_id)
+        # Manually expire the token by updating the DB row
+        with db_conn.cursor() as cur:
+            cur.execute(
+                "UPDATE refresh_tokens SET expires_at = NOW() - INTERVAL '1 day' WHERE token_hash = %s",
+                (_hash(token),),
+            )
+        db_conn.commit()
+        with pytest.raises(InvalidToken):
+            verify_and_rotate_refresh_token(db_conn, token)
 
 
 class TestRevoke:
@@ -130,8 +134,13 @@ class TestRevoke:
 
 class TestCleanup:
     def test_cleanup_expired(self, db_conn, clean_auth_tables, user_id):
-        with freeze_time("2026-01-01 00:00:00"):
-            issue_refresh_token(db_conn, user_id)
-        with freeze_time("2026-04-01 00:00:00"):
-            count = cleanup_expired_tokens(db_conn)
-            assert count >= 1
+        token = issue_refresh_token(db_conn, user_id)
+        # Force expires_at to be more than 7 days in the past so cleanup picks it up
+        with db_conn.cursor() as cur:
+            cur.execute(
+                "UPDATE refresh_tokens SET expires_at = NOW() - INTERVAL '8 days' WHERE token_hash = %s",
+                (_hash(token),),
+            )
+        db_conn.commit()
+        count = cleanup_expired_tokens(db_conn)
+        assert count >= 1
