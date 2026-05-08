@@ -290,6 +290,37 @@ CREATE TABLE team_invitations (
 > Step 3.3-A の詳細は `docs/AUTH_SETUP.md` / `docs/AUTH_MIGRATION.md` /
 > `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
 
+#### Step 3.3-A 完了サマリ（2026-05-08）
+
+**Backend (Phase 0-5):**
+- `api/lib/auth/` パッケージ化（provider ABC + LocalAuthProvider + SupabaseAuthProvider + factory）
+- AuthContext / api_key_auth / check_tileset_access_v2 でアプリ層認可
+- `/api/auth/*` 10 エンドポイント（login/refresh/logout/me/password-reset/invitation 等）
+- TwoTierCORSMiddleware（`/api/auth/*` strict / その他 `*` 許容）
+- CLI: `python -m lib.auth.cli {create-admin,revoke-token,cleanup-expired}`
+- 起動時 fail-fast 設定検証
+
+**Admin UI (Phase 6):**
+- Supabase クライアント完全撤去（`@supabase/ssr`, `@supabase/supabase-js` 依存削除）
+- `app/src/lib/auth/` の AuthClient + AuthProvider 抽象化
+- 認証ページ 6 ページ新規（login, accept-invitation, password-reset/{request,confirm}, settings/{profile,password}）
+- middleware は refresh cookie 存在で route guard
+- `apiFetch` で 401 → refresh → retry 自動化
+
+**ドキュメント (Phase 7):**
+- `docs/AUTH_SETUP.md`（local モード セットアップ）
+- `docs/AUTH_MIGRATION.md`（supabase → local 移行手順）
+
+**テスト:**
+- 479 passed, 2 skipped（auth 関連 130+ 直接テスト）
+- auth モジュールカバレッジ: 70-100%（password/tokens/provider/context/errors/models = 100%）
+
+**コミット規模:**
+- Backend: 32 コミット（design docs `024a956` 〜 `13437fc`）
+- Admin UI: 10 コミット（`c48a2f2` 〜 `fb40c83`）
+- ドキュメント: 3 コミット（`e5f7799`, `b5152dd`, `49a47cb`）
+- ブランチ: `feat/s3_3-3_team_and_role`
+
 ### Phase 4: エンタープライズ機能（3-4週間）
 
 - Step 3.4-A: 権限管理（RBAC）

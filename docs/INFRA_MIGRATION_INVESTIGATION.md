@@ -160,6 +160,35 @@
 
 ---
 
+## Phase 3 で実施済みの準備工程（2026-05-08 完了）
+
+Phase 3 / Step 3.3-A（プラガブル認証）の実装に伴い、上記「Phase 3 内で実施」のうち 1〜4 が完了:
+
+- ✅ **`api/lib/auth.py` をパッケージ化、JWT 発行者非依存にリファクタ**
+  - 単一ファイルから `api/lib/auth/` パッケージへ分割（`provider.py`, `providers/{local,supabase}.py`, `jwt_utils.py`, `tokens.py`, `password.py`, `rate_limit.py`, `email_backends/`, `cli.py` 等）
+  - `JWT_SECRET` を汎用化（`SUPABASE_JWT_SECRET` は supabase モード専用に縮退）
+  - `AUTH_PROVIDER=local|supabase` 環境変数で発行者を切替（factory pattern）
+- ✅ **新規 RLS は permissive のまま、アプリ層認可で対応**
+  - `auth.uid()` への直接依存を新規スキーマで排除
+  - 行レベル認可は `lib/auth/api_key_auth.py` の `check_tileset_access_v2` 等でアプリ層実施
+  - ポータブル RLS（`current_setting('app.user_id')`）への移行は Phase 4 で対応予定
+- ✅ **Admin UI の Supabase クライアントを完全撤去**
+  - `app/src/lib/supabase/`、`app/src/contexts/auth-context.tsx`、`app/src/app/auth/callback/` を削除
+  - `app/src/lib/auth/` の `AuthClient` シングルトン + `AuthProvider` で抽象化
+  - `@supabase/ssr` および `@supabase/supabase-js` 依存を `package.json` から削除
+- ✅ **Supabase 固有 Postgres 拡張は使っていないことを確認**
+  - `pg_cron` 不使用 → 期限切れトークン削除は CLI コマンド `python -m lib.auth.cli cleanup-expired` で実施（運用は scheduled machine or 外部 cron を推奨）
+  - `pgsodium`, `pg_net` も不使用
+
+実装規模:
+- Backend: 32 コミット、auth テスト 130+（全 479 テスト PASS）
+- Admin UI: 10 コミット、Supabase クライアント完全撤去 + 認証ページ 6 ページ新規実装
+- ドキュメント: `docs/AUTH_SETUP.md`、`docs/AUTH_MIGRATION.md` 新規
+
+将来 Cloudflare 寄せ移行する際、認証層の手直しは不要となる状態を確立。
+
+---
+
 ## 参考リンク
 
 - [Cloudflare Containers and Sandboxes are now generally available (2026-04)](https://developers.cloudflare.com/changelog/post/2026-04-13-containers-sandbox-ga/)
@@ -176,3 +205,4 @@
 | 日付 | 著者 | 変更内容 |
 |---|---|---|
 | 2026-05-08 | Claude（調査）/ otsuka（決定） | 初版作成。Cloudflare 一本化は当面見送り、Phase 3 を優先する方針で記録 |
+| 2026-05-08 | Claude | Phase 3 / Step 3.3-A 完了に伴い「Phase 3 で実施済みの準備工程」を追記 |
