@@ -7,3 +7,37 @@ class TestAuthProviderABC:
     def test_cannot_instantiate(self):
         with pytest.raises(TypeError):
             AuthProvider()
+
+
+class TestFactory:
+    def test_local_provider_selected(self, monkeypatch):
+        monkeypatch.setenv("AUTH_PROVIDER", "local")
+        monkeypatch.setenv("JWT_SECRET", "x" * 64)
+        from lib.config import get_settings
+        from lib._auth_pkg import get_auth_provider
+        get_settings.cache_clear()
+        get_auth_provider.cache_clear()
+        from lib._auth_pkg.providers.local import LocalAuthProvider
+        assert isinstance(get_auth_provider(), LocalAuthProvider)
+
+    def test_supabase_provider_selected(self, monkeypatch):
+        monkeypatch.setenv("AUTH_PROVIDER", "supabase")
+        monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
+        monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+        monkeypatch.setenv("SUPABASE_JWT_SECRET", "x" * 64)
+        from lib.config import get_settings
+        from lib._auth_pkg import get_auth_provider
+        get_settings.cache_clear()
+        get_auth_provider.cache_clear()
+        from lib._auth_pkg.providers.supabase import SupabaseAuthProvider
+        assert isinstance(get_auth_provider(), SupabaseAuthProvider)
+
+    def test_unknown_provider_raises(self, monkeypatch):
+        monkeypatch.setenv("AUTH_PROVIDER", "unknown")
+        from lib.config import get_settings
+        from lib._auth_pkg import get_auth_provider
+        get_settings.cache_clear()
+        get_auth_provider.cache_clear()
+        import pytest
+        with pytest.raises(ValueError):
+            get_auth_provider()
