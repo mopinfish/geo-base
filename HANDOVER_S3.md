@@ -33,7 +33,7 @@
 | **Phase 2** | **Step 3.2-B** | **リトライ機能統合** | ✅ 完了 |
 | **Phase 2** | **Step 3.2-C** | **Redisキャッシュ導入** | ✅ 完了 |
 | **Phase 2** | **Step 3.2-D** | **バッチ処理最適化 + 管理画面UI** | ✅ 完了 |
-| Phase 3 | Step 3.3-A | チームモデル設計 | 🔜 次のステップ |
+| **Phase 3** | **Step 3.3-A** | **チーム / ロール + プラガブル認証** | ✅ 完了（Backend + Admin UI） |
 
 ---
 
@@ -282,10 +282,13 @@ CREATE TABLE team_invitations (
 
 | ステップ | 内容 | ステータス |
 |---------|------|-----------|
-| Step 3.3-A | チームモデル設計 | 🔜 次 |
-| Step 3.3-B | APIキー管理 | 📋 計画中 |
+| Step 3.3-A | チーム / ロール + プラガブル認証 | ✅ 完了（Backend + Admin UI） |
+| Step 3.3-B | APIキー管理 | ✅ 完了（Step 3.3-A に統合） |
 | Step 3.3-C | Shapefile/GeoPackageインポート | 📋 計画中 |
 | Step 3.3-D | タイルセット管理強化 | 📋 計画中 |
+
+> Step 3.3-A の詳細は `docs/AUTH_SETUP.md` / `docs/AUTH_MIGRATION.md` /
+> `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
 
 ### Phase 4: エンタープライズ機能（3-4週間）
 

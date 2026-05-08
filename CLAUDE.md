@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `geo-base` は地理空間タイルサーバーシステムのモノレポです。3つの独立してデプロイ可能なコンポーネントが、1つの PostGIS データベースを共有します。
 
 - **`api/`** — FastAPI タイルサーバー（Python, `uv` 管理）。**Fly.io** に `geo-base-api.fly.dev` としてデプロイ（旧 Vercel デプロイは廃止済み）。PostGIS から `ST_AsMVT` でベクタータイルを動的生成、`rio-tiler` で COG ラスタータイルを配信、PMTiles にも対応。エントリポイントは `api/lib/main.py` で、`lib/routers/` 配下のルーターを統合。Pydantic モデルは `lib/models/` に配置。
-- **`app/`** — Next.js 16（App Router）+ React 19 + Tailwind v4 + shadcn/ui の管理画面。**Vercel** に `geo-base-admin.vercel.app` としてデプロイ。認証は Supabase 経由。API クライアントは `app/src/lib/api.ts`。
+- **`app/`** — Next.js 16（App Router）+ React 19 + Tailwind v4 + shadcn/ui の管理画面。**Vercel** に `geo-base-admin.vercel.app` としてデプロイ。認証はプラガブル（local / supabase）で、`app/src/lib/auth/` の AuthClient が `/api/auth/*` をラップ。API クライアントは `app/src/lib/api.ts`。
 - **`mcp/`** — geo-base のツールを Claude Desktop 向けに公開する FastMCP サーバー。**Fly.io** に `geo-base-mcp.fly.dev` としてデプロイ。ツールは `mcp/tools/` 配下（tilesets, features, geocoding, stats, analysis, crud）。`stdio`（ローカル）と `sse`（リモート）の両トランスポートをサポート。
-- **`docker/`** — `docker compose` でローカルの PostGIS + Redis を起動。スキーマシード SQL は `docker/postgis-init/` に番号順で配置（`04_rls_policies.sql` がローカル用、`04_rls_policies.sql.supabase` が Supabase 用）。
+- **`docker/`** — `docker compose` でローカルの PostGIS + Redis を起動。スキーマシード SQL は `docker/postgis-init/` に番号順で配置（`04_auth_schema.sql`: 自前 users / refresh_tokens、`05_teams_schema.sql`: チーム関連、`06_api_keys_schema.sql`: API キー、`09_rls_policies.sql` がローカル用、`09_rls_policies.sql.supabase` が Supabase 用）。
 - **`packages/shared/`** — 共有パッケージのスケルトン。
 - **`scripts/`** — `setup.sh`, `seed_sample_data.{py,fish}`, `fix_bounds.py` 等。
 
@@ -88,9 +88,16 @@ cd mcp && fly deploy                            # MCP → geo-base-mcp.fly.dev
 
 ## 認証モデル
 
-API は **Supabase JWT** 検証を使用（`api/lib/auth.py` の `verify_jwt_token`）。保護エンドポイントには `SUPABASE_JWT_SECRET` の設定が必須。認証必須ルートは `Depends(get_current_user)`、任意認証は `Depends(get_optional_user)` を使用。Admin UI はセッション管理に `@supabase/ssr` を採用。タイルセットには `is_public` フラグがあり、公開読み取りは認証不要だが、書き込みは常に所有者の JWT が必要。
+API は **プラガブル認証** をサポート（Phase 3 / Step 3.3-A で実装）。`AUTH_PROVIDER=local|supabase` で切替:
 
-API キーは別系統の認証パス（Phase 3 / Step 3.3 で追加）：`lib/routers/api_keys.py` + `lib/models/api_key.py`。スキーマは `docker/postgis-init/06_api_keys_schema.sql`。
+- `local`: 自前の `users` テーブル + JWT 発行（`api/lib/auth/` パッケージ、初期管理者は `uv run python -m lib.auth.cli create-admin` で作成）
+- `supabase`: 従来通り Supabase Auth JWT に委譲
+
+認証必須ルートは `Depends(require_auth)`（ユーザー必須）または `Depends(require_auth_context)`（JWT または API キー）、任意認証は `Depends(get_current_user)` / `Depends(get_auth_context_optional)` を使用。タイルセットには `is_public` フラグがあり、公開読み取りは認証不要だが、書き込みは常に所有者の JWT または API キーが必要。
+
+API キーは別系統の認証パス（Phase 3 / Step 3.3-A）：`lib/routers/api_keys.py` + `lib/models/api_key.py` + `lib/auth/api_key_auth.py`。スキーマは `docker/postgis-init/06_api_keys_schema.sql`。
+
+詳細: `docs/AUTH_SETUP.md`、移行: `docs/AUTH_MIGRATION.md`、設計: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
 
 ## プロジェクト履歴ドキュメント
 
