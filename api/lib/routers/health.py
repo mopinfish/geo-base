@@ -1,8 +1,6 @@
 """
-Health check and authentication endpoints.
+Health check endpoints.
 """
-
-from typing import Optional
 
 from fastapi import APIRouter, Depends
 
@@ -11,7 +9,7 @@ from lib.database import check_database_connection, check_postgis_extension
 from lib.raster_tiles import is_rasterio_available
 from lib.pmtiles import is_pmtiles_available
 from lib.cache import get_cache_stats, clear_all_caches
-from lib.auth import User, get_current_user, require_auth, is_auth_configured
+from lib.auth import User, require_auth, is_auth_configured
 
 
 router = APIRouter(tags=["health"])
@@ -79,41 +77,8 @@ def health_check_cache():
 def clear_cache(user: User = Depends(require_auth)):
     """
     Clear all caches.
-    
+
     Requires authentication. In production, this should be restricted to admins.
     """
     clear_all_caches()
     return {"status": "ok", "message": "All caches cleared"}
-
-
-# ============================================================================
-# Auth Test Endpoints
-# ============================================================================
-
-
-@router.get("/api/auth/me")
-def get_current_user_info(user: User = Depends(require_auth)):
-    """
-    Get current authenticated user information.
-    
-    Requires authentication.
-    """
-    return {
-        "id": user.id,
-        "email": user.email,
-        "role": user.role,
-    }
-
-
-@router.get("/api/auth/status")
-def get_auth_status(user: Optional[User] = Depends(get_current_user)):
-    """
-    Get authentication status.
-    
-    Returns authentication status without requiring authentication.
-    """
-    return {
-        "authenticated": user is not None,
-        "user_id": user.id if user else None,
-        "email": user.email if user else None,
-    }
