@@ -8,13 +8,14 @@ Endpoints are organized into routers for better maintainability.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from lib.config import get_settings
+from lib.cors_middleware import TwoTierCORSMiddleware
 from lib.database import close_pool
 
 # Import all routers
+from lib.routers.auth import router as auth_router
 from lib.routers.health import router as health_router
 from lib.routers.tilesets import router as tilesets_router
 from lib.routers.features import router as features_router
@@ -43,14 +44,12 @@ app = FastAPI(
 
 settings = get_settings()
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    TwoTierCORSMiddleware,
+    strict_origins=settings.cors_origins,
 )
 
 # Include Routers
+app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(tilesets_router)
 app.include_router(features_router)
