@@ -26,8 +26,14 @@ export default function PasswordSettingsPage() {
       await authClient.logout();
       router.push("/login?password_changed=1");
     } else {
-      const data = await res.json();
-      setError(data.detail || "更新に失敗しました");
+      let detail = "更新に失敗しました";
+      try {
+        const data = await res.json();
+        if (data?.detail) detail = data.detail;
+      } catch {
+        // ignore parse errors, use default
+      }
+      setError(detail);
     }
     setLoading(false);
   };

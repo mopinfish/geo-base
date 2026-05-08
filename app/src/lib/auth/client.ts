@@ -41,17 +41,22 @@ class AuthClient {
   }
 
   private async _doRefresh(): Promise<User | null> {
-    const res = await fetch(`${API_URL}/api/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!res.ok) {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        this.clearSession();
+        return null;
+      }
+      const data: TokenPair = await res.json();
+      this.setSession(data);
+      return data.user;
+    } catch {
       this.clearSession();
       return null;
     }
-    const data: TokenPair = await res.json();
-    this.setSession(data);
-    return data.user;
   }
 
   async logout(): Promise<void> {

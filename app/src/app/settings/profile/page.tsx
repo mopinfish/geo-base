@@ -20,10 +20,17 @@ export default function ProfileSettingsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email }),
     });
-    if (res.ok) setMessage("更新しました");
-    else {
-      const data = await res.json();
-      setError(data.detail || "更新に失敗しました");
+    if (res.ok) {
+      setMessage("更新しました");
+    } else {
+      let detail = "更新に失敗しました";
+      try {
+        const data = await res.json();
+        if (data?.detail) detail = data.detail;
+      } catch {
+        // ignore parse errors, use default
+      }
+      setError(detail);
     }
   };
 
