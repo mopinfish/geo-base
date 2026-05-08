@@ -2,8 +2,49 @@
  * geo-base タイルサーバー API クライアント
  */
 
+import { authClient } from "./auth/client";
+
 // 環境変数からAPIのベースURLを取得
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://geo-base-api.fly.dev';
+
+/**
+ * 認証トークン自動付与 + 401 リトライに対応した fetch ラッパー
+ *
+ * - authClient から access token を取得して Authorization ヘッダーに付与
+ * - 401 が返ったら 1 度だけ refresh して retry
+ * - cookies (refresh token) は credentials: "include" で常に送信
+ */
+export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers);
+  const token = authClient.getAccessToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  let res = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+
+  // 401 → 1 度だけ refresh して retry
+  if (res.status === 401 && token) {
+    const newUser = await authClient.refresh();
+    if (newUser) {
+      const newToken = authClient.getAccessToken();
+      if (newToken) {
+        headers.set("Authorization", `Bearer ${newToken}`);
+        res = await fetch(`${API_BASE_URL}${path}`, {
+          ...options,
+          headers,
+          credentials: "include",
+        });
+      }
+    }
+  }
+
+  return res;
+}
 
 // ============================
 // 基本型定義
