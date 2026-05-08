@@ -208,6 +208,74 @@ async def require_auth_context(
     return ctx
 
 
+async def check_tileset_access_v2(conn, tileset: dict, ctx: Optional["AuthContext"]) -> bool:
+    """タイルセットアクセス判定。
+
+    ルール:
+    1. 公開タイルセット → 誰でも可
+    2. 認証なし → 不可
+    3. read スコープなし → 不可
+    4. オーナー → 可
+    5. API キー（チーム紐付け）+ team_tilesets で共有 → 可
+    6. JWT ユーザー + 所属チーム経由で共有 → 可
+    """
+    import asyncio
+
+    if tileset.get("is_public"):
+        return True
+    if ctx is None:
+        return False
+    if not ctx.has_scope("read"):
+        return False
+
+    owner_id = tileset.get("user_id")
+    if owner_id and ctx.user_id == str(owner_id):
+        return True
+
+    tileset_id = str(tileset["id"])
+
+    if ctx.is_api_key:
+        if ctx.team_id is None:
+            return False
+        return await asyncio.to_thread(_is_tileset_shared_with_team, conn, tileset_id, ctx.team_id)
+
+    # JWT ユーザー: 所属する全チームを横断
+    return await asyncio.to_thread(_user_has_team_access, conn, ctx.user_id, tileset_id)
+
+
+def _is_tileset_shared_with_team(conn, tileset_id: str, team_id: str) -> bool:
+    import psycopg2
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM team_tilesets WHERE team_id = %s AND tileset_id = %s LIMIT 1",
+                (team_id, tileset_id),
+            )
+            return cur.fetchone() is not None
+    except psycopg2.errors.InvalidTextRepresentation:
+        # team_id / tileset_id が UUID 形式でない場合 → アクセス不可
+        conn.rollback()
+        return False
+
+
+def _user_has_team_access(conn, user_id: str, tileset_id: str) -> bool:
+    import psycopg2
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT 1 FROM team_members tm
+                   JOIN team_tilesets tt ON tm.team_id = tt.team_id
+                  WHERE tm.user_id = %s AND tt.tileset_id = %s
+                  LIMIT 1""",
+                (user_id, tileset_id),
+            )
+            return cur.fetchone() is not None
+    except psycopg2.errors.InvalidTextRepresentation:
+        # user_id / tileset_id が UUID 形式でない場合 → アクセス不可
+        conn.rollback()
+        return False
+
+
 __all__ = [
     # Models
     "User", "AuthResult", "TokenPair",
@@ -225,4 +293,6 @@ __all__ = [
     # NEW (Task 3.2): unified context for JWT + API key
     "AuthContext", "validate_api_key", "API_KEY_PREFIX", "log_api_key_request",
     "get_auth_context_optional", "require_auth_context",
+    # NEW (Task 3.3): team-based tileset authorization
+    "check_tileset_access_v2",
 ]
