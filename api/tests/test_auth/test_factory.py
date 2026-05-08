@@ -41,3 +41,43 @@ class TestFactory:
         import pytest
         with pytest.raises(ValueError):
             get_auth_provider()
+
+
+class TestConfigValidation:
+    def test_local_without_jwt_secret_fails(self, monkeypatch):
+        monkeypatch.setenv("AUTH_PROVIDER", "local")
+        # 空文字列で .env の値を上書き
+        monkeypatch.setenv("JWT_SECRET", "")
+        monkeypatch.setenv("SUPABASE_JWT_SECRET", "")
+        from lib.config import get_settings
+        get_settings.cache_clear()
+        with pytest.raises(Exception, match="JWT_SECRET"):
+            get_settings()
+
+    def test_supabase_without_url_fails(self, monkeypatch):
+        monkeypatch.setenv("AUTH_PROVIDER", "supabase")
+        monkeypatch.setenv("SUPABASE_URL", "")
+        from lib.config import get_settings
+        get_settings.cache_clear()
+        with pytest.raises(Exception, match="SUPABASE_URL"):
+            get_settings()
+
+    def test_smtp_without_host_fails(self, monkeypatch):
+        monkeypatch.setenv("AUTH_PROVIDER", "local")
+        monkeypatch.setenv("JWT_SECRET", "x" * 64)
+        monkeypatch.setenv("EMAIL_BACKEND", "smtp")
+        monkeypatch.setenv("SMTP_HOST", "")
+        from lib.config import get_settings
+        get_settings.cache_clear()
+        with pytest.raises(Exception, match="SMTP_HOST"):
+            get_settings()
+
+    def test_samesite_none_without_secure_fails(self, monkeypatch):
+        monkeypatch.setenv("AUTH_PROVIDER", "local")
+        monkeypatch.setenv("JWT_SECRET", "x" * 64)
+        monkeypatch.setenv("COOKIE_SAMESITE", "none")
+        monkeypatch.setenv("COOKIE_SECURE", "false")
+        from lib.config import get_settings
+        get_settings.cache_clear()
+        with pytest.raises(Exception, match="COOKIE_SECURE"):
+            get_settings()
