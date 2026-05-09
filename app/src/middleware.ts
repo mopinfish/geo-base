@@ -18,7 +18,8 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasRefresh = !!request.cookies.get("geo_base_refresh");
 
-  const isProtected = PROTECTED_PATHS.some((p) => pathname.startsWith(p));
+  const isProtected =
+    pathname === "/" || PROTECTED_PATHS.some((p) => pathname.startsWith(p));
   const isAuthPage = AUTH_ONLY_PATHS.includes(pathname);
 
   if (isProtected && !hasRefresh) {
