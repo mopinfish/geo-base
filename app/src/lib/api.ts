@@ -5,7 +5,10 @@
 import { authClient } from "./auth/client";
 
 // 環境変数からAPIのベースURLを取得
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://geo-base-api.fly.dev';
+// 未設定の場合は空文字 → 相対パス /api/* で叩き、Next.js の dev rewrites
+// または本番 (Vercel rewrites or 同一オリジンデプロイ) でプロキシされる前提。
+// 絶対 URL を使いたい場合は NEXT_PUBLIC_API_URL を明示的に設定すること。
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /**
  * 認証トークン自動付与 + 401 リトライに対応した fetch ラッパー
