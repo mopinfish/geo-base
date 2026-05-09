@@ -609,8 +609,13 @@ async def calculate_tileset_bounds(
 
     Useful after bulk importing GeoJSON features.
 
-    所有者本人または team_tilesets で write 以上の permission_level を持つ
-    チームメンバーが実行可能（issue #49）。
+    実行可能な条件（issue #49、`update` action 相当）:
+    - 個人タイルセットの所有者
+    - JWT ユーザー: `can_user_perform_action(user_id, tileset_id, 'update')` が True
+      （team_role=owner/administrator の role 継承、または team_tilesets.permission_level
+      が write 以上）
+    - API キー: ctx.team_id が共有先 team の場合のみ、かつ
+      team_tilesets.permission_level が write 以上
     """
     try:
         # Step 1: 認可判定に必要なフィールドだけ読んで cursor を閉じる
@@ -720,8 +725,13 @@ async def update_tileset(
     """
     Update an existing tileset.
 
-    所有者本人または team_tilesets で write 以上の permission_level を持つ
-    チームメンバーが実行可能（issue #49）。
+    実行可能な条件（issue #49、`update` action）:
+    - 個人タイルセットの所有者
+    - JWT ユーザー: `can_user_perform_action(user_id, tileset_id, 'update')` が True
+      （team_role=owner/administrator の role 継承、または team_tilesets.permission_level
+      が write 以上）
+    - API キー: ctx.team_id が共有先 team の場合のみ、かつ
+      team_tilesets.permission_level が write 以上
     """
     try:
         # Step 1: 認可判定に必要な行を読み出して cursor を閉じる
@@ -767,12 +777,18 @@ async def update_tileset(
                 params.append(tileset.max_zoom)
 
             if tileset.bounds is not None and len(tileset.bounds) == 4:
+                # f-string 連結だと NaN/Infinity で SQL 構文エラー / 将来の型変更時に
+                # インジェクション経路となるため、プレースホルダで bind する
                 west, south, east, north = tileset.bounds
-                updates.append(f"bounds = ST_MakeEnvelope({west}, {south}, {east}, {north}, 4326)")
+                updates.append(
+                    "bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
+                )
+                params.extend([west, south, east, north])
 
             if tileset.center is not None and len(tileset.center) >= 2:
                 lon, lat = tileset.center[0], tileset.center[1]
-                updates.append(f"center = ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)")
+                updates.append("center = ST_SetSRID(ST_MakePoint(%s, %s), 4326)")
+                params.extend([lon, lat])
 
             if tileset.attribution is not None:
                 updates.append("attribution = %s")
@@ -847,9 +863,15 @@ async def delete_tileset(
     """
     Delete a tileset and all associated features.
 
-    所有者本人または team_tilesets で admin permission_level を持つ
-    チームメンバー（既定では team owner / administrator）が実行可能
-    （issue #49）。
+    実行可能な条件（issue #49）:
+    - 個人タイルセットの所有者（ctx.user_id == tileset.user_id）
+    - JWT ユーザー: `can_user_perform_action(user_id, tileset_id, 'delete')`
+      が True を返す場合。これは
+      - team_role が owner/administrator の場合は role 継承で admin 相当となり可
+      - もしくは team_tilesets.permission_level='admin' が明示されている場合
+    - API キー: ctx.team_id が共有先 team の場合のみ、かつ
+      team_tilesets.permission_level='admin' が明示されている場合
+      （API キーは team_role の継承を行わないため、permission_level=NULL は不可）
     """
     try:
         # Step 1: 認可判定に必要な行を読み出して cursor を閉じる

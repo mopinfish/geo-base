@@ -171,6 +171,18 @@ class TestAuthGuards:
             await check_tileset_write_access_v2(db_conn, ts, ctx, "delete") is False
         )
 
+    @pytest.mark.asyncio
+    async def test_unknown_action_denied(self, db_conn, make_tileset, jwt_ctx):
+        """未登録の action は許可されない（タイポ防止 / 未知 scope での意図せぬ通過防止）。"""
+        ts = make_tileset()
+        # owner かつフルスコープでも、未知 action は False
+        assert (
+            await check_tileset_write_access_v2(
+                db_conn, ts, jwt_ctx(ts["user_id"]), "drop"
+            )
+            is False
+        )
+
 
 # ---------------------------------------------------------------------------
 # 個人タイルセット（後方互換）

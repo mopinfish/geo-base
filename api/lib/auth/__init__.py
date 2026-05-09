@@ -295,7 +295,9 @@ def _user_has_team_access(conn, user_id: str, tileset_id: str) -> bool:
 # 05_teams_schema.sql L195-217）なので、JWT ユーザー経路ではそれに委譲する。
 # API キー経路は team_id ベースで team_tilesets.permission_level を直接見る。
 
-# action 名 → 必要な scope
+# action 名 → 必要な scope。未登録の action は禁止する（タイポ等で
+# 許可判定が誤って通らないよう、`check_tileset_write_access_v2` 入口で
+# 明示的に弾く）。
 _ACTION_REQUIRED_SCOPE = {
     "read": "read",
     "create": "write",
@@ -333,7 +335,10 @@ async def check_tileset_write_access_v2(
     if ctx is None:
         return False
 
-    required_scope = _ACTION_REQUIRED_SCOPE.get(required_action, required_action)
+    # 未知 action は許可しない（タイポ防止）
+    if required_action not in _ACTION_REQUIRED_SCOPE:
+        return False
+    required_scope = _ACTION_REQUIRED_SCOPE[required_action]
     if not ctx.has_scope(required_scope):
         return False
 
