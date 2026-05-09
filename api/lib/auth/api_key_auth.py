@@ -7,7 +7,6 @@ from typing import Optional
 from .context import AuthContext
 from .errors import RateLimited
 
-
 logger = logging.getLogger(__name__)
 
 

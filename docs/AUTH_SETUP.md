@@ -9,7 +9,7 @@ geo-base API は **プラガブル認証** をサポートします（Phase 3 / 
 設計の背景・全体像は `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
 本ドキュメントは **ローカル / 本番の構築手順** に絞ったハンズオンです。
 
-関連: 移行手順は `docs/AUTH_MIGRATION.md`、リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`。
+関連: 移行手順は `docs/AUTH_MIGRATION.md`、リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`、認可仕様の網羅レビューは `docs/ACCESS_CONTROL_REVIEW.md`。
 
 ---
 

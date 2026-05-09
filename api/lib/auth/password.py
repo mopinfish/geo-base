@@ -6,7 +6,6 @@ from passlib.hash import bcrypt
 
 from .errors import WeakPassword
 
-
 MIN_PASSWORD_LENGTH = 8
 BCRYPT_ROUNDS = 12
 

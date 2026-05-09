@@ -13,16 +13,22 @@
 from functools import lru_cache
 from typing import Annotated, Optional
 
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Header, HTTPException, status
 
-from .errors import (
-    AuthError, InvalidCredentials, RateLimited, UserNotFound,
-    UserAlreadyExists, InvalidToken, WeakPassword, ProviderError,
-)
-from .models import User, AuthResult, TokenPair
-from .provider import AuthProvider
+from .api_key_auth import API_KEY_PREFIX, log_api_key_request, validate_api_key
 from .context import AuthContext
-from .api_key_auth import validate_api_key, API_KEY_PREFIX, log_api_key_request
+from .errors import (
+    AuthError,
+    InvalidCredentials,
+    InvalidToken,
+    ProviderError,
+    RateLimited,
+    UserAlreadyExists,
+    UserNotFound,
+    WeakPassword,
+)
+from .models import AuthResult, TokenPair, User
+from .provider import AuthProvider
 
 
 @lru_cache(maxsize=1)

@@ -287,8 +287,12 @@ CREATE TABLE team_invitations (
 | Step 3.3-C | Shapefile/GeoPackageインポート | 📋 計画中 |
 | Step 3.3-D | タイルセット管理強化 | 📋 計画中 |
 
-> Step 3.3-A の詳細は `docs/AUTH_SETUP.md` / `docs/AUTH_MIGRATION.md` /
-> `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
+> Step 3.3-A の詳細は以下を参照:
+> - セットアップ: `docs/AUTH_SETUP.md`
+> - 移行手順: `docs/AUTH_MIGRATION.md`
+> - 手動 E2E チェック: `docs/AUTH_E2E_CHECKLIST.md`
+> - 認可仕様レビュー（2026-05-09 監査）: `docs/ACCESS_CONTROL_REVIEW.md`
+> - 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
 
 #### Step 3.3-A 完了サマリ（2026-05-08）
 

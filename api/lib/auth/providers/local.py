@@ -1,30 +1,32 @@
 """LocalAuthProvider - geo-base が users テーブルを所有し JWT を発行する実装。"""
 import asyncio
-import secrets
 import hashlib
 import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from lib.config import get_settings
 from lib.database import get_db_connection  # 既存の context manager
 
-from ..errors import (
-    AuthError, InvalidCredentials, RateLimited, UserAlreadyExists,
-    UserNotFound, InvalidToken, WeakPassword,
-)
-from ..models import User, AuthResult, TokenPair
-from ..provider import AuthProvider
-from ..jwt_utils import issue_access_token, decode_access_token, claims_to_user
-from ..password import hash_password, verify_password, check_password_policy
-from ..tokens import (
-    issue_refresh_token, verify_and_rotate_refresh_token,
-    revoke_refresh_token, revoke_all_user_tokens,
-)
-from ..rate_limit import check_login_rate_limit, record_login_attempt
 from ..email_backends import get_email_backend
 from ..email_backends.templates import render_password_reset_email
-
+from ..errors import (
+    InvalidCredentials,
+    InvalidToken,
+    UserAlreadyExists,
+    UserNotFound,
+)
+from ..jwt_utils import claims_to_user, decode_access_token, issue_access_token
+from ..models import AuthResult, TokenPair, User
+from ..password import check_password_policy, hash_password, verify_password
+from ..provider import AuthProvider
+from ..rate_limit import check_login_rate_limit, record_login_attempt
+from ..tokens import (
+    issue_refresh_token,
+    revoke_refresh_token,
+    verify_and_rotate_refresh_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +75,8 @@ class LocalAuthProvider(AuthProvider):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, email, name, role, app_metadata, user_metadata, email_verified_at, is_active
+                    """SELECT id, email, name, role, app_metadata, user_metadata,
+                              email_verified_at, is_active
                        FROM users WHERE id = %s""",
                     (user_id,),
                 )
@@ -125,7 +128,8 @@ class LocalAuthProvider(AuthProvider):
 
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, password_hash, name, role, app_metadata, user_metadata, email, email_verified_at
+                    """SELECT id, password_hash, name, role, app_metadata, user_metadata,
+                              email, email_verified_at
                        FROM users WHERE email = %s AND is_active = TRUE""",
                     (email.lower(),),
                 )
@@ -134,10 +138,15 @@ class LocalAuthProvider(AuthProvider):
             if row is None:
                 # タイミング攻撃対策: ユーザー不存在でも bcrypt 検証
                 verify_password(password, _DUMMY_HASH)
-                record_login_attempt(conn, email=email, success=False, ip=ip, user_agent=user_agent)
+                record_login_attempt(
+                    conn, email=email, success=False, ip=ip, user_agent=user_agent
+                )
                 raise InvalidCredentials("Invalid email or password")
 
-            user_id, password_hash, name, role, app_meta, user_meta, db_email, email_verified_at = row
+            (
+                user_id, password_hash, name, role,
+                app_meta, user_meta, db_email, email_verified_at,
+            ) = row
 
             if not verify_password(password, password_hash):
                 record_login_attempt(conn, email=email, success=False, ip=ip, user_agent=user_agent)
@@ -244,9 +253,11 @@ class LocalAuthProvider(AuthProvider):
 
                 cur.execute(
                     """INSERT INTO users
-                          (email, password_hash, name, email_verified_at, app_metadata, user_metadata)
+                          (email, password_hash, name, email_verified_at,
+                           app_metadata, user_metadata)
                        VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb)
-                       RETURNING id, email, name, role, app_metadata, user_metadata, email_verified_at""",
+                       RETURNING id, email, name, role, app_metadata,
+                                 user_metadata, email_verified_at""",
                     (
                         email_lower, password_hash_str, name,
                         datetime.now(timezone.utc) if email_verified else None,
@@ -301,12 +312,13 @@ class LocalAuthProvider(AuthProvider):
                     cur.execute(
                         f"""UPDATE users SET {', '.join(updates)}, updated_at = NOW()
                             WHERE id = %s
-                            RETURNING id, email, name, role, app_metadata, user_metadata, email_verified_at""",
+                            RETURNING id, email, name, role, app_metadata,
+                                      user_metadata, email_verified_at""",
                         tuple(params),
                     )
                 except Exception as e:
                     if "duplicate key" in str(e).lower() or "unique" in str(e).lower():
-                        raise UserAlreadyExists(f"Email already in use")
+                        raise UserAlreadyExists("Email already in use")
                     raise
                 row = cur.fetchone()
                 if not row:
@@ -350,7 +362,10 @@ class LocalAuthProvider(AuthProvider):
                 row = cur.fetchone()
 
             if row is None:
-                logger.info("Password reset requested for nonexistent email", extra={"email": email})
+                logger.info(
+                    "Password reset requested for nonexistent email",
+                    extra={"email": email},
+                )
                 return  # 情報漏洩防止: 何もしないが正常終了
 
             user_id, user_name = row
@@ -361,7 +376,8 @@ class LocalAuthProvider(AuthProvider):
 
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, ip_address)
+                    """INSERT INTO password_reset_tokens
+                          (user_id, token_hash, expires_at, ip_address)
                        VALUES (%s, %s, %s, %s)""",
                     (user_id, token_hash, expires_at, ip),
                 )
@@ -418,7 +434,8 @@ class LocalAuthProvider(AuthProvider):
                 )
                 # 全 refresh token 失効
                 cur.execute(
-                    """UPDATE refresh_tokens SET revoked_at = NOW(), revoked_reason = 'password_reset'
+                    """UPDATE refresh_tokens
+                          SET revoked_at = NOW(), revoked_reason = 'password_reset'
                        WHERE user_id = %s AND revoked_at IS NULL""",
                     (user_id,),
                 )

@@ -6,7 +6,6 @@ from typing import Optional
 
 from .errors import RateLimited
 
-
 MAX_FAILED_ATTEMPTS = 5
 WINDOW_MINUTES = 15
 

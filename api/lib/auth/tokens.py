@@ -4,14 +4,13 @@
 - トークンローテーション: 検証時に新トークン発行 + 旧トークン revoke
 - 再利用検知: revoked 済みトークンが再提示されたら、そのユーザーの全トークンを失効
 """
-import secrets
 import hashlib
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from .errors import InvalidToken
-
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,9 @@ def verify_and_rotate_refresh_token(
 
         if expires_at < datetime.now(timezone.utc):
             cur.execute(
-                "UPDATE refresh_tokens SET revoked_at = NOW(), revoked_reason = 'expired' WHERE id = %s",
+                """UPDATE refresh_tokens
+                      SET revoked_at = NOW(), revoked_reason = 'expired'
+                   WHERE id = %s""",
                 (token_id,),
             )
             conn.commit()

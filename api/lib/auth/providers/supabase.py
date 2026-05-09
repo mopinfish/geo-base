@@ -7,13 +7,15 @@ import httpx
 from lib.config import get_settings
 
 from ..errors import (
-    AuthError, InvalidCredentials, InvalidToken,
-    UserAlreadyExists, UserNotFound, ProviderError, WeakPassword,
+    InvalidCredentials,
+    InvalidToken,
+    ProviderError,
+    UserAlreadyExists,
+    UserNotFound,
 )
-from ..models import User, AuthResult, TokenPair
+from ..jwt_utils import claims_to_user, decode_access_token
+from ..models import AuthResult, TokenPair, User
 from ..provider import AuthProvider
-from ..jwt_utils import decode_access_token, claims_to_user
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,9 @@ class SupabaseAuthProvider(AuthProvider):
     async def _request(self, method: str, path: str, headers: dict, **kwargs) -> httpx.Response:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             try:
-                return await client.request(method, f"{self._base}{path}", headers=headers, **kwargs)
+                return await client.request(
+                    method, f"{self._base}{path}", headers=headers, **kwargs
+                )
             except httpx.HTTPError as e:
                 raise ProviderError(f"Supabase request failed: {e}")
 
@@ -181,7 +185,12 @@ class SupabaseAuthProvider(AuthProvider):
                 raise UserNotFound(user_id)
             return user
 
-        res = await self._request("PUT", f"/auth/v1/admin/users/{user_id}", self._admin_headers(), json=body)
+        res = await self._request(
+            "PUT",
+            f"/auth/v1/admin/users/{user_id}",
+            self._admin_headers(),
+            json=body,
+        )
         if res.status_code == 404:
             raise UserNotFound(user_id)
         if res.status_code >= 500:

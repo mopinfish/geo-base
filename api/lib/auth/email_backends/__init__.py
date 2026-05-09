@@ -40,8 +40,8 @@ def get_email_backend() -> EmailBackend:
 
 
 # 実装を re-export
-from .null_backend import NullEmailBackend  # noqa: E402
 from .console_backend import ConsoleEmailBackend  # noqa: E402
+from .null_backend import NullEmailBackend  # noqa: E402
 from .smtp_backend import SMTPEmailBackend  # noqa: E402
 
 __all__ = [

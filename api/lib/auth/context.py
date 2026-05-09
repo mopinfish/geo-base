@@ -1,9 +1,9 @@
 """AuthContext - JWT ユーザーと API キーを統一的に扱うコンテキスト。"""
 from typing import Optional
+
 from pydantic import BaseModel
 
 from .models import User
-
 
 # スコープ階層（数値が大きいほど強い権限）
 _SCOPE_HIERARCHY = {"read": 1, "write": 2, "delete": 3, "admin": 4}
@@ -15,8 +15,9 @@ class AuthContext(BaseModel):
     user_id: str
     email: Optional[str] = None
     role: Optional[str] = None
-    team_id: Optional[str] = None  # API キーが特定のチームに紐付いている場合のみセット。
-                                    # JWT ユーザーは常に None（所属チームは team_members を別途参照）
+    # API キーが特定のチームに紐付いている場合のみセット。
+    # JWT ユーザーは常に None（所属チームは team_members を別途参照）。
+    team_id: Optional[str] = None
     scopes: list[str] = []
     is_api_key: bool = False
     api_key_id: Optional[str] = None

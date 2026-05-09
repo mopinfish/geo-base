@@ -12,9 +12,8 @@ import asyncio
 import getpass
 import json
 import sys
-from typing import Optional
 
-from .errors import AuthError, UserAlreadyExists, WeakPassword
+from .errors import UserAlreadyExists, WeakPassword
 
 
 async def cmd_create_admin(args):
@@ -48,8 +47,9 @@ async def cmd_create_admin(args):
 
 
 async def cmd_revoke_user_tokens(args):
-    from .tokens import revoke_all_user_tokens
     from lib.database import get_db_connection
+
+    from .tokens import revoke_all_user_tokens
 
     with get_db_connection() as conn:
         count = revoke_all_user_tokens(conn, args.user_id, reason="admin_revocation")
@@ -73,7 +73,7 @@ async def cmd_cleanup_expired(args):
             inv = cur.fetchone()[0]
         conn.commit()
 
-    print(f"OK Cleanup complete:")
+    print("OK Cleanup complete:")
     print(f"   Refresh tokens removed:        {rt}")
     print(f"   Login attempts removed:        {la}")
     print(f"   Password reset tokens removed: {pr}")

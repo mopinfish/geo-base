@@ -1,5 +1,6 @@
 """共通モデル定義。プロバイダ非依存。"""
-from typing import Optional, Any
+from typing import Any, Optional
+
 from pydantic import BaseModel
 
 

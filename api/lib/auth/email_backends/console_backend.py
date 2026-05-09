@@ -1,7 +1,7 @@
 """ローカル開発用バックエンド。標準出力 + logger.info に出力。"""
 import logging
-from . import EmailBackend
 
+from . import EmailBackend
 
 logger = logging.getLogger(__name__)
 

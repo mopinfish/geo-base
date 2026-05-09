@@ -7,17 +7,16 @@ from typing import Any
 
 import jwt as pyjwt
 from jwt.exceptions import (
-    InvalidTokenError,
+    DecodeError,
     ExpiredSignatureError,
+    InvalidAlgorithmError,
     InvalidAudienceError,
     InvalidSignatureError,
-    DecodeError,
-    InvalidAlgorithmError,
+    InvalidTokenError,
 )
 
 from .errors import InvalidToken
 from .models import User
-
 
 ALGORITHM = "HS256"
 
