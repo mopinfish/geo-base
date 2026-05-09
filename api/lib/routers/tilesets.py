@@ -15,7 +15,6 @@ from lib.auth import (
     User,
     get_current_user,
     require_auth,
-    check_tileset_access,
     AuthContext,
     get_auth_context_optional,
     check_tileset_access_v2,

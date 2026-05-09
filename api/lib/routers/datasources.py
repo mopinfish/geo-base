@@ -10,7 +10,14 @@ from pydantic import BaseModel
 
 from lib.database import get_connection
 from lib.models.datasource import DatasourceType, StorageProvider, DatasourceCreate
-from lib.auth import User, get_current_user, require_auth, check_tileset_access
+from lib.auth import (
+    AuthContext,
+    User,
+    check_tileset_access_v2,
+    get_auth_context_optional,
+    get_current_user,
+    require_auth,
+)
 from lib.pmtiles import is_pmtiles_available, get_pmtiles_metadata
 from lib.raster_tiles import is_rasterio_available, get_cog_info
 from lib.storage import get_storage_client, validate_cog_file
@@ -191,12 +198,16 @@ def list_datasources(
 
 
 @router.get("/{datasource_id}")
-def get_datasource(
+async def get_datasource(
     datasource_id: str,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
-    """Get a specific datasource by ID."""
+    """Get a specific datasource by ID.
+
+    アクセス判定は v2（issue #51）— team_tilesets 経由のチーム共有読み取りも
+    許可される。
+    """
     try:
         with conn.cursor() as cur:
             # Try PMTiles first
@@ -213,14 +224,16 @@ def get_datasource(
                 (datasource_id,),
             )
             row = cur.fetchone()
-            
+
             if row:
-                is_public = row[15]
-                owner_user_id = str(row[16]) if row[16] else None
-                
-                # Check access
-                if not check_tileset_access(str(row[1]), is_public, owner_user_id, user):
-                    if not user:
+                tileset_for_access = {
+                    "id": row[1],
+                    "is_public": row[15],
+                    "user_id": row[16],
+                }
+
+                if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                    if auth is None:
                         raise HTTPException(
                             status_code=401,
                             detail="Authentication required to access this datasource",
@@ -249,9 +262,9 @@ def get_datasource(
                     "updated_at": row[13].isoformat() if row[13] else None,
                     "tileset_name": row[14],
                     "is_public": row[15],
-                    "user_id": owner_user_id,
+                    "user_id": str(row[16]) if row[16] else None,
                 }
-            
+
             # Try COG
             cur.execute(
                 """
@@ -269,12 +282,14 @@ def get_datasource(
             row = cur.fetchone()
             
             if row:
-                is_public = row[14]
-                owner_user_id = str(row[15]) if row[15] else None
-                
-                # Check access
-                if not check_tileset_access(str(row[1]), is_public, owner_user_id, user):
-                    if not user:
+                tileset_for_access = {
+                    "id": row[1],
+                    "is_public": row[14],
+                    "user_id": row[15],
+                }
+
+                if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                    if auth is None:
                         raise HTTPException(
                             status_code=401,
                             detail="Authentication required to access this datasource",
@@ -302,7 +317,7 @@ def get_datasource(
                     "updated_at": row[12].isoformat() if row[12] else None,
                     "tileset_name": row[13],
                     "is_public": row[14],
-                    "user_id": owner_user_id,
+                    "user_id": str(row[15]) if row[15] else None,
                 }
             
             raise HTTPException(status_code=404, detail="Datasource not found")
