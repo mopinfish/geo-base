@@ -330,22 +330,62 @@ def sample_bulk_features(sample_point, sample_polygon):
 # ============================================================================
 # Database Fixtures (for integration tests)
 # ============================================================================
+#
+# Tests that touch the database MUST connect via TEST_DATABASE_URL, never
+# DATABASE_URL. `clean_auth_tables` and the auth/team factories TRUNCATE rows,
+# so accidentally pointing them at the dev DB destroys local data (see issue
+# #47). The fixtures below enforce this by failing loudly when
+# TEST_DATABASE_URL is unset or equal to DATABASE_URL.
 
-@pytest.fixture
-def database_url():
-    """Get database URL from environment."""
-    url = os.environ.get("DATABASE_URL")
+def _db_name_only(url: str) -> str:
+    """DB 接続文字列から DB 名のみ抜き出す（資格情報の CI ログ漏洩防止）。"""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        return parsed.path.lstrip("/") or "<unknown>"
+    except Exception:
+        return "<unparsable>"
+
+
+@pytest.fixture(scope="session")
+def test_database_url():
+    """テスト用 DB の接続文字列を TEST_DATABASE_URL から取得する（session scope）。
+
+    未設定 or dev DB と同一の場合は pytest.fail で停止する（#47）。
+    Session scope にすることで、設定不備時に同一 fail メッセージが全テストに
+    対して繰り返し出るノイズを 1 回にまとめる。
+    """
+    url = os.environ.get("TEST_DATABASE_URL")
     if not url:
-        pytest.skip("DATABASE_URL not set")
+        pytest.fail(
+            "TEST_DATABASE_URL is not set. "
+            "DB を触るテストは専用のテスト DB に接続する必要があります（dev DB の TRUNCATE 事故防止）。"
+            "セットアップ手順: docs/AUTH_E2E_CHECKLIST.md / TESTING.md / api/.env.example",
+            pytrace=False,
+        )
+    dev_url = os.environ.get("DATABASE_URL")
+    if dev_url and url == dev_url:
+        pytest.fail(
+            f"TEST_DATABASE_URL must differ from DATABASE_URL "
+            f"(現在どちらも DB={_db_name_only(dev_url)} を指している)。"
+            "dev DB を破壊しないよう、別 DB（例: geo_base_test）を指定してください。",
+            pytrace=False,
+        )
     return url
 
 
 @pytest.fixture
-def db_connection(database_url):
+def database_url(test_database_url):
+    """後方互換: 既存テストが参照する fixture 名。test_database_url を返す。"""
+    return test_database_url
+
+
+@pytest.fixture
+def db_connection(test_database_url):
     """
     Create a database connection for testing.
 
-    Note: This fixture requires psycopg2 and a valid DATABASE_URL.
+    Note: This fixture requires psycopg2 and a valid TEST_DATABASE_URL.
     It creates a connection that is rolled back after each test.
     """
     try:
@@ -353,7 +393,7 @@ def db_connection(database_url):
     except ImportError:
         pytest.skip("psycopg2 not installed")
 
-    conn = psycopg2.connect(database_url)
+    conn = psycopg2.connect(test_database_url)
     conn.autocommit = False
 
     yield conn
@@ -364,19 +404,30 @@ def db_connection(database_url):
 
 
 @pytest.fixture
-def db_conn():
-    """テスト用 DB 接続。各テスト後に rollback。"""
+def db_conn(test_database_url, monkeypatch):
+    """テスト用 DB 接続。各テスト後に rollback。TEST_DATABASE_URL が必須。
+
+    `lib.database` の connection pool もテスト DB に向けるため、
+    DATABASE_URL を test_database_url に差し替え、settings cache を無効化する。
+    こうしないとアプリ層（`LocalAuthProvider` 等）が dev DB に接続してしまう。
+    """
     try:
         import psycopg2
     except ImportError:
         pytest.skip("psycopg2 not installed")
 
-    conn = psycopg2.connect(
-        os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/geo_base")
-    )
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    from lib.config import get_settings
+    from lib.database import close_pool
+    get_settings.cache_clear()
+    close_pool()
+
+    conn = psycopg2.connect(test_database_url)
     yield conn
     conn.rollback()
     conn.close()
+    close_pool()
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -440,8 +491,13 @@ def null_email_backend(monkeypatch):
 
 
 @pytest.fixture
-def local_auth_settings(monkeypatch):
-    """テスト用 local 認証設定オーバーライド。"""
+def local_auth_settings(monkeypatch, test_database_url):
+    """テスト用 local 認証設定オーバーライド。
+
+    DATABASE_URL を TEST_DATABASE_URL に差し替えるので、ファクトリ経由で
+    `lib.database` の connection pool が test DB に向く。dev DB を破壊しない
+    ための要請（issue #47）。
+    """
     monkeypatch.setenv("AUTH_PROVIDER", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret-not-for-production-" + "x" * 40)
     monkeypatch.setenv("JWT_AUDIENCE", "authenticated")
@@ -449,17 +505,21 @@ def local_auth_settings(monkeypatch):
     monkeypatch.setenv("EMAIL_BACKEND", "null")
     monkeypatch.setenv("INVITATION_BASE_URL", "http://testserver")
     monkeypatch.setenv("CORS_ORIGINS", '["http://testserver"]')
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
 
     from lib.config import get_settings
     from lib.auth import get_auth_provider
     from lib.auth.email_backends import get_email_backend
+    from lib.database import close_pool
     get_settings.cache_clear()
     get_auth_provider.cache_clear()
     get_email_backend.cache_clear()
+    close_pool()
     yield
     get_settings.cache_clear()
     get_auth_provider.cache_clear()
     get_email_backend.cache_clear()
+    close_pool()
 
 
 @pytest.fixture

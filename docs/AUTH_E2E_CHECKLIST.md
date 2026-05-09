@@ -12,14 +12,35 @@ Phase 3 / Step 3.3-A（プラガブル認証）のリリース前に手動で実
 
 ---
 
-## ⚠️ 重要: pytest との DB 共有に注意
+## テスト DB（geo_base_test）
 
-`api/tests/conftest.py` のフィクスチャは **`users` / `refresh_tokens` / `auth_login_attempts` / `password_reset_tokens` を TRUNCATE** します。E2E 中に `pytest tests/` を同じ `DATABASE_URL`（ローカル PostGIS）で実行すると **作成済みの管理者アカウントが消えます**。E2E が中断され、ログイン後の操作で 401/404（UserNotFound）が発生する原因になります。
+issue #47 の対応で、**pytest は専用のテスト DB に接続するように分離されました**。`conftest.py` のフィクスチャは `TEST_DATABASE_URL` を必須とし、未設定 or `DATABASE_URL` と同一の場合は `pytest.fail` で停止します。これにより、E2E 中に `pytest tests/` を流しても dev DB（`geo_base`）は破壊されません。
 
-**対処:**
-- E2E 実行中は `pytest` を走らせない、または別の DB を使う
-- ローカルで pytest を流したくなったら、E2E 終了後に admin ユーザーを再作成する: `uv run python -m lib.auth.cli create-admin --email admin@example.com`
-- 根本対応（テスト用 DB 分離）は今後の改善ポイント
+### セットアップ
+
+`docker compose up -d` 初回起動時、`docker/postgis-init/99_create_test_db.sh` が `geo_base_test` を自動作成しスキーマを clone します。
+
+既存の volume を維持したまま手動で作る場合（リポジトリルートから実行）:
+
+```bash
+docker compose -f docker/docker-compose.yml exec postgis \
+  psql -U postgres -c "CREATE DATABASE geo_base_test;"
+docker compose -f docker/docker-compose.yml exec postgis bash -c \
+  'pg_dump -U postgres --schema-only --no-owner --no-acl geo_base \
+     | psql -U postgres -d geo_base_test'
+```
+
+> `cd docker` してから実行する場合は `-f docker/docker-compose.yml` は省略可。
+
+### 実行
+
+```bash
+cd api
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/geo_base_test
+uv run pytest tests/ -q
+```
+
+`api/.env.example` にも `TEST_DATABASE_URL` のサンプルを追加してあります。CI を導入する際は CI 環境で必ず `TEST_DATABASE_URL` をセットしてください（dev DB と同一値だと `pytest.fail` で落ちます）。
 
 ## 注意: テストアカウントの email
 
@@ -171,3 +192,4 @@ local / supabase 両モードで共通に確認したい横断項目:
 | 日付 | 変更内容 |
 |---|---|
 | 2026-05-08 | 初版作成（Phase 3 / Step 3.3-A 完了に伴う E2E 手順を計画書から独立ファイル化） |
+| 2026-05-10 | issue #47: テスト DB 分離（`TEST_DATABASE_URL` 必須化）に伴い「pytest との DB 共有に注意」セクションを「テスト DB（geo_base_test）」に置き換え |

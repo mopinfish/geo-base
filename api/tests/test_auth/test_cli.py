@@ -1,7 +1,10 @@
 """Tests for auth CLI."""
 import subprocess
 import os
-import pytest
+from pathlib import Path
+
+# api/tests/test_auth/test_cli.py → api/tests/test_auth → api/tests → api
+API_DIR = Path(__file__).resolve().parents[2]
 
 
 class TestCli:
@@ -13,22 +16,22 @@ class TestCli:
         })
         result = subprocess.run(
             ["uv", "run", "python", "-m", "lib.auth.cli", "--help"],
-            cwd="/Users/otsuka/ws/projects/geofirm/geo-base/api",
+            cwd=str(API_DIR),
             env=env, capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0
         assert "create-admin" in result.stdout
 
-    def test_list_users_empty(self, db_conn, clean_auth_tables):
+    def test_list_users_empty(self, db_conn, clean_auth_tables, test_database_url):
         env = os.environ.copy()
         env.update({
             "AUTH_PROVIDER": "local",
             "JWT_SECRET": "x" * 64,
-            "DATABASE_URL": "postgresql://postgres:postgres@127.0.0.1:15432/geo_base",
+            "DATABASE_URL": test_database_url,
         })
         result = subprocess.run(
             ["uv", "run", "python", "-m", "lib.auth.cli", "list-users", "--json"],
-            cwd="/Users/otsuka/ws/projects/geofirm/geo-base/api",
+            cwd=str(API_DIR),
             env=env, capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
