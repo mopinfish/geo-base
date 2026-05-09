@@ -23,6 +23,21 @@ export const AUTH_ONLY_PATHS = [
   "/password-reset/confirm",
 ] as const;
 
+/**
+ * Next.js middleware の `config.matcher` パターン。
+ *
+ * 除外する（middleware を経由させない）対象:
+ * - `/api` 単体および `/api/...` 配下（FastAPI に直接または rewrites 経由で転送）
+ *   `/api-keys` 等の **`/api` で始まるが API ではない UI ルート** を誤って除外
+ *   しないよう `api(?:/|$)` で厳密マッチ
+ * - `/_next/...` 配下すべて（HMR / static / image / data 等）
+ * - 拡張子付きパス（favicon.ico / robots.txt / public 配下の画像など）
+ *
+ * 上記以外は middleware を通り、`decideMiddleware` で認証判定される。
+ */
+export const MIDDLEWARE_MATCHER =
+  "/((?!api(?:/|$)|_next/|.*\\.\\w+$).*)";
+
 export type MiddlewareDecision =
   | { kind: "next" }
   | { kind: "redirect-login"; next: string }

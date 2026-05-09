@@ -27,11 +27,14 @@ export function middleware(request: NextRequest) {
   }
 }
 
-// matcher から /api/ を除外する。
-// authClient (`app/src/lib/auth/client.ts`) は NEXT_PUBLIC_API_URL 未設定時に
-// 相対パス `/api/auth/...` を叩く（dev では next.config.ts の rewrites で
-// FastAPI に転送される）。middleware が /api/* にマッチすると、未ログイン状態の
-// /api/auth/login すら /login にリダイレクトされてログインフローが壊れるため。
+// matcher パターン（仕様は middleware-decisions.ts の `MIDDLEWARE_MATCHER` を参照）。
+//
+// Next.js (Turbopack) は `config.matcher` を **コンパイル時に静的解析** するため、
+// 別ファイルの定数を import しても受け付けず、リテラル文字列を直接渡す必要がある。
+// そのため `middleware-decisions.ts` の `MIDDLEWARE_MATCHER` と本ファイルのリテラル
+// は **同一文字列** に保つ必要があり、テスト
+// （`middleware-decisions.test.ts` の "matcher と middleware.ts のリテラル同期"）
+// で同期を担保している。
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api(?:/|$)|_next/|.*\\.\\w+$).*)"],
 };
