@@ -12,6 +12,8 @@ import {
   Menu,
   X,
   Loader2,
+  Users,
+  KeyRound,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,16 @@ const navItems: NavItem[] = [
     title: "データソース",
     href: "/datasources",
     icon: Database,
+  },
+  {
+    title: "チーム",
+    href: "/teams",
+    icon: Users,
+  },
+  {
+    title: "API キー",
+    href: "/api-keys",
+    icon: KeyRound,
   },
 ];
 
