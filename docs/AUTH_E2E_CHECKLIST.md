@@ -12,6 +12,15 @@ Phase 3 / Step 3.3-A（プラガブル認証）のリリース前に手動で実
 
 ---
 
+## ⚠️ 重要: pytest との DB 共有に注意
+
+`api/tests/conftest.py` のフィクスチャは **`users` / `refresh_tokens` / `auth_login_attempts` / `password_reset_tokens` を TRUNCATE** します。E2E 中に `pytest tests/` を同じ `DATABASE_URL`（ローカル PostGIS）で実行すると **作成済みの管理者アカウントが消えます**。E2E が中断され、ログイン後の操作で 401/404（UserNotFound）が発生する原因になります。
+
+**対処:**
+- E2E 実行中は `pytest` を走らせない、または別の DB を使う
+- ローカルで pytest を流したくなったら、E2E 終了後に admin ユーザーを再作成する: `uv run python -m lib.auth.cli create-admin --email admin@example.com`
+- 根本対応（テスト用 DB 分離）は今後の改善ポイント
+
 ## 注意: テストアカウントの email
 
 `*.test` / `*.localhost` / `*.invalid` などの **RFC 2606 で予約された TLD** は API の `EmailStr` バリデーションに弾かれます（`email-validator` パッケージの仕様）。
