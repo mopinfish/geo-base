@@ -51,7 +51,10 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         httponly=True,
         secure=settings.cookie_secure,
         samesite=settings.cookie_samesite,
-        path="/api/auth",
+        # Path="/" にすることで Admin UI 側 middleware が Cookie の存在を
+        # 検査できる。トークンは HttpOnly なので JS から読めず、
+        # 認証時のみ /api/auth/refresh で実際の検証が走るため安全性は維持。
+        path="/",
         domain=settings.cookie_domain or None,
     )
 
@@ -60,7 +63,7 @@ def _clear_refresh_cookie(response: Response) -> None:
     settings = get_settings()
     response.delete_cookie(
         key=REFRESH_COOKIE_NAME,
-        path="/api/auth",
+        path="/",
         domain=settings.cookie_domain or None,
     )
 
