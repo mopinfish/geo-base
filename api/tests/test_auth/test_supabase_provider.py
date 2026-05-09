@@ -18,6 +18,9 @@ def provider(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", SUPABASE_URL)
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret-" + "x" * 50)
+    # SupabaseAuthProvider.verify_access_token はローカル JWT 検証のため
+    # JWT_SECRET も同じ値に揃える必要がある（api/.env の上書きを保証）。
+    monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-" + "x" * 50)
     monkeypatch.setenv("JWT_AUDIENCE", "authenticated")
     from lib.config import get_settings
     get_settings.cache_clear()
