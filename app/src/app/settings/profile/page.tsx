@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth/context";
 import { apiFetch } from "@/lib/api";
 import { AdminLayout } from "@/components/layout";
+import { SettingsNav } from "@/components/settings/settings-nav";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,9 +70,11 @@ export default function ProfileSettingsPage() {
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">プロフィール設定</h1>
-          <p className="text-muted-foreground">アカウント情報の確認と編集</p>
+          <h1 className="text-3xl font-bold">設定</h1>
+          <p className="text-muted-foreground">アカウントとアプリケーションの設定</p>
         </div>
+
+        <SettingsNav />
 
         <Card className="max-w-2xl">
           <CardHeader>
