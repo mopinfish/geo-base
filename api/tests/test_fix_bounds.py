@@ -2,7 +2,7 @@
 Tests for fix_bounds.py script.
 
 This module tests the validation and data processing functions in scripts/fix_bounds.py.
-Note: Database-dependent tests require DATABASE_URL environment variable.
+Note: Database-dependent tests require TEST_DATABASE_URL environment variable.
 """
 
 import pytest
@@ -304,7 +304,7 @@ class TestScanReport:
 class TestDatabaseIntegration:
     """Integration tests requiring database connection."""
     
-    @pytest.mark.skip(reason="Requires DATABASE_URL")
+    @pytest.mark.skip(reason="Requires TEST_DATABASE_URL")
     def test_scan_and_fix_dry_run(self, database_url):
         """Test scanning tilesets in dry-run mode."""
         from fix_bounds import scan_and_fix

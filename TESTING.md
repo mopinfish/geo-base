@@ -29,6 +29,20 @@ geo-base/
 
 ## 1. ユニットテストの実行
 
+### 1.0 APIサーバーのテスト
+
+API テストは **専用のテスト DB（`geo_base_test`）** に接続するため、`TEST_DATABASE_URL` が必須です（issue #47）。未設定 / `DATABASE_URL` と同一だと DB 系テストは `pytest.fail` で停止します。
+
+```fish
+cd api
+uv sync --extra dev
+
+# `docker compose up -d` 初回起動で geo_base_test は自動作成される。
+# 既存 volume の場合の手動セットアップ手順は docs/AUTH_E2E_CHECKLIST.md 参照。
+set -x TEST_DATABASE_URL postgresql://postgres:postgres@localhost:5432/geo_base_test
+uv run pytest tests/ -q
+```
+
 ### 1.1 MCPサーバーのテスト
 
 ```fish
