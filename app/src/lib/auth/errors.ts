@@ -10,11 +10,35 @@ export class UnauthorizedError extends AuthApiError {}
 export class WeakPasswordError extends AuthApiError {}
 export class UserAlreadyExistsError extends AuthApiError {}
 
+function normalizeDetail(raw: unknown, fallback: string): string {
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) {
+    // FastAPI/Pydantic の 422 は [{type, loc, msg, input, ctx}, ...] という配列
+    const parts = raw
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const obj = item as Record<string, unknown>;
+          const loc = Array.isArray(obj.loc) ? obj.loc.join(".") : "";
+          const msg = typeof obj.msg === "string" ? obj.msg : "";
+          return loc && msg ? `${loc}: ${msg}` : msg || JSON.stringify(item);
+        }
+        return String(item);
+      })
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join("; ") : fallback;
+  }
+  if (raw && typeof raw === "object") {
+    return JSON.stringify(raw);
+  }
+  return fallback;
+}
+
 export async function parseAuthError(response: Response): Promise<AuthApiError> {
   let detail = "Authentication error";
   try {
     const data = await response.json();
-    detail = data.detail || detail;
+    detail = normalizeDetail(data?.detail, detail);
   } catch {
     // ignore
   }

@@ -12,6 +12,15 @@ Phase 3 / Step 3.3-A（プラガブル認証）のリリース前に手動で実
 
 ---
 
+## 注意: テストアカウントの email
+
+`*.test` / `*.localhost` / `*.invalid` などの **RFC 2606 で予約された TLD** は API の `EmailStr` バリデーションに弾かれます（`email-validator` パッケージの仕様）。
+
+テスト用には以下のように **実在する TLD** を使ってください:
+- ✅ `admin@example.com`、`admin@example.org`（RFC 2606 で documentation 用に予約された **第 2 階層**ドメイン、TLD は `.com` / `.org`）
+- ✅ `admin@geo-base.dev` 等の自前ドメイン
+- ❌ `admin@local.test`、`admin@example.test`、`admin@foo.localhost`
+
 ## 前提条件
 
 - Docker Desktop 起動済み
@@ -46,7 +55,7 @@ CORS_ORIGINS=["http://localhost:3000"]
 EOF
 
 # 3. 初期管理者を作成（パスワード対話入力: 例 TestPass123）
-uv run python -m lib.auth.cli create-admin --email admin@local.test
+uv run python -m lib.auth.cli create-admin --email admin@example.com
 ```
 
 ### A-2. サーバ起動
@@ -67,12 +76,12 @@ npm run dev
 
 ### A-3. チェック項目
 
-- [ ] **A-3-1 ログイン**: `/login` で `admin@local.test` / `TestPass123` でログイン成功 → `/` にリダイレクト
+- [ ] **A-3-1 ログイン**: `/login` で `admin@example.com` / `TestPass123` でログイン成功 → `/` にリダイレクト
 - [ ] **A-3-2 認証保護ルート表示**: `/tilesets` が表示される（未ログインだと `/login?next=/tilesets` にリダイレクトされる）
 - [ ] **A-3-3 プロフィール更新**: `/settings/profile` で名前を変更 → 「更新しました」表示 → 再読込しても新しい名前が表示
 - [ ] **A-3-4 パスワード変更**: `/settings/password` で現在 / 新パスワードを入力 → 成功時に **自動ログアウトされて `/login?password_changed=1` へ遷移**
 - [ ] **A-3-5 旧パスワードでログイン失敗 → 新で成功**: A-3-4 直後に旧パスワードでログイン失敗、新パスワードで成功することを確認
-- [ ] **A-3-6 チーム作成 + 招待発行**: 適当なチームを作成 → メンバー招待 (`invitee@local.test` 等) を発行 → **API ターミナルに招待メール内容（リンク含む）が `console` バックエンドで出力される** ことを確認
+- [ ] **A-3-6 チーム作成 + 招待発行**: 適当なチームを作成 → メンバー招待 (`invitee@example.com` 等) を発行 → **API ターミナルに招待メール内容（リンク含む）が `console` バックエンドで出力される** ことを確認
 - [ ] **A-3-7 招待受諾フロー**: 招待リンクをコピー → 別ブラウザ（プライベートウィンドウ可）で開く → `/accept-invitation?token=...` 画面 → サインアップ（パスワード設定） → 自動ログイン → チームメンバーに追加されている
 - [ ] **A-3-8 パスワードリセット要求**: `/password-reset/request` でメールアドレス入力 → 送信後の確認画面表示 → API ターミナルにリセットリンクが出力される
 - [ ] **A-3-9 パスワードリセット完了**: リセットリンク経由で `/password-reset/confirm?token=...` → 新パスワード設定 → `/login?reset=success` にリダイレクト → 旧パスワードでログイン失敗、新パスワードで成功
