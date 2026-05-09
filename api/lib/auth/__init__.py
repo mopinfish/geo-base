@@ -9,6 +9,8 @@
 - verify_jwt_token: 後方互換用エイリアス
 - extract_token_from_header: 既存ヘルパ
 - check_tileset_access, get_tileset_with_access_check, is_auth_configured: 既存タイル系認可
+- check_tileset_access_v2: タイルセット読み取り認可（ctx ベース）
+- check_tileset_write_access_v2: タイルセット書き込み認可（ctx ベース、issue #49）
 """
 from functools import lru_cache
 from typing import Annotated, Optional
@@ -282,6 +284,128 @@ def _user_has_team_access(conn, user_id: str, tileset_id: str) -> bool:
         return False
 
 
+# ============================================================================
+# Write access (issue #49 / ACCESS_CONTROL_REVIEW C-1)
+# ============================================================================
+#
+# update / delete などの書き込み系操作は、個人タイルセットの所有者だけでなく、
+# `team_tilesets` 経由で共有されたタイルセットに対する team_member も
+# permission_level に応じて許可する必要がある。判定ロジックは DB 側の
+# `can_user_perform_action()` SQL 関数に集約済み（docker/postgis-init/
+# 05_teams_schema.sql L195-217）なので、JWT ユーザー経路ではそれに委譲する。
+# API キー経路は team_id ベースで team_tilesets.permission_level を直接見る。
+
+# action 名 → 必要な scope
+_ACTION_REQUIRED_SCOPE = {
+    "read": "read",
+    "create": "write",
+    "update": "write",
+    "delete": "delete",
+}
+
+
+async def check_tileset_write_access_v2(
+    conn,
+    tileset: dict,
+    ctx: Optional["AuthContext"],
+    required_action: str,
+) -> bool:
+    """タイルセット書き込み認可判定。
+
+    ルール:
+    1. 認証なし → 不可
+    2. 必要な scope が不足 → 不可（API キー想定）
+    3. 個人タイルセット所有者（tileset.user_id == ctx.user_id）→ 常に可
+    4. JWT ユーザー: `can_user_perform_action(user_id, tileset_id, action)`
+       SQL 関数で team_member.role と team_tilesets.permission_level を
+       考慮した判定を行う
+    5. API キー: ctx.team_id が共有先 team の場合のみ、team_tilesets の
+       permission_level が action に対して十分か判定（team_role の継承は
+       適用しない — API キーは team の "代理" だが特定 user の権限を継承
+       しないため）
+
+    Args:
+        required_action: "update" or "delete"（"create" / "read" も受け付けるが、
+            このヘルパは書き込み用途を想定）
+    """
+    import asyncio
+
+    if ctx is None:
+        return False
+
+    required_scope = _ACTION_REQUIRED_SCOPE.get(required_action, required_action)
+    if not ctx.has_scope(required_scope):
+        return False
+
+    owner_id = tileset.get("user_id")
+    if owner_id and ctx.user_id == str(owner_id):
+        return True
+
+    tileset_id = str(tileset["id"])
+
+    if ctx.is_api_key:
+        if ctx.team_id is None:
+            return False
+        return await asyncio.to_thread(
+            _team_permission_allows, conn, ctx.team_id, tileset_id, required_action
+        )
+
+    return await asyncio.to_thread(
+        _user_can_perform_action, conn, ctx.user_id, tileset_id, required_action
+    )
+
+
+def _user_can_perform_action(
+    conn, user_id: str, tileset_id: str, action: str
+) -> bool:
+    """`can_user_perform_action()` SQL 関数を呼び出す（JWT ユーザー用）。"""
+    import psycopg2
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT can_user_perform_action(%s::uuid, %s::uuid, %s)",
+                (user_id, tileset_id, action),
+            )
+            row = cur.fetchone()
+            return bool(row[0]) if row else False
+    except psycopg2.errors.InvalidTextRepresentation:
+        # 不正な UUID 形式
+        conn.rollback()
+        return False
+
+
+def _team_permission_allows(
+    conn, team_id: str, tileset_id: str, action: str
+) -> bool:
+    """team_tilesets.permission_level だけで action 可否を判定（API キー用）。
+
+    team_role の継承（owner→admin 等）は適用しない。team_tilesets に紐付け
+    が無ければ False。
+    """
+    import psycopg2
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT permission_level FROM team_tilesets
+                  WHERE team_id = %s AND tileset_id = %s LIMIT 1""",
+                (team_id, tileset_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                return False
+            level = row[0]
+            if action == "read":
+                return level in ("read", "write", "admin")
+            if action in ("create", "update"):
+                return level in ("write", "admin")
+            if action == "delete":
+                return level == "admin"
+            return False
+    except psycopg2.errors.InvalidTextRepresentation:
+        conn.rollback()
+        return False
+
+
 __all__ = [
     # Models
     "User", "AuthResult", "TokenPair",
@@ -301,4 +425,6 @@ __all__ = [
     "get_auth_context_optional", "require_auth_context",
     # NEW (Task 3.3): team-based tileset authorization
     "check_tileset_access_v2",
+    # NEW (issue #49 / C-1): team-based tileset write authorization
+    "check_tileset_write_access_v2",
 ]

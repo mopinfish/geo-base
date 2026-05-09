@@ -19,6 +19,7 @@ from lib.auth import (
     AuthContext,
     get_auth_context_optional,
     check_tileset_access_v2,
+    check_tileset_write_access_v2,
 )
 from lib.tiles import generate_tilejson
 from lib.pmtiles import generate_pmtiles_tilejson
@@ -595,36 +596,42 @@ def create_tileset(
 
 
 @router.post("/{tileset_id}/calculate-bounds")
-def calculate_tileset_bounds(
+async def calculate_tileset_bounds(
     tileset_id: str,
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
 ):
     """
     Calculate and update tileset bounds from its features.
-    
+
     This endpoint calculates the bounding box from all features in the tileset
     and updates the tileset's bounds and center fields.
-    
+
     Useful after bulk importing GeoJSON features.
-    
-    Requires authentication and ownership of the tileset.
+
+    所有者本人または team_tilesets で write 以上の permission_level を持つ
+    チームメンバーが実行可能（issue #49）。
     """
     try:
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id, type FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this tileset")
-            
+
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            ctx = AuthContext.from_jwt_user(user)
+            if not await check_tileset_write_access_v2(
+                conn, tileset_for_access, ctx, "update"
+            ):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to update this tileset"
+                )
+
             tileset_type = row[2]
             
             # Only calculate bounds for vector tilesets (which have features)
@@ -701,7 +708,7 @@ def calculate_tileset_bounds(
 
 
 @router.patch("/{tileset_id}")
-def update_tileset(
+async def update_tileset(
     tileset_id: str,
     tileset: TilesetUpdate,
     user: User = Depends(require_auth),
@@ -709,24 +716,30 @@ def update_tileset(
 ):
     """
     Update an existing tileset.
-    
-    Requires authentication and ownership of the tileset.
+
+    所有者本人または team_tilesets で write 以上の permission_level を持つ
+    チームメンバーが実行可能（issue #49）。
     """
     try:
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this tileset")
-            
+
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            ctx = AuthContext.from_jwt_user(user)
+            if not await check_tileset_write_access_v2(
+                conn, tileset_for_access, ctx, "update"
+            ):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to update this tileset"
+                )
+
             # Build update query dynamically
             updates = []
             params = []
@@ -820,31 +833,38 @@ def update_tileset(
 
 
 @router.delete("/{tileset_id}", status_code=204)
-def delete_tileset(
+async def delete_tileset(
     tileset_id: str,
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
 ):
     """
     Delete a tileset and all associated features.
-    
-    Requires authentication and ownership of the tileset.
+
+    所有者本人または team_tilesets で admin permission_level を持つ
+    チームメンバー（既定では team owner / administrator）が実行可能
+    （issue #49）。
     """
     try:
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to delete this tileset")
-            
+
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            ctx = AuthContext.from_jwt_user(user)
+            if not await check_tileset_write_access_v2(
+                conn, tileset_for_access, ctx, "delete"
+            ):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to delete this tileset"
+                )
+
             # Delete tileset (cascades to features due to FK constraint)
             cur.execute("DELETE FROM tilesets WHERE id = %s", (tileset_id,))
             conn.commit()
