@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/contexts/auth-context";
+import { AuthProvider } from "@/lib/auth/context";
 
 export const metadata: Metadata = {
   title: "geo-base Admin",

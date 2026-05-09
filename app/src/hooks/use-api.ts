@@ -1,58 +1,34 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth/client";
 
 /**
  * 認証付きAPIクライアントを提供するフック
- * 
- * Supabaseのセッションからアクセストークンを取得し、
+ *
+ * AuthClient のセッションからアクセストークンを取得し、
  * APIクライアントに設定する
- * 
+ *
  * @returns { api, isReady } - APIクライアントと準備完了状態
  */
 export function useApi() {
   const [isReady, setIsReady] = useState(false);
 
-  const setupToken = useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.access_token) {
-        api.setToken(session.access_token);
-        console.log("API token set successfully"); // デバッグ
-      } else {
-        api.setToken(null);
-        console.log("No session, token cleared"); // デバッグ
-      }
-    } catch (error) {
-      console.error("Error setting up token:", error);
-      api.setToken(null);
-    } finally {
-      setIsReady(true);
-    }
-  }, []);
-
   useEffect(() => {
-    // 初期設定
-    setupToken();
+    // 初期トークン設定
+    const token = authClient.getAccessToken();
+    api.setToken(token);
 
-    // 認証状態の変更を監視
-    const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (session?.access_token) {
-          api.setToken(session.access_token);
-        } else {
-          api.setToken(null);
-        }
-      }
-    );
+    // 認証状態の変更を購読
+    const unsubscribe = authClient.subscribe(() => {
+      const newToken = authClient.getAccessToken();
+      api.setToken(newToken);
+      setIsReady(true);
+    });
 
-    return () => subscription.unsubscribe();
-  }, [setupToken]);
+    return unsubscribe;
+  }, []);
 
   return { api, isReady };
 }
@@ -62,10 +38,8 @@ export function useApi() {
  * Server Actionsや非コンポーネントで使用
  */
 export async function setupApiToken(): Promise<void> {
-  const supabase = createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  if (session?.access_token) {
-    api.setToken(session.access_token);
+  const token = authClient.getAccessToken();
+  if (token) {
+    api.setToken(token);
   }
 }

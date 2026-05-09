@@ -344,7 +344,7 @@ def database_url():
 def db_connection(database_url):
     """
     Create a database connection for testing.
-    
+
     Note: This fixture requires psycopg2 and a valid DATABASE_URL.
     It creates a connection that is rolled back after each test.
     """
@@ -352,15 +352,42 @@ def db_connection(database_url):
         import psycopg2
     except ImportError:
         pytest.skip("psycopg2 not installed")
-    
+
     conn = psycopg2.connect(database_url)
     conn.autocommit = False
-    
+
     yield conn
-    
+
     # Rollback any changes made during the test
     conn.rollback()
     conn.close()
+
+
+@pytest.fixture
+def db_conn():
+    """テスト用 DB 接続。各テスト後に rollback。"""
+    try:
+        import psycopg2
+    except ImportError:
+        pytest.skip("psycopg2 not installed")
+
+    conn = psycopg2.connect(
+        os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/geo_base")
+    )
+    yield conn
+    conn.rollback()
+    conn.close()
+
+
+@pytest.fixture
+def clean_auth_tables(db_conn):
+    """auth 関連テーブルをクリーンアップ"""
+    with db_conn.cursor() as cur:
+        cur.execute(
+            "TRUNCATE refresh_tokens, auth_login_attempts, password_reset_tokens, users CASCADE"
+        )
+    db_conn.commit()
+    yield
 
 
 # ============================================================================
@@ -396,3 +423,142 @@ def assert_valid_bounds(bounds: list) -> None:
     assert -90 <= south <= 90, "South must be in valid range"
     assert -90 <= north <= 90, "North must be in valid range"
     assert south <= north, "South must be <= North"
+
+
+# ============================================================================
+# Auth / Team / API Key / Tileset Fixtures (pluggable auth Phase 4)
+# ============================================================================
+
+@pytest.fixture
+def null_email_backend(monkeypatch):
+    """get_email_backend() を NullEmailBackend に差し替え。"""
+    from lib.auth.email_backends import NullEmailBackend, get_email_backend
+    backend = NullEmailBackend()
+    monkeypatch.setattr("lib.auth.email_backends.get_email_backend", lambda: backend)
+    get_email_backend.cache_clear()
+    return backend
+
+
+@pytest.fixture
+def local_auth_settings(monkeypatch):
+    """テスト用 local 認証設定オーバーライド。"""
+    monkeypatch.setenv("AUTH_PROVIDER", "local")
+    monkeypatch.setenv("JWT_SECRET", "test-secret-not-for-production-" + "x" * 40)
+    monkeypatch.setenv("JWT_AUDIENCE", "authenticated")
+    monkeypatch.setenv("JWT_ISSUER", "geo-base-test")
+    monkeypatch.setenv("EMAIL_BACKEND", "null")
+    monkeypatch.setenv("INVITATION_BASE_URL", "http://testserver")
+    monkeypatch.setenv("CORS_ORIGINS", '["http://testserver"]')
+
+    from lib.config import get_settings
+    from lib.auth import get_auth_provider
+    from lib.auth.email_backends import get_email_backend
+    get_settings.cache_clear()
+    get_auth_provider.cache_clear()
+    get_email_backend.cache_clear()
+    yield
+    get_settings.cache_clear()
+    get_auth_provider.cache_clear()
+    get_email_backend.cache_clear()
+
+
+@pytest.fixture
+def make_user(db_conn, clean_auth_tables, local_auth_settings):
+    """ローカル DB にユーザーを作成するファクトリ。"""
+    import uuid as uuid_lib
+    import asyncio
+    from lib.auth.providers.local import LocalAuthProvider
+
+    def _make(email=None, password="ValidPass123", name="Test User"):
+        email = email or f"u-{uuid_lib.uuid4().hex[:8]}@example.test"
+        provider = LocalAuthProvider()
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(
+                provider.create_user(email, password, name=name, email_verified=True)
+            )
+        finally:
+            loop.close()
+
+    return _make
+
+
+@pytest.fixture
+def make_team(db_conn, make_user):
+    """チーム作成ファクトリ。"""
+    import uuid as uuid_lib
+
+    def _make(owner=None, name=None):
+        owner = owner or make_user()
+        team_name = name or f"team-{uuid_lib.uuid4().hex[:6]}"
+        with db_conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO teams (name, slug, owner_id) VALUES (%s, %s, %s) RETURNING id",
+                (team_name, team_name.lower(), owner.id),
+            )
+            team_id = str(cur.fetchone()[0])
+            cur.execute(
+                "INSERT INTO team_members (team_id, user_id, role) VALUES (%s, %s, 'owner')",
+                (team_id, owner.id),
+            )
+        db_conn.commit()
+        return {"id": team_id, "name": team_name, "owner": owner}
+
+    return _make
+
+
+@pytest.fixture
+def make_api_key(db_conn, make_user):
+    """API キー発行ファクトリ。"""
+    import secrets, hashlib
+
+    def _make(user=None, team_id=None, scopes=None):
+        user = user or make_user()
+        scopes = scopes or ["read"]
+        random_part = secrets.token_urlsafe(32)
+        full_key = f"gb_test_{random_part}"
+        key_hash = hashlib.sha256(full_key.encode()).hexdigest()
+        prefix = full_key[:12]
+        with db_conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO api_keys (name, prefix, key_hash, user_id, team_id, scopes)
+                   VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+                ("test", prefix, key_hash, user.id, team_id, scopes),
+            )
+            key_id = str(cur.fetchone()[0])
+        db_conn.commit()
+        return {"key": full_key, "id": key_id, "user": user}
+
+    return _make
+
+
+@pytest.fixture
+def public_tileset(db_conn, make_user):
+    """公開タイルセット"""
+    import uuid as uuid_lib
+    user = make_user()
+    tid = str(uuid_lib.uuid4())
+    with db_conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO tilesets (id, name, type, format, user_id, is_public)
+               VALUES (%s, 'public', 'vector', 'pbf', %s, TRUE)""",
+            (tid, user.id),
+        )
+    db_conn.commit()
+    return {"id": tid, "owner": user}
+
+
+@pytest.fixture
+def private_tileset(db_conn, make_user):
+    """非公開タイルセット"""
+    import uuid as uuid_lib
+    user = make_user()
+    tid = str(uuid_lib.uuid4())
+    with db_conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO tilesets (id, name, type, format, user_id, is_public)
+               VALUES (%s, 'private', 'vector', 'pbf', %s, FALSE)""",
+            (tid, user.id),
+        )
+    db_conn.commit()
+    return {"id": tid, "owner": user}

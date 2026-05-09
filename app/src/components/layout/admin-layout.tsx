@@ -1,7 +1,7 @@
 "use client";
 
 import { Sidebar } from "./sidebar";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/lib/auth/context";
 import { User } from "lucide-react";
 
 interface AdminLayoutProps {

@@ -2,6 +2,9 @@
 
 このドキュメントでは、geo-baseの各コンポーネントをローカル環境で実行する方法を説明します。
 
+> 認証（local / supabase の切替、初期管理者作成、トラブルシューティング）の詳細は
+> **[`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md)** を参照してください。
+
 ## ポート割り当て
 
 | コンポーネント | ポート | ディレクトリ | 説明 |
@@ -60,15 +63,38 @@ uv run uvicorn lib.main:app --reload --port 8000
 
 ```env
 # データベース接続
-DATABASE_URL=postgresql://user:pass@localhost:5432/geo_base
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/geo_base
 
-# Supabase（本番環境）
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-service-role-key
+# 認証プロバイダ（Phase 3 / Step 3.3-A で導入）
+# local: 自前 users テーブル + JWT 発行（Supabase 不要）
+# supabase: Supabase Auth に委譲（従来動作）
+AUTH_PROVIDER=local
 
-# JWT設定
+# JWT 設定（local モード必須。openssl rand -base64 64 等で生成）
 JWT_SECRET=your-jwt-secret
+JWT_AUDIENCE=authenticated
+JWT_ISSUER=geo-base
+ACCESS_TOKEN_TTL_SECONDS=900
+
+# メール（招待・パスワードリセット）
+EMAIL_BACKEND=console            # null / console / smtp
+INVITATION_BASE_URL=http://localhost:3000
+
+# CORS / Cookie
+CORS_ORIGINS=http://localhost:3000
+COOKIE_SAMESITE=lax
+COOKIE_SECURE=false
+
+# local プロバイダ固有
+LOCAL_AUTH_ALLOW_SIGNUP=false    # パブリック signup の可否（招待フロー中心なら false）
+
+# AUTH_PROVIDER=supabase の場合のみ必要（local モードでは未設定で OK）
+# SUPABASE_URL=https://your-project.supabase.co
+# SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# SUPABASE_JWT_SECRET=your-supabase-jwt-secret
 ```
+
+詳細な変数リファレンスは [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md) を参照。
 
 ### MCP Server (`/mcp/.env`)
 

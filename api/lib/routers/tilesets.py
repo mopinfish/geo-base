@@ -11,7 +11,15 @@ from lib.config import get_settings
 from lib.database import get_connection
 from lib.models.tileset import TilesetCreate, TilesetUpdate
 from lib.cache import invalidate_tileset_cache
-from lib.auth import User, get_current_user, require_auth, check_tileset_access
+from lib.auth import (
+    User,
+    get_current_user,
+    require_auth,
+    check_tileset_access,
+    AuthContext,
+    get_auth_context_optional,
+    check_tileset_access_v2,
+)
 from lib.tiles import generate_tilejson
 from lib.pmtiles import generate_pmtiles_tilejson
 from lib.raster_tiles import generate_raster_tilejson
@@ -150,10 +158,10 @@ def list_tilesets(
 
 
 @router.get("/{tileset_id}")
-def get_tileset(
+async def get_tileset(
     tileset_id: str,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """Get a specific tileset by ID with access control."""
     try:
@@ -175,12 +183,10 @@ def get_tileset(
             raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
 
         tileset = dict(zip(columns, row))
-        is_public = tileset.get("is_public", True)
-        owner_user_id = str(tileset.get("user_id")) if tileset.get("user_id") else None
 
-        # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
+        # Check access (v2: supports JWT + API key + team-based sharing)
+        if not await check_tileset_access_v2(conn, tileset, auth):
+            if auth is None:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
@@ -218,23 +224,23 @@ def get_tileset(
 
 
 @router.get("/{tileset_id}/tilejson.json")
-def get_tileset_tilejson(
+async def get_tileset_tilejson(
     tileset_id: str,
     request: Request,
     layer: Optional[str] = Query(None, description="Filter to specific layer name for QGIS compatibility"),
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get TileJSON for a tileset.
-    
+
     Routes to appropriate handler based on tileset type.
     """
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT type, is_public, user_id
+                SELECT id, type, is_public, user_id
                 FROM tilesets
                 WHERE id = %s
                 """,
@@ -245,12 +251,16 @@ def get_tileset_tilejson(
         if not row:
             raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
 
-        tileset_type, is_public, owner_user_id = row
-        owner_user_id = str(owner_user_id) if owner_user_id else None
+        _row_id, tileset_type, is_public, owner_user_id = row
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": str(owner_user_id) if owner_user_id else None,
+        }
 
-        # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
+        # Check access (v2: supports JWT + API key + team-based sharing)
+        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
