@@ -12,12 +12,14 @@ import {
   Menu,
   X,
   Loader2,
+  Users,
+  KeyRound,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { createClient } from "@/lib/supabase/client";
+import { authClient } from "@/lib/auth/client";
 
 interface NavItem {
   title: string;
@@ -46,6 +48,16 @@ const navItems: NavItem[] = [
     href: "/datasources",
     icon: Database,
   },
+  {
+    title: "チーム",
+    href: "/teams",
+    icon: Users,
+  },
+  {
+    title: "API キー",
+    href: "/api-keys",
+    icon: KeyRound,
+  },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -64,10 +76,9 @@ export function Sidebar() {
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
-    
+
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
+      await authClient.logout();
       router.push("/login");
       router.refresh();
     } catch (error) {

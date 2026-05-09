@@ -11,6 +11,7 @@ import os
 from functools import lru_cache
 from typing import List, Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +43,35 @@ class Settings(BaseSettings):
     # Supabase Storage settings
     supabase_storage_bucket: str = "geo-tiles"  # Default bucket name for COG/PMTiles files
     supabase_storage_public_url: Optional[str] = None  # Public URL for storage
+
+    # Auth provider
+    auth_provider: str = "supabase"  # local | supabase
+
+    # JWT
+    jwt_secret: Optional[str] = None  # local モード必須、supabase モードでは SUPABASE_JWT_SECRET にフォールバック
+    jwt_audience: str = "authenticated"
+    jwt_issuer: str = "geo-base"
+    access_token_ttl_seconds: int = 900
+
+    # Email backend
+    email_backend: str = "console"  # null | console | smtp
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from: Optional[str] = None
+    smtp_use_tls: bool = True
+
+    # Invitation
+    invitation_base_url: str = "http://localhost:3000"
+
+    # Cookie
+    cookie_samesite: str = "lax"
+    cookie_secure: bool = False
+    cookie_domain: Optional[str] = None
+
+    # API key log sampling rate (0.0 - 1.0)
+    api_key_log_sample_rate: float = 1.0
 
     # Vercel Blob (optional, for production)
     blob_read_write_token: Optional[str] = None
@@ -117,12 +147,41 @@ class Settings(BaseSettings):
         return None
     
     @property
-    def jwt_secret(self) -> Optional[str]:
-        """Get JWT secret for token verification."""
-        # Supabase JWT secret takes precedence
-        if self.supabase_jwt_secret:
-            return self.supabase_jwt_secret
-        return None
+    def effective_jwt_secret(self) -> Optional[str]:
+        """JWT_SECRET 優先、SUPABASE_JWT_SECRET にフォールバック（後方互換）"""
+        return self.jwt_secret or self.supabase_jwt_secret
+
+    @model_validator(mode='after')
+    def validate_auth_config(self) -> 'Settings':
+        if self.auth_provider == "local":
+            if not self.effective_jwt_secret:
+                raise ValueError(
+                    "AUTH_PROVIDER=local requires JWT_SECRET (or SUPABASE_JWT_SECRET as fallback)"
+                )
+        elif self.auth_provider == "supabase":
+            if not self.supabase_url:
+                raise ValueError("AUTH_PROVIDER=supabase requires SUPABASE_URL")
+            if not self.supabase_service_role_key:
+                raise ValueError("AUTH_PROVIDER=supabase requires SUPABASE_SERVICE_ROLE_KEY")
+            if not self.supabase_jwt_secret:
+                raise ValueError("AUTH_PROVIDER=supabase requires SUPABASE_JWT_SECRET")
+        else:
+            raise ValueError(f"Unknown AUTH_PROVIDER: {self.auth_provider}")
+
+        if self.email_backend == "smtp":
+            if not self.smtp_host:
+                raise ValueError("EMAIL_BACKEND=smtp requires SMTP_HOST")
+            if not self.smtp_from:
+                raise ValueError("EMAIL_BACKEND=smtp requires SMTP_FROM")
+        elif self.email_backend not in ("null", "console"):
+            raise ValueError(f"Unknown EMAIL_BACKEND: {self.email_backend}")
+
+        if self.cookie_samesite == "none" and not self.cookie_secure:
+            raise ValueError(
+                "COOKIE_SAMESITE=none requires COOKIE_SECURE=true (browser security requirement)"
+            )
+
+        return self
 
 
 @lru_cache

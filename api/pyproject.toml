@@ -1,6 +1,6 @@
 [project]
 name = "geo-base-api"
-version = "0.4.1"
+version = "0.4.5"
 description = "FastAPI Tile Server for geo-base"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,6 +21,9 @@ dependencies = [
     "PyJWT>=2.8.0",
     "cryptography>=41.0.0",
     "python-multipart>=0.0.20",
+    "email-validator>=2.0.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt<4.0",
 ]
 
 [project.optional-dependencies]
@@ -35,6 +38,8 @@ dev = [
     "httpx>=0.26.0",
     "black>=24.0.0",
     "ruff>=0.1.0",
+    "respx>=0.21.0",
+    "freezegun>=1.4.0",
 ]
 
 [build-system]
@@ -65,6 +70,7 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

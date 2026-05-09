@@ -1,0 +1,239 @@
+# 認証セットアップガイド
+
+geo-base API は **プラガブル認証** をサポートします（Phase 3 / Step 3.3-A で導入）。
+`AUTH_PROVIDER` 環境変数で切り替えられます:
+
+- **`local`**: geo-base が `users` テーブルを所有し、自前で JWT を発行する。Supabase 不要。
+- **`supabase`**: 従来通り Supabase Auth に委譲する。
+
+設計の背景・全体像は `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
+本ドキュメントは **ローカル / 本番の構築手順** に絞ったハンズオンです。
+
+関連: 移行手順は `docs/AUTH_MIGRATION.md`、リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`、認可仕様の網羅レビューは `docs/ACCESS_CONTROL_REVIEW.md`。
+
+---
+
+## クイックスタート（local モード）
+
+ローカル開発で local プロバイダを動かす最短手順。
+
+### 1. PostGIS 起動
+
+```bash
+cd docker
+docker compose up -d postgis
+```
+
+`docker/postgis-init/04_auth_schema.sql` が初期化時に適用され、`users` / `refresh_tokens` /
+`login_attempts` / `password_reset_tokens` テーブルが作成されます。
+
+### 2. 環境変数
+
+`api/.env` を作成（`api/.env.example` は最新の変数リストを反映済み）:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/geo_base
+
+# 認証プロバイダ
+AUTH_PROVIDER=local
+JWT_SECRET=$(openssl rand -base64 64)   # 必須。実際の値を貼り付ける
+JWT_AUDIENCE=authenticated
+JWT_ISSUER=geo-base
+ACCESS_TOKEN_TTL_SECONDS=900
+
+# メール送信（local モードの招待・パスワードリセット用）
+EMAIL_BACKEND=console                     # 開発時はコンソール出力で十分
+INVITATION_BASE_URL=http://localhost:3000
+
+# CORS / Cookie
+CORS_ORIGINS=http://localhost:3000
+COOKIE_SAMESITE=lax
+COOKIE_SECURE=false
+
+# 任意: signup を許可するかどうか（招待フローのみ運用するなら false）
+LOCAL_AUTH_ALLOW_SIGNUP=false
+```
+
+> `JWT_SECRET` は必ず `openssl rand -base64 64` 等で **64 バイト以上** をランダム生成してください。
+> 設定漏れがあると API 起動時に `Settings` バリデーションで失敗します（`AUTH_PROVIDER=local requires JWT_SECRET ...`）。
+
+### 3. 初期管理者作成
+
+API サーバーを起動する前に、CLI で最初の管理者ユーザーを作ります:
+
+```bash
+cd api
+uv sync
+uv run python -m lib.auth.cli create-admin --email admin@example.com
+# Password: ********
+# Confirm password: ********
+# Name (optional): Admin
+# OK Admin user created: <uuid>
+```
+
+### 4. API 起動
+
+```bash
+cd api
+uv run uvicorn lib.main:app --reload --port 8000
+```
+
+ヘルスチェック:
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+### 5. Admin UI 起動
+
+別ターミナルで:
+
+```bash
+cd app
+npm install
+npm run dev
+```
+
+ブラウザで http://localhost:3000/login にアクセスし、先ほど作成した
+`admin@example.com` のメール/パスワードでログイン。
+
+---
+
+## 主要な API エンドポイント
+
+`api/lib/routers/auth.py` 配下に集約されています。Origin チェック付きの state-changing
+エンドポイントは Refresh Cookie + Bearer access_token の併用が前提です。
+
+| メソッド | パス | 認証 | 説明 |
+|---|---|---|---|
+| POST | `/api/auth/login` | – | email + password でログイン。`access_token` を返却し、`geo_base_refresh` Cookie を設定 |
+| POST | `/api/auth/refresh` | Refresh Cookie | access_token を再発行。Cookie をローテーション |
+| POST | `/api/auth/logout` | Refresh Cookie | refresh token を失効、Cookie 削除 |
+| GET | `/api/auth/me` | Bearer | 現在のユーザー情報 |
+| PATCH | `/api/auth/me` | Bearer | name / email / metadata 更新 |
+| POST | `/api/auth/me/password` | Bearer | パスワード変更（要・現パスワード） |
+| POST | `/api/auth/password-reset/request` | – | パスワードリセットメール送信（情報漏洩防止のため常に 204） |
+| POST | `/api/auth/password-reset/confirm` | – | リセットトークンで新パスワードを設定 |
+| GET | `/api/auth/invitations/{token}` | – | 招待メタ情報を取得（受諾画面用） |
+| POST | `/api/auth/accept-invitation` | – | 招待を受諾し新規ユーザー作成 + 自動ログイン |
+
+ベース URL はローカルでは `http://localhost:8000`、本番は `https://geo-base-api.fly.dev` を使ってください。
+
+---
+
+## 環境変数リファレンス
+
+詳細仕様（バリデーションルール含む）は設計書 §9.1 を参照。ここでは主要変数のみ列挙します。
+
+### 認証プロバイダ
+
+| 変数 | デフォルト | 説明 |
+|---|---|---|
+| `AUTH_PROVIDER` | `supabase` | `local` または `supabase` |
+| `JWT_SECRET` | – | local モード必須。64 バイト以上推奨。`SUPABASE_JWT_SECRET` が設定されていればフォールバック可 |
+| `JWT_AUDIENCE` | `authenticated` | JWT `aud` クレーム |
+| `JWT_ISSUER` | `geo-base` | JWT `iss` クレーム |
+| `ACCESS_TOKEN_TTL_SECONDS` | `900` | access_token の有効期限（秒） |
+
+### メール
+
+| 変数 | デフォルト | 説明 |
+|---|---|---|
+| `EMAIL_BACKEND` | `console` | `null` / `console` / `smtp` |
+| `INVITATION_BASE_URL` | `http://localhost:3000` | 招待 / リセットリンクの base URL（Admin UI の origin） |
+| `SMTP_HOST` | – | `EMAIL_BACKEND=smtp` 必須 |
+| `SMTP_PORT` | `587` | – |
+| `SMTP_USER` | – | – |
+| `SMTP_PASSWORD` | – | – |
+| `SMTP_FROM` | – | `EMAIL_BACKEND=smtp` 必須 |
+| `SMTP_USE_TLS` | `true` | – |
+
+### CORS / Cookie
+
+| 変数 | デフォルト | 説明 |
+|---|---|---|
+| `CORS_ORIGINS` | `["*"]` | カンマ区切り or JSON 配列。Admin UI の origin を含めること |
+| `COOKIE_SAMESITE` | `lax` | `lax` / `strict` / `none`。クロスオリジンで refresh する場合は `none` |
+| `COOKIE_SECURE` | `false` | `true` で HTTPS 限定。`COOKIE_SAMESITE=none` の場合は必須 |
+| `COOKIE_DOMAIN` | – | 通常は未設定で OK |
+
+### local プロバイダ固有
+
+| 変数 | デフォルト | 説明 |
+|---|---|---|
+| `LOCAL_AUTH_ALLOW_SIGNUP` | `false` | パブリック signup を許可するかどうか。招待フロー中心の運用なら `false` |
+
+### Supabase プロバイダ固有
+
+`AUTH_PROVIDER=supabase` の場合は以下が必須:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_JWT_SECRET`
+
+---
+
+## 運用 CLI
+
+`uv run python -m lib.auth.cli <subcommand>`（カレントは `api/` ディレクトリ）。
+
+| サブコマンド | 用途 |
+|---|---|
+| `create-admin --email <email>` | 初期管理者ユーザー作成（`role=admin`、`email_verified=true`） |
+| `revoke-user-tokens <user_id>` | 指定ユーザーの refresh_token をすべて失効 |
+| `cleanup-expired` | 失効済みの refresh_token / login_attempts / password_reset_tokens / 期限切れ招待を削除 |
+| `reset-password --email <email>` | パスワードリセットメールを送信 |
+| `list-users [--json]` | 登録ユーザー一覧 |
+
+定期実行（cron 等）には `cleanup-expired` を 1 日 1 回程度走らせると DB が肥大化しません。
+
+---
+
+## トラブルシューティング
+
+### `AUTH_PROVIDER=local requires JWT_SECRET ...` で起動失敗
+
+`JWT_SECRET` 未設定。`openssl rand -base64 64` で生成して `api/.env` に貼り付けてください。
+`SUPABASE_JWT_SECRET` を設定済みであればフォールバックされます（後方互換）が、新規環境では
+`JWT_SECRET` を明示するのが推奨。
+
+### CORS エラー（ブラウザコンソールに `blocked by CORS policy`）
+
+`CORS_ORIGINS` に Admin UI の origin（例: `http://localhost:3000`）が含まれていません。
+カンマ区切り文字列または JSON 配列で複数指定可能です:
+
+```bash
+CORS_ORIGINS=http://localhost:3000,https://geo-base-admin.vercel.app
+```
+
+### refresh が 403 `Origin not allowed` で失敗
+
+`/api/auth/refresh` `/logout` `/login` 等の state-changing エンドポイントは
+リクエスト `Origin` ヘッダを `CORS_ORIGINS` と照合します。Admin UI の origin が許可リストに
+入っているか確認してください。
+
+### メールが届かない（local モード）
+
+- `EMAIL_BACKEND=console`: 送信内容は API のログに **コンソール出力** されます（実際のメールは飛びません）。
+  招待 URL やリセットトークンはログから拾ってください。
+- `EMAIL_BACKEND=smtp`: `SMTP_HOST` / `SMTP_FROM` 等が未設定だと起動時にバリデーション失敗します。
+  SendGrid / Mailgun 等のクレデンシャルを `fly secrets` で設定してください。
+
+### ログインがロックされる（429 Too Many Requests）
+
+同一 IP / email から短期間に連続失敗すると `login_attempts` テーブルでカウントされ、
+レート制限が発動します（既定: 5 回失敗で 15 分ロック）。`uv run python -m lib.auth.cli cleanup-expired`
+または該当行を直接削除すれば解除できます。
+
+### Supabase から local に切り替えたい
+
+`docs/AUTH_MIGRATION.md` を参照。
+
+---
+
+## 関連ドキュメント
+
+- 移行手順: `docs/AUTH_MIGRATION.md`
+- 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
+- 実装計画: `docs/superpowers/plans/2026-05-08-pluggable-auth.md`
+- ローカル開発全般: `LOCAL_DEVELOPMENT.md`

@@ -20,7 +20,7 @@ from lib.raster_tiles import (
     validate_tile_format,
 )
 from lib.cache import get_cached_tileset_info, cache_tileset_info
-from lib.auth import User, get_current_user, check_tileset_access
+from lib.auth import AuthContext, get_auth_context_optional, check_tileset_access_v2
 
 
 router = APIRouter(prefix="/raster", tags=["tiles"])
@@ -75,7 +75,7 @@ async def get_raster_tile(
     scale_max: float = Query(None, description="Maximum value for rescaling"),
     colormap: str = Query(None, description="Colormap name for single-band visualization"),
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get a raster tile from a Cloud Optimized GeoTIFF (COG).
@@ -157,8 +157,13 @@ async def get_raster_tile(
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
     
     # Check access
-    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-        if not user:
+    tileset_for_access = {
+        "id": tileset_id,
+        "is_public": is_public,
+        "user_id": owner_user_id,
+    }
+    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if auth is None:
             raise HTTPException(
                 status_code=401,
                 detail="Authentication required to access this tileset",
@@ -168,7 +173,7 @@ async def get_raster_tile(
             status_code=403,
             detail="You do not have permission to access this tileset"
         )
-    
+
     # Parse band indexes
     band_indexes = None
     if indexes:
@@ -209,11 +214,11 @@ async def get_raster_tile(
 
 
 @router.get("/{tileset_id}/tilejson.json")
-def get_raster_tilejson_endpoint(
+async def get_raster_tilejson_endpoint(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get TileJSON for a raster tileset.
@@ -250,8 +255,13 @@ def get_raster_tilejson_endpoint(
         owner_user_id = str(owner_user_id) if owner_user_id else None
         
         # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": owner_user_id,
+        }
+        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
@@ -261,7 +271,7 @@ def get_raster_tilejson_endpoint(
                 status_code=403,
                 detail="You do not have permission to access this tileset"
             )
-        
+
         base_url = get_base_url(request)
         
         bounds = None
@@ -302,7 +312,7 @@ async def get_raster_preview(
     scale_max: float = Query(None, description="Maximum value for rescaling"),
     colormap: str = Query(None, description="Colormap name for single-band visualization"),
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Generate a preview image of the entire raster dataset.
@@ -352,8 +362,13 @@ async def get_raster_preview(
             cog_url = row[3]
             
             # Check access
-            if not check_tileset_access(tileset_id, is_public, owner_id, user):
-                if not user:
+            tileset_for_access = {
+                "id": tileset_id,
+                "is_public": is_public,
+                "user_id": owner_id,
+            }
+            if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                if auth is None:
                     raise HTTPException(
                         status_code=401,
                         detail="Authentication required",
@@ -405,10 +420,10 @@ async def get_raster_preview(
 
 
 @router.get("/{tileset_id}/info")
-def get_raster_info(
+async def get_raster_info(
     tileset_id: str,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get metadata information about a raster tileset's COG.
@@ -444,8 +459,13 @@ def get_raster_info(
         owner_user_id = str(owner_user_id) if owner_user_id else None
         
         # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": owner_user_id,
+        }
+        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
@@ -455,12 +475,12 @@ def get_raster_info(
                 status_code=403,
                 detail="You do not have permission to access this tileset"
             )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Get COG info
     try:
         cog_info = get_cog_info(cog_url)
@@ -476,11 +496,11 @@ def get_raster_info(
 
 
 @router.get("/{tileset_id}/statistics")
-def get_raster_statistics(
+async def get_raster_statistics(
     tileset_id: str,
     indexes: str = Query(None, description="Comma-separated band indexes"),
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     Get statistics for a raster tileset's bands.
@@ -517,8 +537,13 @@ def get_raster_statistics(
         owner_user_id = str(owner_user_id) if owner_user_id else None
         
         # Check access
-        if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-            if not user:
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": owner_user_id,
+        }
+        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
@@ -528,12 +553,12 @@ def get_raster_statistics(
                 status_code=403,
                 detail="You do not have permission to access this tileset"
             )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Parse band indexes
     band_indexes = None
     if indexes:

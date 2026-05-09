@@ -37,6 +37,10 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_MCP_URL=http://localhost:8001
 ```
 
+> Phase 3 / Step 3.3-A 以降、Admin UI は API の `/api/auth/*` 経由で認証します。
+> Supabase 関連の環境変数（`NEXT_PUBLIC_SUPABASE_*`）は不要です。
+> 認証バックエンドのセットアップは [`docs/AUTH_SETUP.md`](../docs/AUTH_SETUP.md) を参照。
+
 ### 3. ローカル開発サーバーの起動
 
 **全コンポーネントを起動する場合（3つのターミナルを使用）:**
@@ -91,30 +95,54 @@ npm run lint
 ```
 app/
 ├── src/
-│   ├── app/                    # App Router ページ
-│   │   ├── page.tsx            # ダッシュボード
-│   │   ├── layout.tsx          # ルートレイアウト
-│   │   ├── globals.css         # グローバルスタイル
-│   │   ├── login/              # ログインページ
-│   │   ├── tilesets/           # タイルセット管理
-│   │   ├── features/           # フィーチャー管理
-│   │   ├── datasources/        # データソース
-│   │   └── settings/           # 設定
+│   ├── app/                          # App Router ページ
+│   │   ├── page.tsx                  # ダッシュボード
+│   │   ├── layout.tsx                # ルートレイアウト
+│   │   ├── globals.css               # グローバルスタイル
+│   │   ├── login/                    # ログイン
+│   │   ├── accept-invitation/        # 招待受諾（Phase 3 / Step 3.3-A）
+│   │   ├── password-reset/
+│   │   │   ├── request/              # リセットメール送信
+│   │   │   └── confirm/              # 新パスワード設定
+│   │   ├── settings/
+│   │   │   ├── profile/              # プロフィール編集
+│   │   │   └── password/             # パスワード変更
+│   │   ├── tilesets/                 # タイルセット管理
+│   │   ├── features/                 # フィーチャー管理
+│   │   ├── datasources/              # データソース
+│   │   ├── teams/                    # チーム管理
+│   │   └── api-keys/                 # APIキー管理
 │   ├── components/
-│   │   ├── ui/                 # shadcn/ui コンポーネント
-│   │   └── layout/             # レイアウトコンポーネント
+│   │   ├── ui/                       # shadcn/ui コンポーネント
+│   │   └── layout/                   # レイアウトコンポーネント
 │   ├── lib/
-│   │   ├── api.ts              # APIクライアント
-│   │   └── utils.ts            # ユーティリティ関数
-│   ├── hooks/                  # カスタムフック
-│   └── types/                  # 型定義
-├── public/                     # 静的ファイル
-├── .env.example                # 環境変数サンプル
-├── .env.local                  # ローカル環境変数（gitignore）
+│   │   ├── api.ts                    # APIクライアント
+│   │   ├── auth/                     # 認証クライアント (Phase 3 / Step 3.3-A)
+│   │   │   ├── client.ts             # AuthClient: login/refresh/logout/fetch
+│   │   │   ├── context.tsx           # React Context: useAuth()
+│   │   │   ├── errors.ts             # エラー型
+│   │   │   └── types.ts              # User / TokenPair 等
+│   │   └── utils.ts                  # ユーティリティ関数
+│   ├── hooks/                        # カスタムフック
+│   └── types/                        # 型定義
+├── public/                           # 静的ファイル
+├── .env.example                      # 環境変数サンプル
+├── .env.local                        # ローカル環境変数（gitignore）
 ├── package.json
 ├── tailwind.config.ts
 └── tsconfig.json
 ```
+
+### 認証フロー (Phase 3 / Step 3.3-A)
+
+`app/src/lib/auth/` の `AuthClient` が `/api/auth/*` をラップします。
+
+- **アクセストークン**: メモリ保持（`access_token`）、API リクエストの `Authorization: Bearer <token>` ヘッダで送信
+- **リフレッシュトークン**: API が `geo_base_refresh` という HttpOnly Cookie で発行 / ローテーション。
+  Admin UI では直接読み書きしない
+- **401 応答**: `AuthClient` が自動的に `POST /api/auth/refresh` を試み、成功すれば元のリクエストをリトライ
+- **永続セッション**: ページリロード時は `/api/auth/refresh` で新しい access_token を取得
+- **`useAuth()` フック**: `context.tsx` から `user`, `login`, `logout`, `isAuthenticated` を提供
 
 ## 機能
 
@@ -129,24 +157,22 @@ app/
 - [x] APIクライアント
 - [x] プレースホルダーページ（ログイン、設定、データソース）
 
-### Step 3.2（予定）
+### Step 3.2
 
-- [ ] Supabase Auth 連携
-- [ ] ログイン/ログアウト機能
-- [ ] セッション管理
-- [ ] 認証ミドルウェア
+- [x] タイルセット詳細ページ
+- [x] タイルセット作成/編集フォーム
+- [x] MapLibre GL JS によるプレビュー
+- [x] フィーチャー詳細ページ・作成/編集
+- [x] GeoJSON/Shapefile アップロード
 
-### Step 3.3（予定）
+### Step 3.3-A（プラガブル認証 + チーム / ロール）
 
-- [ ] タイルセット詳細ページ
-- [ ] タイルセット作成/編集フォーム
-- [ ] MapLibre GL JS によるプレビュー
-
-### Step 3.4（予定）
-
-- [ ] フィーチャー詳細ページ
-- [ ] フィーチャー作成/編集
-- [ ] GeoJSON/Shapefile アップロード
+- [x] AuthClient + useAuth コンテキスト（`src/lib/auth/`）
+- [x] ログイン / ログアウト / プロフィール編集 / パスワード変更
+- [x] パスワードリセット（`/password-reset/request`, `/password-reset/confirm`）
+- [x] 招待受諾（`/accept-invitation`）
+- [x] チーム管理 / メンバー招待
+- [x] APIキー管理
 
 ## 接続先API
 
