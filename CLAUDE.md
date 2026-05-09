@@ -70,9 +70,9 @@ npm install
 npm run dev                                     # Next.js dev サーバー（:3000）
 npm run build && npm start                      # 本番ビルド
 npm run lint
+npm test                                        # Vitest（middleware 等の単体テスト）
+npm run test:watch                              # Vitest watch モード
 ```
-
-`app/` には **テストランナーは未設定**。
 
 ### Docker / DB
 
