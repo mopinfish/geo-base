@@ -109,29 +109,58 @@ export default function TeamDetailPage() {
   const loadTeamData = async () => {
     setIsLoading(true);
     setError(null);
+
+    // チーム取得は必須。失敗したら「見つかりません」表示。
+    let teamData: Team;
     try {
-      const [teamData, membersData, invitationsData, tilesetsData] = await Promise.all([
-        api.getTeam(teamId),
+      teamData = await api.getTeam(teamId);
+    } catch (err) {
+      console.error("Failed to load team:", err);
+      setError(err instanceof Error ? err.message : "チームの取得に失敗しました");
+      setIsLoading(false);
+      return;
+    }
+    setTeam(teamData);
+    setEditForm({ name: teamData.name, description: teamData.description });
+
+    // 残りは Promise.allSettled で並行取得 — owner/admin 限定の API
+    // (listTeamInvitations 等) が 403 でも他のセクションは表示する。
+    const [membersRes, invitationsRes, tilesetsRes, allTilesetsRes] =
+      await Promise.allSettled([
         api.listTeamMembers(teamId),
         api.listTeamInvitations(teamId),
         api.listTeamTilesets(teamId),
+        api.listTilesets(),
       ]);
-      setTeam(teamData);
-      setMembers(membersData.members);
-      setInvitations(invitationsData.invitations);
-      setTeamTilesets(tilesetsData.tilesets);
-      setEditForm({ name: teamData.name, description: teamData.description });
 
-      // Load available tilesets for adding
-      const allTilesets = await api.listTilesets();
-      const tilesetsArray = Array.isArray(allTilesets) ? allTilesets : allTilesets.tilesets;
-      setAvailableTilesets(tilesetsArray);
-    } catch (err) {
-      console.error("Failed to load team data:", err);
-      setError(err instanceof Error ? err.message : "データの読み込みに失敗しました");
-    } finally {
-      setIsLoading(false);
+    if (membersRes.status === "fulfilled") {
+      setMembers(membersRes.value.members);
+    } else {
+      console.warn("Failed to load members:", membersRes.reason);
     }
+
+    if (invitationsRes.status === "fulfilled") {
+      setInvitations(invitationsRes.value.invitations);
+    } else {
+      // member role では 403 になり得るため警告のみ
+      console.info("Skipping invitations (insufficient role):", invitationsRes.reason);
+    }
+
+    if (tilesetsRes.status === "fulfilled") {
+      setTeamTilesets(tilesetsRes.value.tilesets);
+    } else {
+      console.warn("Failed to load team tilesets:", tilesetsRes.reason);
+    }
+
+    if (allTilesetsRes.status === "fulfilled") {
+      const v = allTilesetsRes.value;
+      const arr = Array.isArray(v) ? v : v.tilesets;
+      setAvailableTilesets(arr);
+    } else {
+      console.warn("Failed to load available tilesets:", allTilesetsRes.reason);
+    }
+
+    setIsLoading(false);
   };
 
   const handleUpdateTeam = async () => {
