@@ -20,13 +20,17 @@ issue #47 の対応で、**pytest は専用のテスト DB に接続するよう
 
 `docker compose up -d` 初回起動時、`docker/postgis-init/99_create_test_db.sh` が `geo_base_test` を自動作成しスキーマを clone します。
 
-既存の volume を維持したまま手動で作る場合:
+既存の volume を維持したまま手動で作る場合（リポジトリルートから実行）:
 
 ```bash
-docker compose exec postgis psql -U postgres -c "CREATE DATABASE geo_base_test;"
-docker compose exec postgis bash -c \
-  'pg_dump -U postgres --schema-only --no-owner --no-acl geo_base | psql -U postgres -d geo_base_test'
+docker compose -f docker/docker-compose.yml exec postgis \
+  psql -U postgres -c "CREATE DATABASE geo_base_test;"
+docker compose -f docker/docker-compose.yml exec postgis bash -c \
+  'pg_dump -U postgres --schema-only --no-owner --no-acl geo_base \
+     | psql -U postgres -d geo_base_test'
 ```
+
+> `cd docker` してから実行する場合は `-f docker/docker-compose.yml` は省略可。
 
 ### 実行
 

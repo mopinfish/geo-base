@@ -337,11 +337,23 @@ def sample_bulk_features(sample_point, sample_polygon):
 # #47). The fixtures below enforce this by failing loudly when
 # TEST_DATABASE_URL is unset or equal to DATABASE_URL.
 
-@pytest.fixture
+def _db_name_only(url: str) -> str:
+    """DB 接続文字列から DB 名のみ抜き出す（資格情報の CI ログ漏洩防止）。"""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        return parsed.path.lstrip("/") or "<unknown>"
+    except Exception:
+        return "<unparsable>"
+
+
+@pytest.fixture(scope="session")
 def test_database_url():
-    """テスト用 DB の接続文字列を TEST_DATABASE_URL から取得する。
+    """テスト用 DB の接続文字列を TEST_DATABASE_URL から取得する（session scope）。
 
     未設定 or dev DB と同一の場合は pytest.fail で停止する（#47）。
+    Session scope にすることで、設定不備時に同一 fail メッセージが全テストに
+    対して繰り返し出るノイズを 1 回にまとめる。
     """
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
@@ -354,7 +366,8 @@ def test_database_url():
     dev_url = os.environ.get("DATABASE_URL")
     if dev_url and url == dev_url:
         pytest.fail(
-            f"TEST_DATABASE_URL must differ from DATABASE_URL ({dev_url}). "
+            f"TEST_DATABASE_URL must differ from DATABASE_URL "
+            f"(現在どちらも DB={_db_name_only(dev_url)} を指している)。"
             "dev DB を破壊しないよう、別 DB（例: geo_base_test）を指定してください。",
             pytrace=False,
         )

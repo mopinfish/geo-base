@@ -6,11 +6,14 @@
 # pytest's TRUNCATE fixtures never touch dev data (issue #47).
 #
 # This script only runs on first container init (when the data volume is
-# fresh). For existing volumes, create the test DB manually:
+# fresh). For existing volumes, create the test DB manually (run from
+# repo root; flags must match the script body to avoid permission errors):
 #
-#   docker compose exec postgis psql -U postgres -c "CREATE DATABASE geo_base_test;"
-#   docker compose exec postgis bash -c \
-#     'pg_dump -U postgres --schema-only geo_base | psql -U postgres -d geo_base_test'
+#   docker compose -f docker/docker-compose.yml exec postgis \
+#     psql -U postgres -c "CREATE DATABASE geo_base_test;"
+#   docker compose -f docker/docker-compose.yml exec postgis bash -c \
+#     'pg_dump -U postgres --schema-only --no-owner --no-acl geo_base \
+#        | psql -U postgres -d geo_base_test'
 
 set -euo pipefail
 

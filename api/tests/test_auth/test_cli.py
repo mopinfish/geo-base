@@ -1,7 +1,10 @@
 """Tests for auth CLI."""
 import subprocess
 import os
-import pytest
+from pathlib import Path
+
+# api/tests/test_auth/test_cli.py → api/tests/test_auth → api/tests → api
+API_DIR = Path(__file__).resolve().parents[2]
 
 
 class TestCli:
@@ -13,7 +16,7 @@ class TestCli:
         })
         result = subprocess.run(
             ["uv", "run", "python", "-m", "lib.auth.cli", "--help"],
-            cwd="/Users/otsuka/ws/projects/geofirm/geo-base/api",
+            cwd=str(API_DIR),
             env=env, capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0
@@ -28,7 +31,7 @@ class TestCli:
         })
         result = subprocess.run(
             ["uv", "run", "python", "-m", "lib.auth.cli", "list-users", "--json"],
-            cwd="/Users/otsuka/ws/projects/geofirm/geo-base/api",
+            cwd=str(API_DIR),
             env=env, capture_output=True, text=True, timeout=60,
         )
         assert result.returncode == 0, f"stderr: {result.stderr}"
