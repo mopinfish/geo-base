@@ -7,7 +7,14 @@ import { loginAsAdmin } from "../utils/session";
 test.beforeAll(async () => {
   await loginAsAdmin();
   await resetDatabase();
-  const tileset = await createTileset({ name: "ft-list-smoke", type: "vector" });
+  // /features ページは tileset_id 未指定 (= 全件タブ) では public tileset の
+  // features しか返さない (api/lib/routers/features.py の list_features 参照)。
+  // smoke 用に明示的に public で作成する。
+  const tileset = await createTileset({
+    name: "ft-list-smoke",
+    type: "vector",
+    isPublic: true,
+  });
   await createFeature({
     tilesetId: tileset.id,
     layer: "points",
