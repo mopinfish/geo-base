@@ -169,7 +169,7 @@ curl -X PATCH https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
 
 #### チーム共有タイルセットを更新する（`scope=write` + team API キー）
 
-API キー作成時に `--team-id` を指定し、対象タイルセットがそのチームに `team_tilesets.permission_level >= write` で共有されている必要があります。
+API キー作成時に `team_id` を指定（Admin UI のチーム選択 / API リクエスト body の `"team_id"`）し、対象タイルセットがそのチームに `team_tilesets.permission_level >= write` で共有されている必要があります。
 
 ```bash
 curl -X PATCH https://geo-base-api.fly.dev/api/tilesets/$SHARED_TILESET_ID \
@@ -200,12 +200,11 @@ curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
 
 ### よくあるエラー
 
-| HTTP | 原因 | 対処 |
+| HTTP | 典型的な detail | 原因 / 対処 |
 |---|---|---|
-| 401 | `Authorization` ヘッダ欠落 / 不正 | `Bearer <api_key>` 形式を確認 |
-| 403 (write scope required ...) | API キーの scope 不足 | `--scopes read,write` を含めて再発行 |
-| 403 (Not authorized to ...) | リソース認可 NG（個人タイルセットの非所有者、team_tilesets が無い 等）| team API キーの場合は team_id と permission_level を確認 |
-| 429 | rate limit 超過 | 後述の rate limit セクションを参照 |
+| 401 | `Authentication required` 等 | `Authorization: Bearer <api_key>` 形式を確認 |
+| 403 | `write scope required to create tileset`（POST /api/tilesets のみ専用メッセージ）/ `Not authorized to ...`（その他の write 系。scope 不足とリソース認可不足を区別せず単一メッセージで返す） | scope 不足: 必要な `scopes`（`write` / `delete`）を含めて API キーを再発行。リソース認可: team API キーの場合は `team_id` と `team_tilesets.permission_level` を確認 |
+| 429 | `API key rate limit exceeded` | rate limit 超過。後述の rate limit セクションを参照 |
 
 ---
 

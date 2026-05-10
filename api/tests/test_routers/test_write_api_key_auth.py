@@ -12,8 +12,11 @@ API キーから書き込みできなかった。本 PR で `require_auth_contex
 - API キー (write のみ) → DELETE で 403（scope 不足）
 - JWT 既存フロー → 引き続き動作（後方互換）
 
-`db_conn` を `app.dependency_overrides` で共有することで、seed 時に
-commit せずに済む（test 終了時の rollback で自動 cleanup）。
+テスト分離: write 系 endpoint は handler 内で `conn.commit()` を呼ぶため、
+そのままだとテスト DB にデータが残留する。`db_conn.commit` を no-op に
+monkeypatch して、テスト終了時の `db_conn.rollback()` で全データを
+clean up する形にしている（test 内で commit してもアプリ層では成功扱い、
+DB 状態はテスト境界で巻き戻る）。
 """
 import uuid
 
@@ -33,15 +36,43 @@ from lib.routers.tilesets import router as tilesets_router
 # ---------------------------------------------------------------------------
 
 
+class _CommitNoOpConn:
+    """`db_conn` の薄い proxy。`commit()` を no-op にしてテスト分離を担保する。
+
+    psycopg2 の Connection は `commit` 属性が read-only なので
+    `monkeypatch.setattr(conn, 'commit', ...)` は使えない。本クラスは
+    `__getattr__` 経由で他属性を委譲しつつ、`commit` だけ空実装にする。
+    """
+
+    def __init__(self, conn):
+        object.__setattr__(self, "_conn", conn)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def commit(self):
+        # no-op: handler 内の commit を黙って吸収。実 DB 変更は test 終了時に
+        # `db_conn.rollback()` で巻き戻る。
+        pass
+
+
 @pytest.fixture
 def app(db_conn):
+    """write 系 router を載せた最小 app。
+
+    handler 内の `conn.commit()` を no-op に包む `_CommitNoOpConn` を
+    依存性注入で渡し、テスト DB にデータが残留しないようにする
+    （test 終了時の `db_conn.rollback()` で全変更を巻き戻す）。
+    """
+    no_commit_conn = _CommitNoOpConn(db_conn)
+
     app = FastAPI()
     app.include_router(tilesets_router)
     app.include_router(features_router)
     app.include_router(datasources_router)
 
     def _get_conn():
-        yield db_conn
+        yield no_commit_conn
 
     app.dependency_overrides[get_connection] = _get_conn
     return app
