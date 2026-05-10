@@ -281,13 +281,14 @@ export default function DatasourcesPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" data-testid="datasource-filter-type">
                 <span className="text-sm text-muted-foreground">タイプ:</span>
                 <div className="flex gap-1">
                   <Button
                     variant={filterType === "all" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFilterType("all")}
+                    data-testid="datasource-filter-type-all"
                   >
                     すべて
                   </Button>
@@ -295,6 +296,7 @@ export default function DatasourcesPage() {
                     variant={filterType === "pmtiles" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFilterType("pmtiles")}
+                    data-testid="datasource-filter-type-pmtiles"
                   >
                     <FileJson className="mr-1 h-3 w-3" />
                     PMTiles
@@ -303,6 +305,7 @@ export default function DatasourcesPage() {
                     variant={filterType === "cog" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFilterType("cog")}
+                    data-testid="datasource-filter-type-cog"
                   >
                     <Image className="mr-1 h-3 w-3" />
                     COG
@@ -423,9 +426,10 @@ export default function DatasourcesPage() {
                   </TableHeader>
                   <TableBody>
                     {datasources.map((ds) => (
-                      <TableRow 
+                      <TableRow
                         key={ds.id}
                         className={selectedIds.has(ds.id) ? "bg-muted/50" : ""}
+                        data-testid="datasource-list-row"
                       >
                         <TableCell>
                           <input
