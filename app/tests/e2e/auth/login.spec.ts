@@ -29,10 +29,19 @@ test("AUTH-04 @smoke ログアウトで /login に遷移しセッションがク
   await page.getByTestId("login-submit").click();
   await page.waitForURL("/");
 
-  await page.getByTestId("sidebar-logout").click();
-  await page.waitForURL(/\/login(\?|$)/);
+  // dashboard が hydrate 完了するまで待つ。これを入れずに即 click すると
+  // React のイベントハンドラがバインドされる前にクリックが流れて
+  // handleLogout が起動しないことがある。
+  await expect(page.getByTestId("sidebar-logout")).toBeEnabled();
 
+  // クリックと URL 遷移を並行で監視（race を避ける）
+  await Promise.all([
+    page.waitForURL(/\/login(\?|$)/, { timeout: 15_000 }),
+    page.getByTestId("sidebar-logout").click(),
+  ]);
+
+  // セッションがクリアされていることを protected route で確認
   await page.goto("/tilesets");
-  await page.waitForURL(/\/login(\?|$)/);
+  await page.waitForURL(/\/login(\?|$)/, { timeout: 10_000 });
   await expect(page).toHaveURL(/\/login(\?|$)/);
 });

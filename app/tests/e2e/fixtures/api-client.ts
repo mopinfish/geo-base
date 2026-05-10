@@ -1,11 +1,18 @@
 /**
  * 認証付き API クライアント。
  *
- * globalSetup で保存した storageState の cookie をそのまま `request` context に
- * 流し込んで使う。各テストファイルから:
+ * 認証フロー:
+ * 1. globalSetup が保存した storageState (refresh cookie) を使って
+ *    POST /api/auth/refresh を叩き、新しい access token を取得する。
+ * 2. その token を `Authorization: Bearer <token>` ヘッダにセットした
+ *    APIRequestContext を返す。
  *
+ * `require_auth_context` がかかっている API endpoint は cookie のみでは
+ * 認証されず Bearer token が必須なので、このひと手間が要る。
+ *
+ * 各 factory 関数の冒頭で:
  *   const api = await createApiClient();
- *   const tileset = await api.createTileset({ name: "..." });
+ *   const tileset = await api.post("/api/tilesets", ...);
  */
 import path from "node:path";
 import { request, type APIRequestContext } from "@playwright/test";
@@ -18,10 +25,41 @@ const STORAGE_STATE = path.resolve(
   "../../../playwright/.auth/admin.json",
 );
 
-export async function createApiClient(): Promise<APIRequestContext> {
-  return request.newContext({
+interface RefreshResponse {
+  access_token: string;
+  refresh_token?: string;
+  user?: unknown;
+}
+
+async function fetchAccessToken(): Promise<string> {
+  const refreshCtx = await request.newContext({
     baseURL: API_BASE,
     storageState: STORAGE_STATE,
-    extraHTTPHeaders: { "Content-Type": "application/json" },
+  });
+  try {
+    const res = await refreshCtx.post("/api/auth/refresh");
+    if (!res.ok()) {
+      throw new Error(
+        `Failed to refresh access token: ${res.status()} ${await res.text()}`,
+      );
+    }
+    const body = (await res.json()) as RefreshResponse;
+    if (!body.access_token) {
+      throw new Error("Refresh response missing access_token");
+    }
+    return body.access_token;
+  } finally {
+    await refreshCtx.dispose();
+  }
+}
+
+export async function createApiClient(): Promise<APIRequestContext> {
+  const accessToken = await fetchAccessToken();
+  return request.newContext({
+    baseURL: API_BASE,
+    extraHTTPHeaders: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 }

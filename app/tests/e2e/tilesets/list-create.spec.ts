@@ -28,5 +28,9 @@ test("TS-07 @smoke タイルセット新規作成 → 詳細ページへ遷移",
   await page.getByTestId("tileset-form-submit").click();
 
   await page.waitForURL(/\/tilesets\/[^/]+(\?|$)/, { timeout: 15_000 });
-  await expect(page.getByText("ts-create-smoke")).toBeVisible();
+  // 詳細ページの h1 (`<h1>{tileset.name}</h1>`) が hydrate されるまで待つ。
+  // 名前を heading role で待つことで、ローディング状態の他要素にマッチしない。
+  await expect(
+    page.getByRole("heading", { name: "ts-create-smoke" }),
+  ).toBeVisible({ timeout: 15_000 });
 });
