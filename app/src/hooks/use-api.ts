@@ -20,11 +20,18 @@ export function useApi() {
     const token = authClient.getAccessToken();
     api.setToken(token);
 
-    // 認証状態の変更を購読
-    const unsubscribe = authClient.subscribe(() => {
+    // 認証状態の変更を購読。
+    // `subscribe` はマウント時に同期で 1 度コールバックを発火するが、その時点では
+    // AuthClient の初期 refresh が完了しておらず `isLoading=true` / accessToken=null
+    // のままになっている。ここで無条件に `setIsReady(true)` してしまうと、購読側
+    // (e.g. /teams, /api-keys ページ) が token 未取得のまま fetch を走らせて 401 で
+    // 落ちる。`isLoading` が解けてから ready 扱いにする。
+    const unsubscribe = authClient.subscribe((state) => {
       const newToken = authClient.getAccessToken();
       api.setToken(newToken);
-      setIsReady(true);
+      if (!state.isLoading) {
+        setIsReady(true);
+      }
     });
 
     return unsubscribe;
