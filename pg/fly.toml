@@ -1,0 +1,42 @@
+# =============================================================================
+# geo-base-pg - Fly.io self-hosted PostGIS
+# =============================================================================
+# Single-node Postgres 16 + PostGIS 3.4. No public network exposure: other
+# Fly apps in the same org reach this DB via 6PN (`geo-base-pg.internal:5432`).
+# 開発端末からは `flyctl proxy 5433:5432 -a geo-base-pg` でローカル転送。
+#
+# （Deploy 手順は下の `[build]` セクション直前のコメント参照）
+# =============================================================================
+
+app = "geo-base-pg"
+primary_region = "nrt"
+
+[build]
+  # `dockerfile` の値は **fly.toml と同じディレクトリ (= pg/) からの相対パス**
+  # として flyctl が解決する。build context は別パラメータで、
+  # `flyctl deploy <workdir>` の workdir 引数（または cwd）で決まる。
+  # 本プロジェクトでは Dockerfile 内 COPY が docker/postgis-init/* を参照するため、
+  # build context = repo root が必要。よって必ず以下の形で実行すること:
+  #     flyctl deploy . --config pg/fly.toml -a geo-base-pg
+  # 先頭の `.` で workdir を明示的に repo root に指定。`pg/` ディレクトリで
+  # `flyctl deploy --config fly.toml` のように実行すると build context が
+  # pg/ になり、`COPY docker/postgis-init/...` が解決できず失敗する。
+  dockerfile = "Dockerfile"
+
+[env]
+  POSTGRES_DB = "geo_base"
+  POSTGRES_USER = "postgres"
+  # PGDATA をボリュームのサブディレクトリに置く。マウント先が空でない
+  # （lost+found 等が初期からある）と postgres init が refuse するため。
+  PGDATA = "/var/lib/postgresql/data/pgdata"
+
+# Persistent volume (作成は flyctl volumes create で先に行う前提)
+[mounts]
+  source = "pg_data"
+  destination = "/var/lib/postgresql/data"
+
+# 単一マシン構成: HA は無し、復旧は volume snapshot + pg_dump バックアップに依存
+# `[[services]]` も `[http_service]` も置かないので auto-stop は発動せず常時稼働。
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
