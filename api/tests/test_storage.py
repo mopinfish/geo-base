@@ -113,8 +113,11 @@ class TestValidateCogFile:
         assert ok is False
         assert msg == "File is empty"
 
-    def test_rejects_oversize(self):
-        big = b"II\x2a\x00" + b"\x00" * (MAX_FILE_SIZE + 1)
+    def test_rejects_oversize(self, monkeypatch):
+        # MAX_FILE_SIZE そのままで oversize ケースを作ると 500MB のメモリ確保が
+        # 走り CI / ローカルで不安定になるため、しきい値を小さく差し替える。
+        monkeypatch.setattr("lib.storage.MAX_FILE_SIZE", 1024)
+        big = b"II\x2a\x00" + b"\x00" * 2048
         ok, msg = validate_cog_file(big)
         assert ok is False
         assert "exceeds maximum" in msg
@@ -177,8 +180,11 @@ class TestS3StorageClient:
         assert storage_client.delete_file(path) is True
         assert storage_client.file_exists(path) is False
 
-    def test_upload_oversize_returns_none(self, storage_client):
-        big = b"II\x2a\x00" + b"\x00" * (MAX_FILE_SIZE + 1)
+    def test_upload_oversize_returns_none(self, storage_client, monkeypatch):
+        # MAX_FILE_SIZE そのままだと 500MB のメモリ確保で OOM/遅延の原因になるため、
+        # しきい値を小さく差し替えてから oversize 分岐を再現する。
+        monkeypatch.setattr("lib.storage.MAX_FILE_SIZE", 1024)
+        big = b"II\x2a\x00" + b"\x00" * 2048
         url = storage_client.upload_file("big.tif", big, "image/tiff")
         assert url is None
 

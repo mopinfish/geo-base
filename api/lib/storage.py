@@ -88,10 +88,12 @@ class S3StorageClient:
     認証情報は標準の AWS credential resolver（環境変数 / IAM role / ~/.aws）
     に委ねる。本リポジトリの想定では以下の env を `fly secrets set` する:
 
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_ENDPOINT_URL_S3 (optional, settings.s3_endpoint_url が既定値を持つ)
-    - AWS_REGION (optional, settings.s3_region が既定値を持つ)
+    - AWS_ACCESS_KEY_ID            (boto3 が直接読む)
+    - AWS_SECRET_ACCESS_KEY        (boto3 が直接読む)
+    - S3_ENDPOINT_URL              (`lib.config.Settings.s3_endpoint_url`、既定値 Tigris)
+    - S3_REGION                    (`lib.config.Settings.s3_region`、既定 `auto`)
+    - S3_BUCKET                    (`lib.config.Settings.s3_bucket`)
+    - S3_PUBLIC_BASE_URL           (任意。設定なしなら endpoint+bucket を使う)
     """
 
     def __init__(

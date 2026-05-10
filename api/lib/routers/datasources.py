@@ -3,9 +3,13 @@ Datasources CRUD endpoints.
 """
 
 import json
+import re
+import uuid
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from lib.database import get_connection
@@ -705,12 +709,27 @@ async def upload_cog(
                 detail="Storage service is not available"
             )
         
-        # Generate storage path
-        filename = file.filename or "upload.tif"
-        storage_path = f"cog/{tileset_id}/{filename}"
-        
-        # Upload file
-        cog_url = storage.upload_file(storage_path, file_content, "image/tiff")
+        # Generate storage path. file.filename はクライアントが任意の文字列を投入できる
+        # ため、S3 key として使う前にサニタイズする:
+        #   - 拡張子は .tif/.tiff/.geotiff に正規化
+        #   - basename のみ使う（path traversal 防止）
+        #   - 安全文字 [A-Za-z0-9._-] のみ残す
+        #   - 空文字 fallback で `cog.tif` に
+        # その上で衝突回避のために uuid4 + ISO 日付プレフィックスを付与する。
+        original_filename = (file.filename or "upload.tif").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", original_filename)
+        if not safe_filename or safe_filename.startswith("."):
+            safe_filename = "cog.tif"
+        date_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
+        unique_token = uuid.uuid4().hex[:8]
+        storage_path = f"cog/{tileset_id}/{date_prefix}_{unique_token}_{safe_filename}"
+
+        # Upload file. boto3 は同期 I/O なので `run_in_threadpool` でオフロードして
+        # async ハンドラのイベントループをブロックしないようにする (issue #64 Option A
+        # と整合: 既存の同期コアロジックは触らず、async 境界でのみ threadpool に乗せる)。
+        cog_url = await run_in_threadpool(
+            storage.upload_file, storage_path, file_content, "image/tiff"
+        )
         if not cog_url:
             raise HTTPException(
                 status_code=500,
