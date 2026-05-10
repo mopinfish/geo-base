@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useApi } from "@/hooks/use-api";
-import type { Datasource, DatasourceType } from "@/lib/api";
+import { isOpenableUrl, type Datasource, type DatasourceType } from "@/lib/api";
 import {
   Plus,
   RefreshCw,
@@ -457,14 +457,16 @@ export default function DatasourcesPage() {
                             >
                               {truncateUrl(ds.url)}
                             </span>
-                            <a
-                              href={ds.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
+                            {isOpenableUrl(ds.url) && (
+                              <a
+                                href={ds.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>

@@ -33,17 +33,22 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
+  Upload,
 } from "lucide-react";
+
+type InputMode = "url" | "upload";
 
 export default function NewDatasourcePage() {
   const router = useRouter();
   const { api, isReady } = useApi();
 
   // フォーム状態
+  const [inputMode, setInputMode] = useState<InputMode>("url");
   const [datasourceType, setDatasourceType] = useState<DatasourceType>("pmtiles");
   const [tilesetId, setTilesetId] = useState<string>("");
   const [url, setUrl] = useState<string>("");
   const [storageProvider, setStorageProvider] = useState<StorageProvider>("http");
+  const [file, setFile] = useState<File | null>(null);
 
   // タイルセット一覧
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
@@ -127,11 +132,22 @@ export default function NewDatasourcePage() {
     setStorageProvider(isS3Compatible ? "s3" : "http");
   };
 
-  // タイプ変更時にタイルセット選択をリセット
+  // タイプ変更時にタイルセット選択とファイル選択をリセット
   const handleTypeChange = (value: DatasourceType) => {
     setDatasourceType(value);
     setTilesetId("");
+    setFile(null);
   };
+
+  const handleModeChange = (value: InputMode) => {
+    setInputMode(value);
+    setError(null);
+    setSuccess(null);
+  };
+
+  // ファイル拡張子のヒント（type に応じて変える）
+  const acceptHint =
+    datasourceType === "pmtiles" ? ".pmtiles" : ".tif,.tiff,.geotiff";
 
   // フォーム送信
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,9 +163,16 @@ export default function NewDatasourcePage() {
       return;
     }
 
-    if (!url || !urlValid) {
-      setError("有効なURLを入力してください。");
-      return;
+    if (inputMode === "url") {
+      if (!url || !urlValid) {
+        setError("有効なURLを入力してください。");
+        return;
+      }
+    } else {
+      if (!file) {
+        setError("アップロードするファイルを選択してください。");
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -157,19 +180,29 @@ export default function NewDatasourcePage() {
     setSuccess(null);
 
     try {
-      const data: DatasourceCreate = {
-        tileset_id: tilesetId,
-        type: datasourceType,
-        url: url,
-        storage_provider: storageProvider,
-      };
-
-      const result = await api.createDatasource(data);
+      let resultId: string;
+      if (inputMode === "url") {
+        const data: DatasourceCreate = {
+          tileset_id: tilesetId,
+          type: datasourceType,
+          url: url,
+          storage_provider: storageProvider,
+        };
+        const result = await api.createDatasource(data);
+        resultId = result.id;
+      } else {
+        // Direct upload mode (Issue #101)
+        const result =
+          datasourceType === "cog"
+            ? await api.uploadCog(file as File, tilesetId)
+            : await api.uploadPmtiles(file as File, tilesetId);
+        resultId = result.id;
+      }
       setSuccess("データソースを登録しました。");
 
       // 詳細ページへリダイレクト
       setTimeout(() => {
-        router.push(`/datasources/${result.id}`);
+        router.push(`/datasources/${resultId}`);
       }, 1000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "データソースの登録に失敗しました");
@@ -314,77 +347,142 @@ export default function NewDatasourcePage() {
                   )}
                 </div>
 
-                {/* URL */}
+                {/* 入力モード切り替え (Issue #101) */}
                 <div className="space-y-2">
-                  <Label htmlFor="url">URL *</Label>
-                  <div className="relative">
-                    <Input
-                      id="url"
-                      type="url"
-                      value={url}
-                      onChange={(e) => handleUrlChange(e.target.value)}
-                      placeholder={
-                        datasourceType === "pmtiles"
-                          ? "https://example.com/tiles.pmtiles"
-                          : "https://example.com/image.tif"
-                      }
-                      disabled={isSubmitting}
-                      className={
-                        urlValid === false
-                          ? "border-red-500 focus:ring-red-500"
-                          : urlValid === true
-                          ? "border-green-500 focus:ring-green-500"
-                          : ""
-                      }
-                    />
-                    {urlValid !== null && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        {urlValid ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4 text-red-500" />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {datasourceType === "pmtiles"
-                      ? "PMTilesファイルのURLを入力してください（HTTP Range Requestsに対応している必要があります）"
-                      : "Cloud Optimized GeoTIFFファイルのURLを入力してください"}
-                  </p>
-                  {url && (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                    >
-                      URLを開く
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-
-                {/* ストレージプロバイダー */}
-                <div className="space-y-2">
-                  <Label htmlFor="storage">ストレージプロバイダー</Label>
+                  <Label htmlFor="mode">入力方法 *</Label>
                   <Select
-                    value={storageProvider}
-                    onValueChange={(v) => setStorageProvider(v as StorageProvider)}
+                    value={inputMode}
+                    onValueChange={(v) => handleModeChange(v as InputMode)}
                     disabled={isSubmitting}
                   >
-                    <SelectTrigger id="storage">
-                      <SelectValue placeholder="ストレージを選択" />
+                    <SelectTrigger id="mode">
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="http">HTTP（汎用）</SelectItem>
-                      <SelectItem value="s3">S3 互換 (Fly Tigris / AWS S3 / R2)</SelectItem>
+                      <SelectItem value="url">
+                        <div className="flex items-center gap-2">
+                          <ExternalLink className="h-4 w-4" />
+                          URL を指定（外部 HTTP サーバー / 既存の S3 バケット）
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="upload">
+                        <div className="flex items-center gap-2">
+                          <Upload className="h-4 w-4" />
+                          ファイルをアップロード（Fly Tigris に保存）
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-sm text-muted-foreground">
-                    URLから自動判定されますが、手動で変更することもできます
+                    {inputMode === "url"
+                      ? "公開された URL を指定する場合に選択します"
+                      : "ローカルのファイルを直接 Fly Tigris (S3 互換 storage) にアップロードします"}
                   </p>
                 </div>
+
+                {inputMode === "url" ? (
+                  <>
+                    {/* URL */}
+                    <div className="space-y-2">
+                      <Label htmlFor="url">URL *</Label>
+                      <div className="relative">
+                        <Input
+                          id="url"
+                          type="url"
+                          value={url}
+                          onChange={(e) => handleUrlChange(e.target.value)}
+                          placeholder={
+                            datasourceType === "pmtiles"
+                              ? "https://example.com/tiles.pmtiles"
+                              : "https://example.com/image.tif"
+                          }
+                          disabled={isSubmitting}
+                          className={
+                            urlValid === false
+                              ? "border-red-500 focus:ring-red-500"
+                              : urlValid === true
+                              ? "border-green-500 focus:ring-green-500"
+                              : ""
+                          }
+                        />
+                        {urlValid !== null && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            {urlValid ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4 text-red-500" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {datasourceType === "pmtiles"
+                          ? "PMTilesファイルのURLを入力してください（HTTP Range Requestsに対応している必要があります）"
+                          : "Cloud Optimized GeoTIFFファイルのURLを入力してください"}
+                      </p>
+                      {url && (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                        >
+                          URLを開く
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+
+                    {/* ストレージプロバイダー */}
+                    <div className="space-y-2">
+                      <Label htmlFor="storage">ストレージプロバイダー</Label>
+                      <Select
+                        value={storageProvider}
+                        onValueChange={(v) => setStorageProvider(v as StorageProvider)}
+                        disabled={isSubmitting}
+                      >
+                        <SelectTrigger id="storage">
+                          <SelectValue placeholder="ストレージを選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="http">HTTP（汎用）</SelectItem>
+                          <SelectItem value="s3">S3 互換 (Fly Tigris / AWS S3 / R2)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-sm text-muted-foreground">
+                        URLから自動判定されますが、手動で変更することもできます
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  /* アップロードモード (Issue #101) */
+                  <div className="space-y-2">
+                    <Label htmlFor="file">ファイル *</Label>
+                    <Input
+                      id="file"
+                      type="file"
+                      accept={acceptHint}
+                      disabled={isSubmitting}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        setFile(f);
+                      }}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {datasourceType === "pmtiles"
+                        ? "PMTiles ファイル（拡張子 .pmtiles）を選択してください"
+                        : "Cloud Optimized GeoTIFF ファイル（拡張子 .tif / .tiff / .geotiff）を選択してください"}
+                    </p>
+                    {file && (
+                      <p className="text-sm">
+                        選択中: <span className="font-mono">{file.name}</span>{" "}
+                        <span className="text-muted-foreground">
+                          ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* 送信ボタン */}
                 <div className="flex justify-end gap-2 pt-4">
@@ -401,20 +499,23 @@ export default function NewDatasourcePage() {
                     disabled={
                       isSubmitting ||
                       !tilesetId ||
-                      !url ||
-                      !urlValid ||
-                      filteredTilesets.length === 0
+                      filteredTilesets.length === 0 ||
+                      (inputMode === "url" ? !url || !urlValid : !file)
                     }
                   >
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        登録中...
+                        {inputMode === "upload" ? "アップロード中..." : "登録中..."}
                       </>
                     ) : (
                       <>
-                        <Plus className="mr-2 h-4 w-4" />
-                        登録する
+                        {inputMode === "upload" ? (
+                          <Upload className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Plus className="mr-2 h-4 w-4" />
+                        )}
+                        {inputMode === "upload" ? "アップロード" : "登録する"}
                       </>
                     )}
                   </Button>
@@ -450,6 +551,15 @@ export default function NewDatasourcePage() {
                 <li>S3 互換 - Fly Tigris / AWS S3 / Cloudflare R2 等（API キーで認証）</li>
                 <li>HTTP - 一般的なHTTPサーバー（CORSとRange Requestsが必要）</li>
               </ul>
+            </div>
+            <div>
+              <h4 className="font-medium text-foreground">直接アップロード（Issue #101）</h4>
+              <p>
+                「ファイルをアップロード」を選ぶと、Fly Tigris の private bucket
+                に直接保存され、内部 URL（<span className="font-mono">s3://</span>）として
+                管理されます。タイル配信は API 経由で行われるため、外部からは bucket に
+                アクセスできない安全な構成になります。
+              </p>
             </div>
           </CardContent>
         </Card>
