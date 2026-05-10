@@ -1,5 +1,7 @@
 """Tests for AuthProvider ABC and factory."""
 import pytest
+from pydantic import ValidationError
+
 from lib.auth.provider import AuthProvider
 
 
@@ -21,12 +23,16 @@ class TestFactory:
         assert isinstance(get_auth_provider(), LocalAuthProvider)
 
     def test_supabase_provider_no_longer_supported(self, monkeypatch):
-        """`AUTH_PROVIDER=supabase` は #72 で廃止済み。Settings 検証で reject される。"""
+        """`AUTH_PROVIDER=supabase` は #72 で廃止済み。Settings 検証で reject される。
+
+        `model_validator(mode='after')` 内で投げる `ValueError` は pydantic v2 が
+        `ValidationError` でラップするので、ここでも `ValidationError` を期待する。
+        """
         monkeypatch.setenv("AUTH_PROVIDER", "supabase")
         monkeypatch.setenv("JWT_SECRET", "x" * 64)
         from lib.config import get_settings
         get_settings.cache_clear()
-        with pytest.raises(Exception, match="Unknown AUTH_PROVIDER"):
+        with pytest.raises(ValidationError, match="Unknown AUTH_PROVIDER"):
             get_settings()
 
     def test_unknown_provider_raises(self, monkeypatch):
