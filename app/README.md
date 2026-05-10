@@ -37,6 +37,12 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_MCP_URL=http://localhost:8001
 ```
 
+> 本番 (Vercel) では Cookie ベース認証のため Admin UI 自身の origin から `/api/*` を叩く同一オリジン構成にしている。
+> `next.config.ts` の rewrites が `API_BACKEND_URL`（server-side env）を proxy 先として参照する。
+> Vercel project の Environment Variables では:
+> - **`API_BACKEND_URL`** = `https://geo-base-api.fly.dev` （Production scope に設定。未設定だと build が fail-fast で停止）
+> - **`NEXT_PUBLIC_API_URL`** = 空（client.ts は同一オリジン fetch するため）
+
 > Phase 3 / Step 3.3-A 以降、Admin UI は API の `/api/auth/*` 経由で認証します。
 > Supabase 関連の環境変数（`NEXT_PUBLIC_SUPABASE_*`）は不要です。
 > 認証バックエンドのセットアップは [`docs/AUTH_SETUP.md`](../docs/AUTH_SETUP.md) を参照。
@@ -63,6 +69,7 @@ npm run dev
 
 `.env.local` を本番API向けに設定:
 ```env
+# 本番 API を直接叩く (dev サーバーは rewrites が効くため、API_BACKEND_URL 経由でも可)
 NEXT_PUBLIC_API_URL=https://geo-base-api.fly.dev
 NEXT_PUBLIC_MCP_URL=https://geo-base-mcp.fly.dev
 ```
