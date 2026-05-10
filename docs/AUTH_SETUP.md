@@ -137,17 +137,24 @@ npm run dev
 
 ### API キーの作成
 
-Admin UI の `/api-keys` から、または CLI で発行可能:
+**Admin UI**: ログイン後 `/api-keys` ページから作成（推奨、ブラウザのみで完結）。
+
+**API エンドポイント直叩き**: 既存の JWT で `POST /api/api-keys` を呼び出す:
 
 ```bash
-cd api
-uv run python -m lib.auth.cli create-api-key \
-    --user-id <uuid> \
-    --scopes read,write \
-    --team-id <team-uuid>   # 任意: team API キーの場合
+curl -X POST https://geo-base-api.fly.dev/api/api-keys \
+  -H "Authorization: Bearer $JWT_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ci-uploader",
+    "scopes": ["read", "write"],
+    "team_id": null
+  }'
 ```
 
-返却された `gb_live_xxx...` 形式のトークンを **発行時にしか取得できない** ので保管してください。
+返却された `gb_live_xxx...` 形式のトークンを **発行時にしか取得できない**（DB には hash のみ保管）ので保管してください。
+
+実装は `api/lib/routers/api_keys.py:create_api_key` 参照。
 
 ### 書き込みリクエスト例
 

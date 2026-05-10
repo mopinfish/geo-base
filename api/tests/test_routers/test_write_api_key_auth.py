@@ -23,6 +23,8 @@ from fastapi.testclient import TestClient
 
 from lib.auth import AuthContext, get_auth_context_optional, require_auth_context
 from lib.database import get_connection
+from lib.routers.datasources import router as datasources_router
+from lib.routers.features import router as features_router
 from lib.routers.tilesets import router as tilesets_router
 
 
@@ -35,6 +37,8 @@ from lib.routers.tilesets import router as tilesets_router
 def app(db_conn):
     app = FastAPI()
     app.include_router(tilesets_router)
+    app.include_router(features_router)
+    app.include_router(datasources_router)
 
     def _get_conn():
         yield db_conn
@@ -344,4 +348,145 @@ class TestApiKeyCreate:
                 "format": "pbf",
             },
         )
+        assert res.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# features.py (POST / PATCH / DELETE) — API key auth
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def make_feature_in_tileset(db_conn, make_tileset):
+    """tileset と feature を 1 件ずつ作って返す。"""
+
+    def _make(owner_id=None):
+        ts = make_tileset(owner_id=owner_id)
+        feature_id = str(uuid.uuid4())
+        with db_conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO features (id, tileset_id, layer_name, geom, properties)
+                   VALUES (%s, %s, 'default',
+                           ST_SetSRID(ST_MakePoint(139.7, 35.7), 4326),
+                           '{}'::jsonb)""",
+                (feature_id, ts["id"]),
+            )
+        return {"feature_id": feature_id, **ts}
+
+    return _make
+
+
+class TestFeaturesApiKey:
+    def test_owner_api_key_with_write_can_create_feature(
+        self, client_for, make_tileset
+    ):
+        ts = make_tileset()
+        ctx = api_key_ctx(user_id=ts["user_id"], scopes=["read", "write"])
+        client = client_for(ctx)
+        res = client.post(
+            "/api/features",
+            json={
+                "tileset_id": ts["id"],
+                "layer_name": "default",
+                "geometry": {"type": "Point", "coordinates": [139.7, 35.7]},
+                "properties": {"name": "via-api-key"},
+            },
+        )
+        assert res.status_code == 201, res.text
+
+    def test_read_only_api_key_cannot_create_feature(
+        self, client_for, make_tileset
+    ):
+        ts = make_tileset()
+        ctx = api_key_ctx(user_id=ts["user_id"], scopes=["read"])
+        client = client_for(ctx)
+        res = client.post(
+            "/api/features",
+            json={
+                "tileset_id": ts["id"],
+                "layer_name": "default",
+                "geometry": {"type": "Point", "coordinates": [139.7, 35.7]},
+                "properties": {},
+            },
+        )
+        assert res.status_code == 403
+
+    def test_owner_api_key_with_delete_can_delete_feature(
+        self, client_for, make_feature_in_tileset
+    ):
+        f = make_feature_in_tileset()
+        ctx = api_key_ctx(
+            user_id=f["user_id"],
+            scopes=["read", "write", "delete"],
+        )
+        client = client_for(ctx)
+        res = client.delete(f"/api/features/{f['feature_id']}")
+        assert res.status_code == 204
+
+    def test_write_only_api_key_cannot_delete_feature(
+        self, client_for, make_feature_in_tileset
+    ):
+        f = make_feature_in_tileset()
+        ctx = api_key_ctx(user_id=f["user_id"], scopes=["read", "write"])
+        client = client_for(ctx)
+        res = client.delete(f"/api/features/{f['feature_id']}")
+        assert res.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# datasources.py (DELETE / test) — API key auth
+#
+# create / upload は外部ストレージや HTTP fetch が絡むため、
+# 単体テストでは scope ガードのみ検証する（router で 403 / 401 を返す経路）。
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def make_pmtiles_source(db_conn, make_tileset):
+    """tileset + pmtiles_sources を作って ID を返す。"""
+
+    def _make(owner_id=None):
+        ts = make_tileset(owner_id=owner_id)
+        ds_id = str(uuid.uuid4())
+        with db_conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO pmtiles_sources (id, tileset_id, pmtiles_url)
+                   VALUES (%s, %s, 'https://example.test/foo.pmtiles')""",
+                (ds_id, ts["id"]),
+            )
+        return {"datasource_id": ds_id, **ts}
+
+    return _make
+
+
+class TestDatasourcesApiKey:
+    def test_owner_api_key_with_delete_can_delete_datasource(
+        self, client_for, make_pmtiles_source
+    ):
+        ds = make_pmtiles_source()
+        ctx = api_key_ctx(
+            user_id=ds["user_id"],
+            scopes=["read", "write", "delete"],
+        )
+        client = client_for(ctx)
+        res = client.delete(f"/api/datasources/{ds['datasource_id']}")
+        assert res.status_code == 204
+
+    def test_read_only_api_key_cannot_delete_datasource(
+        self, client_for, make_pmtiles_source
+    ):
+        ds = make_pmtiles_source()
+        ctx = api_key_ctx(user_id=ds["user_id"], scopes=["read"])
+        client = client_for(ctx)
+        res = client.delete(f"/api/datasources/{ds['datasource_id']}")
+        assert res.status_code == 403
+
+    def test_outsider_api_key_cannot_delete_datasource(
+        self, client_for, make_pmtiles_source
+    ):
+        ds = make_pmtiles_source()
+        # 別ユーザーの API キー
+        ctx = api_key_ctx(scopes=["read", "write", "delete"])
+        client = client_for(ctx)
+        res = client.delete(f"/api/datasources/{ds['datasource_id']}")
         assert res.status_code == 403
