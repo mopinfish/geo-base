@@ -64,8 +64,10 @@ flyctl secrets set POSTGRES_PASSWORD=(openssl rand -base64 32 | tr -d '/+=' | he
 flyctl deploy --config pg/fly.toml --dockerfile pg/Dockerfile -a geo-base-pg
 ```
 
-`Dockerfile` で `docker/postgis-init/0[1-9]_*.sql` を `/docker-entrypoint-initdb.d/`
-に焼き込んでいるため、**初回起動時に空のボリュームを検知して全スキーマが自動投入される**。
+`Dockerfile` で `docker/postgis-init/01_*.sql` 〜 `06_*.sql` を
+`/docker-entrypoint-initdb.d/` に焼き込んでいるため、**初回起動時に空のボリュームを検知して
+全スキーマが自動投入される**。`09_rls_policies.sql` は Local 用 allow-all RLS なので意図的に
+除外している（理由は `pg/Dockerfile` のコメント参照）。
 
 ### 1.4. 動作確認
 
@@ -75,7 +77,7 @@ flyctl logs -a geo-base-pg | grep -E 'database system is ready|CREATE TABLE'
 
 # psql で接続して確認
 flyctl proxy 5433:5432 -a geo-base-pg &
-PG_PROXY_PID=$last_pid
+set PG_PROXY_PID $last_pid
 sleep 2
 
 # パスワードを取得（マシン内環境変数を覗く）

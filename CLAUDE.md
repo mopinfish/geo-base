@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`app/`** — Next.js 16（App Router）+ React 19 + Tailwind v4 + shadcn/ui の管理画面。**Vercel** に `geo-base-admin.vercel.app` としてデプロイ。認証はプラガブル（local / supabase）で、`app/src/lib/auth/` の AuthClient が `/api/auth/*` をラップ。API クライアントは `app/src/lib/api.ts`。
 - **`mcp/`** — geo-base のツールを Claude Desktop 向けに公開する FastMCP サーバー。**Fly.io** に `geo-base-mcp.fly.dev` としてデプロイ。ツールは `mcp/tools/` 配下（tilesets, features, geocoding, stats, analysis, crud）。`stdio`（ローカル）と `sse`（リモート）の両トランスポートをサポート。
 - **`docker/`** — `docker compose` でローカルの PostGIS + Redis を起動。スキーマシード SQL は `docker/postgis-init/` に番号順で配置（`04_auth_schema.sql`: 自前 users / refresh_tokens、`05_teams_schema.sql`: チーム関連、`06_api_keys_schema.sql`: API キー、`09_rls_policies.sql` がローカル用、`09_rls_policies.sql.supabase` が Supabase 用 — 旧構成の名残）。
-- **`pg/`** — 本番 DB を Fly Machine 上の `postgis/postgis:16-3.4` 単一ノードで運用するための Fly app 設定（`geo-base-pg`）。`Dockerfile` で `docker/postgis-init/0[1-9]_*.sql` を `/docker-entrypoint-initdb.d/` に焼き込んでいる。詳細は `docs/POSTGRES_SETUP.md`。
+- **`pg/`** — 本番 DB を Fly Machine 上の `postgis/postgis:16-3.4` 単一ノードで運用するための Fly app 設定（`geo-base-pg`）。`Dockerfile` で `docker/postgis-init/` の `01_*.sql` 〜 `06_*.sql` を `/docker-entrypoint-initdb.d/` に焼き込んでいる（`09_rls_policies.sql` は Local 用 allow-all RLS なので本番では除外）。詳細は `docs/POSTGRES_SETUP.md`。
 - **`packages/shared/`** — 共有パッケージのスケルトン。
 - **`scripts/`** — `setup.sh`, `seed_sample_data.{py,fish}`, `fix_bounds.py` 等。
 
