@@ -1,8 +1,8 @@
 -- =============================================================================
 -- geo-base Authentication Schema (Phase 3 / Step 3.3-A)
 -- =============================================================================
--- 認証関連テーブル。AUTH_PROVIDER=local 時に使用される。
--- supabase モードでは users テーブルは空のまま、auth.users が代替。
+-- 認証関連テーブル（AUTH_PROVIDER=local が唯一サポートされるモード）。
+-- 旧 supabase モードでは auth.users が代替していたが、Issue #72 で完全廃止済み。
 -- Run after 01_init.sql (uses update_updated_at_column())
 -- =============================================================================
 
@@ -32,7 +32,7 @@ CREATE TRIGGER update_users_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE users IS 'ユーザーアカウント（local モード時のみ使用、supabase モード時は auth.users を参照）';
+COMMENT ON TABLE users IS 'ユーザーアカウント（AUTH_PROVIDER=local の自前認証で使用）';
 
 -- REFRESH TOKENS
 CREATE TABLE IF NOT EXISTS refresh_tokens (

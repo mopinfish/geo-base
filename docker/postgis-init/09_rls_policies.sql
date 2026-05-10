@@ -1,9 +1,12 @@
 -- ============================================================================
 -- Row Level Security (RLS) - Local Development Version
 -- ============================================================================
--- RLS is disabled for local development.
--- The API handles authorization in the application layer.
--- For production (Supabase), use 04_rls_policies.sql.supabase
+-- API がアプリ層で認可を行うため、RLS は permissive のまま。本番 (Fly Postgres,
+-- geo-base-pg) では `pg/Dockerfile` でこのファイルを焼き込まないことで
+-- "RLS 無効 + アプリ層 authz のみ" にしている。詳細は Issue #72 Phase 1.5 と
+-- docs/POSTGRES_SETUP.md 参照。
+--
+-- 旧 Supabase 用 RLS バリアント (`09_rls_policies.sql.supabase`) は Issue #72 で削除済み。
 
 -- Enable RLS but with permissive policies for local development
 ALTER TABLE tilesets ENABLE ROW LEVEL SECURITY;
