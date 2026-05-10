@@ -69,7 +69,7 @@ export default function NewDatasourcePage() {
 
       setTilesetsLoading(true);
       try {
-        const response = await api.listTilesets();
+        const response = await api.listTilesets({ include_private: true });
         let tilesetsArray: Tileset[] = [];
         if (Array.isArray(response)) {
           tilesetsArray = response;

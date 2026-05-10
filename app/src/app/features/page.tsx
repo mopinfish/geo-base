@@ -124,7 +124,7 @@ export default function FeaturesPage() {
           limit,
           tileset_id: selectedTileset !== "all" ? selectedTileset : undefined,
         }),
-        api.listTilesets(),
+        api.listTilesets({ include_private: true }),
       ]);
       
       // フィーチャー結果の処理（GeoJSON FeatureCollection形式に対応）
