@@ -94,10 +94,18 @@ tests/test_crud.py::TestCreateTileset::test_create_tileset_auth_required PASSED
 ### 2.2 環境変数の設定
 
 #### APIサーバー（api/.env）
+
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/geo_base
 AUTH_PROVIDER=local
-JWT_SECRET=$(openssl rand -base64 64)   # 実際の値を貼り付ける
+# 下の値は openssl rand -base64 64 で生成して貼り付ける（コマンド置換は .env では効かない）
+JWT_SECRET=PASTE_64_BYTE_RANDOM_VALUE_HERE
+```
+
+`JWT_SECRET` の生成は別途シェルで:
+
+```bash
+openssl rand -base64 64
 ```
 
 #### MCPサーバー（mcp/.env）

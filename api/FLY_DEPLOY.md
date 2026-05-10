@@ -28,18 +28,20 @@ fly apps create geo-base-api
 ### 3. シークレット（環境変数）の設定
 
 ```fish
-# データベース接続文字列（Fly Postgres を Fly internal network 経由で参照）
-fly secrets set DATABASE_URL="postgresql://postgres:<PASSWORD>@geo-base-pg.flycast:5432/geo_base"
+# データベース接続文字列（Fly internal network 経由、`docs/POSTGRES_SETUP.md` と同じ
+# `geo-base-pg.internal` ホスト名を使用。`geo-base-pg.flycast` も `api/lib/database.py`
+# 側で受け付けるが、ドキュメントは `.internal` で統一する）
+fly secrets set DATABASE_URL="postgresql://postgres:<PASSWORD>@geo-base-pg.internal:5432/geo_base"
 
-# 認証
-fly secrets set AUTH_PROVIDER=local
-fly secrets set JWT_SECRET=$(openssl rand -base64 64)
+# 認証（fish のコマンド置換は `(...)` なので、`openssl rand` は別シェル実行→値を貼る方式が無難）
+set jwt_secret (openssl rand -base64 64)
+fly secrets set AUTH_PROVIDER=local JWT_SECRET="$jwt_secret"
 
 # ストレージ設定（COG/PMTiles アップロード backend、Fly Tigris を想定。Issue #72 Phase 1.2 で詳細を確定予定）
-# fly secrets set TIGRIS_BUCKET="geo-tiles"
+# flyctl storage create -a geo-base-api  # bucket 作成（access key/secret が出力される）
+# fly secrets set S3_BUCKET="geo-base-tiles"
 # fly secrets set AWS_ACCESS_KEY_ID="..."
 # fly secrets set AWS_SECRET_ACCESS_KEY="..."
-# fly secrets set AWS_ENDPOINT_URL_S3="https://fly.storage.tigris.dev"
 ```
 
 ### 4. デプロイ
@@ -112,9 +114,9 @@ fly scale vm shared-cpu-2x
    fly secrets list
    ```
 
-2. `DATABASE_URL` に `geo-base-pg.flycast` 経由の Fly internal network ホスト名が含まれているか確認
+2. `DATABASE_URL` に `geo-base-pg.internal` 経由の Fly internal network ホスト名が含まれているか確認（`api/lib/database.py` は `*.internal` / `*.flycast` の両方を受け付けるが、`docs/POSTGRES_SETUP.md` と本書は `.internal` で統一）
 
-3. Fly internal network (`*.flycast` / `*.internal`) は SSL 不要（`api/lib/database.py` で SSL を自動付与しないよう gate 済み、PR #76）。外部 PostgreSQL を使う場合のみ `?sslmode=require` を付ける
+3. Fly internal network (`*.internal` / `*.flycast`) は SSL 不要（`api/lib/database.py` で SSL を自動付与しないよう gate 済み、PR #76）。外部 PostgreSQL を使う場合のみ `?sslmode=require` を付ける
 
 ### メモリ不足エラー
 

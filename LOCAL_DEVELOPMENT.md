@@ -228,4 +228,4 @@ cd docker && docker compose up -d postgis
 | Admin UI | https://geo-base-admin.vercel.app | Vercel |
 | API | https://geo-base-api.fly.dev | Fly.io |
 | MCP Server | https://geo-base-mcp.fly.dev | Fly.io |
-| PostgreSQL + PostGIS | `geo-base-pg.flycast` (internal) | Fly.io (`geo-base-pg`) |
+| PostgreSQL + PostGIS | `geo-base-pg.internal` (Fly internal network) | Fly.io (`geo-base-pg`) |

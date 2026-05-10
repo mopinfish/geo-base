@@ -14,7 +14,7 @@
 | API (FastAPI) | Fly.io | `geo-base-api.fly.dev` | [`api/FLY_DEPLOY.md`](./api/FLY_DEPLOY.md) |
 | MCP Server | Fly.io | `geo-base-mcp.fly.dev` | `cd mcp && fly deploy` |
 | Admin UI (Next.js) | Vercel | `geo-base-admin.vercel.app` | GitHub push で auto-deploy |
-| PostgreSQL + PostGIS | Fly.io (`geo-base-pg`) | internal: `geo-base-pg.flycast` | [`docs/POSTGRES_SETUP.md`](./docs/POSTGRES_SETUP.md) |
+| PostgreSQL + PostGIS | Fly.io (`geo-base-pg`) | internal: `geo-base-pg.internal` | [`docs/POSTGRES_SETUP.md`](./docs/POSTGRES_SETUP.md) |
 | Redis | Upstash (キャッシュ) | — | env `REDIS_URL` 経由 |
 | Storage (COG/PMTiles) | Fly Tigris (S3 互換) | — | Issue #72 Phase 1.2 で切替予定 |
 
