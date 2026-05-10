@@ -40,7 +40,9 @@ jobs:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
       - name: Setup flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        # Pinned to SHA (= release 1.6 / v1) for supply-chain safety.
+        # Update when a new release is published: https://github.com/superfly/flyctl-actions/releases
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
 
       - name: Resolve current production image
         run: |

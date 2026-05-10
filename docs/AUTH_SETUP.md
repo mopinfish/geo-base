@@ -310,7 +310,7 @@ cd api && uv run python -m lib.auth.cli cleanup-expired
 
 **失敗時のアラート:**
 
-GitHub Actions のデフォルト通知（リポジトリ Watcher / 失敗通知設定） に依存します。
+GitHub Actions のデフォルト通知（リポジトリ Watcher / 失敗通知設定）に依存します。
 Slack / Sentry 連携は別途検討（将来的な改善余地）。
 
 ---
