@@ -214,7 +214,8 @@ Supabaseを使用する場合:
 
 | 変数名 | 値 | 説明 |
 |--------|-----|------|
-| `NEXT_PUBLIC_API_URL` | `https://geo-base-api.fly.dev` | 本番API URL |
+| `API_BACKEND_URL` | `https://geo-base-api.fly.dev` | **必須** (Production scope)。`next.config.ts` の rewrites が `/api/*` を proxy する宛先。未設定だと build が fail-fast で停止する |
+| `NEXT_PUBLIC_API_URL` | （空） | 本番では同一オリジン fetch を使うため空にする。`tilesets/[id]/page.tsx` 等は内部で `https://geo-base-api.fly.dev` の fallback を持つ |
 | `NEXT_PUBLIC_MCP_URL` | `https://geo-base-mcp.fly.dev` | 本番MCP URL |
 
 ### 4. デプロイ
