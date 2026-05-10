@@ -260,7 +260,7 @@ export default function GeoJSONImportPage() {
 
         {/* 成功メッセージ */}
         {status === "success" && (
-          <Card className="border-green-500 bg-green-500/5">
+          <Card className="border-green-500 bg-green-500/5" data-testid="import-success-message">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-2">
@@ -371,6 +371,7 @@ export default function GeoJSONImportPage() {
                       onChange={(e) => setSelectedTilesetId(e.target.value)}
                       disabled={status === "importing" || status === "calculating"}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      data-testid="import-tileset-select"
                     >
                       {tilesets.map((tileset) => (
                         <option key={tileset.id} value={tileset.id}>
@@ -449,6 +450,7 @@ export default function GeoJSONImportPage() {
                       onClick={handleImport}
                       disabled={status === "importing" || status === "calculating" || !selectedTilesetId}
                       className="w-full"
+                      data-testid="import-submit"
                     >
                       {status === "importing" ? (
                         <>
