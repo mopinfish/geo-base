@@ -90,6 +90,12 @@ CREATE TABLE IF NOT EXISTS team_invitations (
 -- (No-op on fresh DBs since the CREATE TABLE above already declares it nullable.)
 ALTER TABLE team_invitations ALTER COLUMN token DROP NOT NULL;
 
+-- Backfill: clear tokens of any non-pending invitations that pre-date issue #55.
+-- Without this, plaintext tokens of older accepted/expired/cancelled invitations
+-- would remain in the DB. Idempotent (no-op on fresh DBs and after first run).
+UPDATE team_invitations SET token = NULL
+ WHERE status <> 'pending' AND token IS NOT NULL;
+
 COMMENT ON TABLE team_invitations IS 'チーム招待の管理テーブル';
 COMMENT ON COLUMN team_invitations.token IS '受諾/失効/キャンセル時に NULL に設定（漏洩した token のリプレイ防止）';
 

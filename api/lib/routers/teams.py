@@ -2,7 +2,7 @@
 Teams management CRUD endpoints.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 from typing import Optional
 
@@ -730,14 +730,24 @@ def accept_team_invitation(
             if status != 'pending':
                 raise HTTPException(status_code=400, detail=f"Invitation is {status}")
 
-            if expires_at and expires_at < datetime.utcnow():
-                # Update status to expired and clear token (#55: replay prevention)
-                cur.execute(
-                    "UPDATE team_invitations SET status = 'expired', token = NULL WHERE id = %s",
-                    (inv_id,)
+            if expires_at:
+                # psycopg2 が TIMESTAMPTZ を tz-aware で返すケースに合わせて
+                # 比較対象も tz-aware にしておく。naive で来たら UTC 扱いに正規化。
+                # auth.py の accept-invitation と同じパターン。
+                now = datetime.now(timezone.utc)
+                expires_at_aware = (
+                    expires_at.replace(tzinfo=timezone.utc)
+                    if expires_at.tzinfo is None
+                    else expires_at
                 )
-                conn.commit()
-                raise HTTPException(status_code=400, detail="Invitation has expired")
+                if expires_at_aware < now:
+                    # Update status to expired and clear token (#55: replay prevention)
+                    cur.execute(
+                        "UPDATE team_invitations SET status = 'expired', token = NULL WHERE id = %s",
+                        (inv_id,)
+                    )
+                    conn.commit()
+                    raise HTTPException(status_code=400, detail="Invitation has expired")
 
             # Email 一致検証: invitation.email と user.email が一致しないと受諾不可
             if user.email and user.email.lower() != email.lower():
