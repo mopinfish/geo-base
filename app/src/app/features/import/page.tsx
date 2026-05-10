@@ -74,7 +74,7 @@ export default function GeoJSONImportPage() {
 
     const fetchTilesets = async () => {
       try {
-        const response = await api.listTilesets();
+        const response = await api.listTilesets({ include_private: true });
         // APIレスポンス形式に対応
         const data = Array.isArray(response) ? response : response?.tilesets || [];
         // vectorタイプのみフィルタリング

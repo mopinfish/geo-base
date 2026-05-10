@@ -24,7 +24,7 @@ export default function NewFeaturePage() {
     
     setIsLoading(true);
     try {
-      const result = await api.listTilesets();
+      const result = await api.listTilesets({ include_private: true });
       if (Array.isArray(result)) {
         setTilesets(result);
       } else if (result && typeof result === 'object' && 'tilesets' in result) {

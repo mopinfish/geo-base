@@ -56,7 +56,7 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
     try {
       const [featureData, tilesetsResult] = await Promise.all([
         api.getFeature(id),
-        api.listTilesets(),
+        api.listTilesets({ include_private: true }),
       ]);
       
       // GeoJSON Feature形式を変換
