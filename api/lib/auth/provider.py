@@ -9,7 +9,8 @@ class AuthProvider(ABC):
     """認証プロバイダの抽象インタフェース。
 
     起動時に AUTH_PROVIDER 環境変数で 1 つだけ生成される。
-    実装: SupabaseAuthProvider, LocalAuthProvider
+    実装: LocalAuthProvider
+    （SupabaseAuthProvider は 2026-05-10 に削除済み — Issue #72）
     """
 
     # === トークン検証（毎リクエストで呼ばれる） ===

@@ -8,11 +8,10 @@
 #
 # First time setup:
 #   fly apps create geo-base-api
-#   fly secrets set DATABASE_URL="postgresql://..."
-#   fly secrets set SUPABASE_URL="https://..."
-#   fly secrets set SUPABASE_ANON_KEY="..."
-#   fly secrets set SUPABASE_JWT_SECRET="..."
+#   fly secrets set DATABASE_URL="postgresql://postgres:****@geo-base-pg.internal:5432/geo_base"
+#   fly secrets set AUTH_PROVIDER=local JWT_SECRET="$(openssl rand -base64 64)"
 #   fly deploy
+# 詳細は docs/POSTGRES_SETUP.md と docs/AUTH_SETUP.md を参照。
 # =============================================================================
 
 app = "geo-base-api"

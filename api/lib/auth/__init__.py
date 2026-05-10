@@ -42,11 +42,13 @@ def get_auth_provider() -> AuthProvider:
     if settings.auth_provider == "local":
         from .providers.local import LocalAuthProvider
         return LocalAuthProvider()
-    elif settings.auth_provider == "supabase":
-        from .providers.supabase import SupabaseAuthProvider
-        return SupabaseAuthProvider()
 
-    raise ValueError(f"Unknown AUTH_PROVIDER: {settings.auth_provider}")
+    # Settings の validate_auth_config と同じ文言で reject。通常は Settings 側で
+    # 先に弾かれるためここに到達しないが、validation を bypass された場合の保険。
+    raise ValueError(
+        f"Unknown AUTH_PROVIDER: {settings.auth_provider} "
+        "(only 'local' is supported)"
+    )
 
 
 def extract_token_from_header(authorization: Optional[str]) -> Optional[str]:
