@@ -295,11 +295,12 @@ def _user_has_team_access(conn, user_id: str, tileset_id: str) -> bool:
 # 05_teams_schema.sql L195-217）なので、JWT ユーザー経路ではそれに委譲する。
 # API キー経路は team_id ベースで team_tilesets.permission_level を直接見る。
 
-# action 名 → 必要な scope。未登録の action は禁止する（タイポ等で
-# 許可判定が誤って通らないよう、`check_tileset_write_access_v2` 入口で
-# 明示的に弾く）。
+# 書き込み action 名 → 必要な scope。`check_tileset_write_access_v2` は
+# 書き込み（create / update / delete）専用ヘルパなので、ここに `read` は
+# 含めない（読み取りは `check_tileset_access_v2` を使うこと）。
+# 未登録の action は禁止する（タイポ等で許可判定が誤って通らないよう、
+# `check_tileset_write_access_v2` 入口で明示的に弾く）。
 _ACTION_REQUIRED_SCOPE = {
-    "read": "read",
     "create": "write",
     "update": "write",
     "delete": "delete",
@@ -312,23 +313,27 @@ async def check_tileset_write_access_v2(
     ctx: Optional["AuthContext"],
     required_action: str,
 ) -> bool:
-    """タイルセット書き込み認可判定。
+    """タイルセット書き込み認可判定（create / update / delete 専用）。
+
+    読み取り認可は `check_tileset_access_v2` を使うこと。
 
     ルール:
     1. 認証なし → 不可
-    2. 必要な scope が不足 → 不可（API キー想定）
-    3. 個人タイルセット所有者（tileset.user_id == ctx.user_id）→ 常に可
-    4. JWT ユーザー: `can_user_perform_action(user_id, tileset_id, action)`
+    2. `required_action` が `_ACTION_REQUIRED_SCOPE` に未登録 → 不可
+       （タイポ / 未対応 action を即拒否）
+    3. 必要な scope が不足 → 不可（API キー想定）
+    4. 個人タイルセット所有者（tileset.user_id == ctx.user_id）→ 常に可
+    5. JWT ユーザー: `can_user_perform_action(user_id, tileset_id, action)`
        SQL 関数で team_member.role と team_tilesets.permission_level を
        考慮した判定を行う
-    5. API キー: ctx.team_id が共有先 team の場合のみ、team_tilesets の
+    6. API キー: ctx.team_id が共有先 team の場合のみ、team_tilesets の
        permission_level が action に対して十分か判定（team_role の継承は
        適用しない — API キーは team の "代理" だが特定 user の権限を継承
        しないため）
 
     Args:
-        required_action: "update" or "delete"（"create" / "read" も受け付けるが、
-            このヘルパは書き込み用途を想定）
+        required_action: `"create"`、`"update"`、`"delete"` のいずれか。
+            `"read"` を含む他の値は False（タイポ防止）。
     """
     import asyncio
 

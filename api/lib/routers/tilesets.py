@@ -609,13 +609,16 @@ async def calculate_tileset_bounds(
 
     Useful after bulk importing GeoJSON features.
 
-    実行可能な条件（issue #49、`update` action 相当）:
+    実行可能な条件（issue #49、`update` action 相当）— **JWT 必須**:
     - 個人タイルセットの所有者
-    - JWT ユーザー: `can_user_perform_action(user_id, tileset_id, 'update')` が True
-      （team_role=owner/administrator の role 継承、または team_tilesets.permission_level
-      が write 以上）
-    - API キー: ctx.team_id が共有先 team の場合のみ、かつ
-      team_tilesets.permission_level が write 以上
+    - team 経由で `can_user_perform_action(user_id, tileset_id, 'update')`
+      が True を返すユーザー（team_role=owner/administrator の role 継承、
+      または team_tilesets.permission_level が write 以上の明示）
+
+    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
+    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
+    > のため API キーでは呼べません。`require_auth_context` への移行は
+    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
         # Step 1: 認可判定に必要なフィールドだけ読んで cursor を閉じる
@@ -725,13 +728,16 @@ async def update_tileset(
     """
     Update an existing tileset.
 
-    実行可能な条件（issue #49、`update` action）:
+    実行可能な条件（issue #49、`update` action）— **JWT 必須**:
     - 個人タイルセットの所有者
-    - JWT ユーザー: `can_user_perform_action(user_id, tileset_id, 'update')` が True
-      （team_role=owner/administrator の role 継承、または team_tilesets.permission_level
-      が write 以上）
-    - API キー: ctx.team_id が共有先 team の場合のみ、かつ
-      team_tilesets.permission_level が write 以上
+    - team 経由で `can_user_perform_action(user_id, tileset_id, 'update')`
+      が True を返すユーザー（team_role=owner/administrator の role 継承、
+      または team_tilesets.permission_level が write 以上の明示）
+
+    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
+    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
+    > のため API キーでは呼べません。`require_auth_context` への移行は
+    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
         # Step 1: 認可判定に必要な行を読み出して cursor を閉じる
@@ -863,15 +869,17 @@ async def delete_tileset(
     """
     Delete a tileset and all associated features.
 
-    実行可能な条件（issue #49）:
-    - 個人タイルセットの所有者（ctx.user_id == tileset.user_id）
-    - JWT ユーザー: `can_user_perform_action(user_id, tileset_id, 'delete')`
-      が True を返す場合。これは
-      - team_role が owner/administrator の場合は role 継承で admin 相当となり可
-      - もしくは team_tilesets.permission_level='admin' が明示されている場合
-    - API キー: ctx.team_id が共有先 team の場合のみ、かつ
-      team_tilesets.permission_level='admin' が明示されている場合
-      （API キーは team_role の継承を行わないため、permission_level=NULL は不可）
+    実行可能な条件（issue #49、`delete` action）— **JWT 必須**:
+    - 個人タイルセットの所有者
+    - team 経由で `can_user_perform_action(user_id, tileset_id, 'delete')`
+      が True を返すユーザー
+      - team_role=owner/administrator の場合は role 継承で admin 相当となり可
+      - もしくは team_tilesets.permission_level='admin' の明示
+
+    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
+    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
+    > のため API キーでは呼べません。`require_auth_context` への移行は
+    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
         # Step 1: 認可判定に必要な行を読み出して cursor を閉じる
