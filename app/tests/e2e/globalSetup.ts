@@ -31,9 +31,10 @@ const API_BASE = process.env.PLAYWRIGHT_API_BASE_URL || "http://localhost:8000";
 const APP_BASE = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 
 async function ensureAdminUser(): Promise<void> {
-  // CLI 経由で admin を冪等に作成する。既に存在するなら "already exists" 出力で
-  // 終了コード 1 になるため、それは握りつぶす。失敗の本当のシグナルは
-  // 各テストの login 試行で検出する。
+  // CLI 経由で admin を冪等に作成する。既存ユーザー時は CLI が
+  // "User with email ... already exists" を stderr に出して exit 1 する。
+  // それ以外の失敗（DB 接続不良 / WeakPassword / uv 未インストール等）は
+  // 後続テストが原因不明にハマるのを避けるため再 throw する。
   const cmd = [
     "uv run python -m lib.auth.cli create-admin",
     `--email ${E2E_ADMIN_EMAIL}`,
@@ -44,12 +45,23 @@ async function ensureAdminUser(): Promise<void> {
   try {
     execSync(cmd, {
       cwd: path.resolve(__dirname, "../../../api"),
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PYTHONUNBUFFERED: "1" },
     });
-  } catch {
-    // 既存ユーザー時は exit 1 になる。各テストの login 試行で本当に動くかを
-    // 検出するのでここでは無視。
+  } catch (err) {
+    // execSync の error には stderr / stdout が Buffer で乗る (stdio: "pipe" の場合)。
+    const e = err as { stderr?: Buffer; stdout?: Buffer; status?: number };
+    const stderr = e.stderr?.toString() ?? "";
+    const stdout = e.stdout?.toString() ?? "";
+    const combined = `${stdout}\n${stderr}`;
+    if (combined.includes("already exists")) {
+      // 期待通りの冪等ケース。
+      return;
+    }
+    // 想定外の失敗。テスト失敗の根本原因を握り潰さないように throw する。
+    throw new Error(
+      `create-admin failed (exit ${e.status ?? "?"}):\n${combined}`,
+    );
   }
 }
 

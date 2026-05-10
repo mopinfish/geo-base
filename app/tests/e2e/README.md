@@ -57,21 +57,23 @@ npm run test:e2e:smoke
 
 ```
 app/tests/e2e/
-├── auth/                 # AUTH-* (unauthenticated project)
-├── dashboard/            # DASH-*
-├── tilesets/             # TS-*
-├── features/             # FT-*
-├── datasources/          # DS-*
-├── teams/                # TM-*
-├── api-keys/             # AK-*
+├── auth/                       # AUTH-* (unauthenticated project)
+├── dashboard/                  # DASH-*
+├── tilesets/                   # TS-*
+├── features/                   # FT-*
+├── datasources/                # DS-*
+├── teams/                      # TM-*
+├── api-keys/                   # AK-*
 ├── fixtures/
-│   ├── api-client.ts     # 認証付き request context
-│   ├── factories.ts      # API 経由のシードファクトリ
+│   ├── api-client.ts           # session.ts の access_token を Bearer に乗せる request context
+│   ├── authenticated-test.ts   # 認証必須テスト用の fixture (per-test loginAsAdmin + addCookies)
+│   ├── factories.ts            # API 経由のシードファクトリ
 │   └── sample.geojson
 ├── utils/
-│   ├── reset-db.ts       # POST /api/test/reset 呼び出し
+│   ├── reset-db.ts             # POST /api/test/reset 呼び出し（認証不要）
+│   ├── session.ts              # loginAsAdmin / getAccessToken / getCookies
 │   └── wait-for-server.ts
-└── globalSetup.ts        # admin 作成 + login + storageState 保存
+└── globalSetup.ts              # admin user の冪等作成のみ（ログインは各テストで都度実施）
 ```
 
 ## 新しいテストを書く
@@ -95,7 +97,9 @@ app/tests/e2e/
 
 ## トラブルシューティング
 
-- **"Failed to login"**: globalSetup が API に届かない。Step 2 の API 起動を確認。`E2E_MODE=1` が無いと `POST /api/test/reset` が 404 を返す。
+- **"Login failed: ..."**: `utils/session.ts` の `loginAsAdmin()` が API に届かない or 認証情報が不一致。Step 2 の API 起動と `globalSetup.ts` で作成された admin の email/password が一致しているか確認。
 - **"Refusing to call /api/test/reset against non-local host"**: `PLAYWRIGHT_API_BASE_URL` が localhost / 127.0.0.1 でない。production を誤爆しないための安全装置。
 - **"DATABASE_URL must point to a geo_base_e2e* database"**: API が `geo_base_e2e` 以外の DB に向いている。Step 2 の `DATABASE_URL` を確認。
+- **"Not Found" (404) on /api/test/reset**: API が `E2E_MODE=1` 付きで起動されていない。Step 2 の env を確認。
 - **"@playwright/test cannot find module ./tests/e2e/globalSetup.ts"**: `tests/e2e/globalSetup.ts` が無いか TypeScript エラー。`npx tsc --noEmit` で確認。
+- **"No active session. Call loginAsAdmin() ..."**: factory 等が認証必須なのに loginAsAdmin が呼ばれていない。`fixtures/authenticated-test.ts` から `test, expect` を import するか、beforeAll で明示的に `loginAsAdmin()` を呼ぶ。
