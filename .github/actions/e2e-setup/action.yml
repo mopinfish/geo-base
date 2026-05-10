@@ -25,6 +25,10 @@ inputs:
   e2e-database-url:
     description: "E2E DB の DATABASE_URL"
     required: true
+  worker-count:
+    description: "並列ワーカー数（追加で geo_base_e2e_w0..w(N-1) を作る、デフォルト 1）"
+    required: false
+    default: "1"
 
 runs:
   using: composite
@@ -78,20 +82,29 @@ runs:
         PGUSER: postgres
         PGPASSWORD: postgres
         E2E_DATABASE_URL: ${{ inputs.e2e-database-url }}
+        E2E_WORKER_COUNT: ${{ inputs.worker-count }}
       run: |
-        # e2e-database-url から DB 名を抽出。Phase 2 で worker 別 DB
+        # メインの E2E DB 名を抽出。Phase 2 で worker 別 DB
         # (geo_base_e2e_w0 等) に拡張しても URL 入力を変えるだけで済む。
         DB_NAME=$(echo "$E2E_DATABASE_URL" | sed -E 's|^.*/([^/?]+)(\?.*)?$|\1|')
         if [ -z "$DB_NAME" ]; then
           echo "Failed to extract DB name from E2E_DATABASE_URL" >&2
           exit 1
         fi
-        echo "Using E2E database: $DB_NAME"
-        psql -d postgres -c "CREATE DATABASE \"$DB_NAME\";"
-        # docker/postgis-init/01..06 を順に流す
-        for f in docker/postgis-init/0[1-6]_*.sql; do
-          echo "Applying $f to $DB_NAME"
-          psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$f"
+        # 共通の init 対象: メイン DB + (worker 数 > 1 のとき) ワーカー DB。
+        DBS=("$DB_NAME")
+        if [ "$E2E_WORKER_COUNT" -gt 1 ]; then
+          for i in $(seq 0 $((E2E_WORKER_COUNT - 1))); do
+            DBS+=("geo_base_e2e_w${i}")
+          done
+        fi
+        for DB in "${DBS[@]}"; do
+          echo "Creating $DB"
+          psql -d postgres -c "CREATE DATABASE \"$DB\";"
+          for f in docker/postgis-init/0[1-6]_*.sql; do
+            echo "Applying $f to $DB"
+            psql -d "$DB" -v ON_ERROR_STOP=1 -f "$f"
+          done
         done
 
     - name: Create E2E admin user

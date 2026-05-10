@@ -63,3 +63,19 @@ def test_reset_handler_aborts_on_wrong_database(monkeypatch):
     res = client.post("/api/test/reset")
     assert res.status_code == 400
     assert "geo_base_e2e" in str(res.json())
+
+
+def test_reset_handler_accepts_worker_database_prefix(monkeypatch):
+    """`geo_base_e2e_w0` のような worker suffix も `startswith("geo_base_e2e")` で
+    OK と判定される（Phase 2 worker 並列化のため）。"""
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/geo_base_e2e_w0",
+    )
+    app = _make_app(monkeypatch, "1")
+    client = TestClient(app)
+    res = client.post("/api/test/reset")
+    # 接続できないなら 500 だが prefix チェックでは弾かれない（400 にならない）
+    assert res.status_code != 400, (
+        f"Expected non-400 (prefix check passed), got {res.status_code}: {res.text}"
+    )
