@@ -17,7 +17,12 @@ from lib.pmtiles import (
     generate_pmtiles_tilejson,
 )
 from lib.cache import get_cached_tileset_info, cache_tileset_info
-from lib.auth import AuthContext, get_auth_context_optional, check_tileset_access_v2
+from lib.auth import (
+    AuthContext,
+    acheck_tileset_access_v2,
+    check_tileset_access_v2,
+    get_auth_context_optional,
+)
 
 
 router = APIRouter(prefix="/pmtiles", tags=["tiles"])
@@ -147,7 +152,7 @@ async def get_pmtiles_tile_endpoint(
         "is_public": is_public,
         "user_id": owner_user_id,
     }
-    if not check_tileset_access_v2(conn, tileset_for_access, auth):
+    if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
         if auth is None:
             raise HTTPException(
                 status_code=401,
@@ -315,7 +320,7 @@ async def get_pmtiles_metadata_endpoint(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,

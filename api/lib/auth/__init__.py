@@ -236,6 +236,26 @@ def _user_has_team_access(conn, user_id: str, tileset_id: str) -> bool:
         return False
 
 
+async def acheck_tileset_access_v2(
+    conn, tileset: dict, ctx: Optional["AuthContext"]
+) -> bool:
+    """`async def` ハンドラから呼ぶための async wrapper。
+
+    `check_tileset_access_v2` は sync 関数で、`def` ハンドラから直接呼べば
+    FastAPI threadpool の上で動くので問題ない。一方 `async def` ハンドラ
+    （tiles/raster.py の get_raster_tile 等、HTTP fetch を await する系）
+    から直接呼ぶとイベントループをブロックするため、本 wrapper 経由で
+    `asyncio.to_thread` にオフロードする。
+
+    Note: `await acheck_tileset_access_v2(...)` を使うのは、handler 側で
+    既に他の I/O を await している場合のみ。それ以外は handler を `def` に
+    して `check_tileset_access_v2(...)` を直接呼ぶ方が threadpool が
+    効率的に並行処理する（Option A の本旨）。
+    """
+    import asyncio
+    return await asyncio.to_thread(check_tileset_access_v2, conn, tileset, ctx)
+
+
 # ============================================================================
 # Write access (issue #49 / ACCESS_CONTROL_REVIEW C-1)
 # ============================================================================
@@ -384,6 +404,7 @@ __all__ = [
     "get_auth_context_optional", "require_auth_context",
     # Tileset authorization (team-aware, ctx-based)
     "check_tileset_access_v2",
+    "acheck_tileset_access_v2",  # async wrapper for use in async def handlers (#66)
     # NEW (issue #49 / C-1): team-based tileset write authorization
     "check_tileset_write_access_v2",
 ]
