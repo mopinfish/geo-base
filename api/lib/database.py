@@ -68,27 +68,38 @@ def _is_fly() -> bool:
 def _prepare_connection_string(database_url: str) -> str:
     """
     Prepare database connection string with SSL settings.
-    
-    For Supabase and production environments, SSL is required.
+
+    For Supabase and production environments, SSL is required, EXCEPT when
+    connecting to a Fly.io private hostname (`*.internal` / `*.flycast`).
+    Such traffic flows over Fly's 6PN private network which is already
+    WireGuard-encrypted at the network layer, and the standard
+    `postgis/postgis` image is not SSL-enabled — so app-level SSL would
+    cause "server does not support SSL, but SSL was required".
     """
     settings = get_settings()
-    
+
     # Parse the URL
     parsed = urlparse(database_url)
-    
+
     # Check if SSL params already exist
     query_params = parse_qs(parsed.query)
-    
-    # Add sslmode if not present and needed
+
+    # Determine SSL requirement
     is_production = settings.is_production
     is_supabase = "supabase" in database_url.lower()
-    
-    if (is_production or is_supabase) and "sslmode" not in query_params:
+    host = (parsed.hostname or "").lower()
+    is_fly_internal = host.endswith(".internal") or host.endswith(".flycast")
+
+    if (
+        (is_production or is_supabase)
+        and not is_fly_internal
+        and "sslmode" not in query_params
+    ):
         query_params["sslmode"] = ["require"]
-    
+
     # Rebuild query string
     new_query = urlencode(query_params, doseq=True)
-    
+
     # Rebuild URL
     new_parsed = parsed._replace(query=new_query)
     return urlunparse(new_parsed)
