@@ -677,8 +677,9 @@ export default function FeaturesPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredFeatures.map((feature) => (
-                    <TableRow 
+                    <TableRow
                       key={feature.id}
+                      data-testid="feature-list-row"
                       className={selectedIds.has(feature.id) ? "bg-muted/50" : ""}
                     >
                       <TableCell>

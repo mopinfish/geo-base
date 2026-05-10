@@ -159,6 +159,7 @@ export default function TeamsPage() {
                 key={team.id}
                 className="cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => router.push(`/teams/${team.id}`)}
+                data-testid="team-card"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">

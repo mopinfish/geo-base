@@ -5,6 +5,7 @@ This is the main application entry point.
 Endpoints are organized into routers for better maintainability.
 """
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -26,6 +27,11 @@ from lib.routers.stats import router as stats_router
 from lib.routers.tiles import router as tiles_router
 from lib.routers.teams import router as teams_router
 from lib.routers.api_keys import router as api_keys_router
+
+# E2E テスト用のルーター（環境変数 E2E_MODE=1 のときだけ登録される）。
+# 本番には絶対に出してはいけない。詳細は lib/routers/test_helpers.py を参照。
+if os.getenv("E2E_MODE") == "1":
+    from lib.routers.test_helpers import router as test_helpers_router  # noqa: E402
 
 
 @asynccontextmanager
@@ -60,6 +66,9 @@ app.include_router(stats_router)
 app.include_router(tiles_router)
 app.include_router(teams_router)
 app.include_router(api_keys_router)
+
+if os.getenv("E2E_MODE") == "1":
+    app.include_router(test_helpers_router)
 
 
 def get_base_url(request: Request) -> str:

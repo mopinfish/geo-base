@@ -241,6 +241,7 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
         onChange={handleFileSelect}
         className="hidden"
         disabled={disabled}
+        data-testid="import-file-input"
       />
 
       {/* ファイル情報 */}

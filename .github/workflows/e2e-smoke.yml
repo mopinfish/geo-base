@@ -1,0 +1,134 @@
+name: E2E smoke (PR)
+
+# Issue #110: PR ごとに smoke 10 件を CI で実行する。
+# main マージ時 / nightly の full E2E は Phase 2 で別ワークフロー化する。
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "api/**"
+      - "docker/postgis-init/**"
+      - ".github/workflows/e2e-*.yml"
+      - ".github/actions/e2e-setup/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Run smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/geo_base_e2e
+      JWT_SECRET: ci-test-secret-not-for-production
+      E2E_MODE: "1"
+      AUTH_PROVIDER: local
+      # /api/auth/* は state-changing endpoint なので Origin ヘッダ検証が走る
+      # (api/lib/routers/auth.py の `_check_origin`)。デフォルトの ["*"] では
+      # 文字列照合に通らず 403 を返してブラウザの login/refresh が落ちるため、
+      # CI からアクセスする http://localhost:3000 を明示的に許可する。
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      # ブラウザは /api/* 相対で叩き、Next.js rewrites で API へ proxy する。
+      # NEXT_PUBLIC_API_URL は空のままにすることで HttpOnly cookie が
+      # localhost:3000 ドメインに保存される（同一オリジン）。
+      API_BACKEND_URL: http://localhost:8000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql (client)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          e2e-database-url: ${{ env.DATABASE_URL }}
+
+      - name: Start FastAPI in background
+        working-directory: api
+        run: |
+          uv run uvicorn lib.main:app --host 0.0.0.0 --port 8000 &
+          echo "FASTAPI_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Start Next.js in background
+        working-directory: app
+        run: |
+          npm run start -- --port 3000 &
+          echo "NEXTJS_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for FastAPI
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/api/health > /dev/null; then
+              echo "FastAPI ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "FastAPI did not become ready in time" >&2
+          exit 1
+
+      - name: Wait for Next.js
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000 > /dev/null; then
+              echo "Next.js ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Next.js did not become ready in time" >&2
+          exit 1
+
+      - name: Run smoke tests
+        working-directory: app
+        env:
+          PLAYWRIGHT_API_BASE_URL: http://localhost:8000
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          CI: "true"
+        run: npm run test:e2e:smoke
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: app/playwright-report
+          retention-days: 7
+
+      - name: Stop background servers
+        if: always()
+        run: |
+          [ -n "${FASTAPI_PID:-}" ] && kill "$FASTAPI_PID" || true
+          [ -n "${NEXTJS_PID:-}" ] && kill "$NEXTJS_PID" || true

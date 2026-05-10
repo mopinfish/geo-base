@@ -146,6 +146,7 @@ export function TilesetForm({
               onChange={(e) => setName(e.target.value)}
               placeholder="タイルセット名"
               required
+              data-testid="tileset-form-name"
             />
           </div>
 
@@ -158,6 +159,7 @@ export function TilesetForm({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="タイルセットの説明（任意）"
               rows={3}
+              data-testid="tileset-form-description"
             />
           </div>
 
@@ -170,7 +172,7 @@ export function TilesetForm({
                   value={type}
                   onValueChange={(v) => setType(v as typeof type)}
                 >
-                  <SelectTrigger id="type">
+                  <SelectTrigger id="type" data-testid="tileset-form-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -291,7 +293,7 @@ export function TilesetForm({
               キャンセル
             </Button>
           </Link>
-          <Button type="submit" disabled={isSubmitting || !name}>
+          <Button type="submit" disabled={isSubmitting || !name} data-testid="tileset-form-submit">
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
