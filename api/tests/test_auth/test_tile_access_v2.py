@@ -24,48 +24,43 @@ def setup_tileset(db_conn, clean_auth_tables):
 
 
 class TestCheckTilesetAccessV2:
-    @pytest.mark.asyncio
-    async def test_public_allows_anonymous(self, setup_tileset, db_conn):
+    def test_public_allows_anonymous(self, setup_tileset, db_conn):
         tid, owner = setup_tileset(is_public=True)
         with db_conn.cursor() as cur:
             cur.execute("SELECT id, user_id, is_public FROM tilesets WHERE id = %s", (tid,))
             row = dict(zip([d[0] for d in cur.description], cur.fetchone()))
-        assert await check_tileset_access_v2(db_conn, row, None) is True
+        assert check_tileset_access_v2(db_conn, row, None) is True
 
-    @pytest.mark.asyncio
-    async def test_private_denies_anonymous(self, setup_tileset, db_conn):
+    def test_private_denies_anonymous(self, setup_tileset, db_conn):
         tid, owner = setup_tileset(is_public=False)
         with db_conn.cursor() as cur:
             cur.execute("SELECT id, user_id, is_public FROM tilesets WHERE id = %s", (tid,))
             row = dict(zip([d[0] for d in cur.description], cur.fetchone()))
-        assert await check_tileset_access_v2(db_conn, row, None) is False
+        assert check_tileset_access_v2(db_conn, row, None) is False
 
-    @pytest.mark.asyncio
-    async def test_owner_allowed(self, setup_tileset, db_conn):
+    def test_owner_allowed(self, setup_tileset, db_conn):
         tid, owner = setup_tileset(is_public=False)
         with db_conn.cursor() as cur:
             cur.execute("SELECT id, user_id, is_public FROM tilesets WHERE id = %s", (tid,))
             row = dict(zip([d[0] for d in cur.description], cur.fetchone()))
 
         ctx = AuthContext(user_id=owner, scopes=["read", "write", "admin"])
-        assert await check_tileset_access_v2(db_conn, row, ctx) is True
+        assert check_tileset_access_v2(db_conn, row, ctx) is True
 
-    @pytest.mark.asyncio
-    async def test_non_owner_denied(self, setup_tileset, db_conn):
+    def test_non_owner_denied(self, setup_tileset, db_conn):
         tid, owner = setup_tileset(is_public=False)
         with db_conn.cursor() as cur:
             cur.execute("SELECT id, user_id, is_public FROM tilesets WHERE id = %s", (tid,))
             row = dict(zip([d[0] for d in cur.description], cur.fetchone()))
 
         ctx = AuthContext(user_id="other-user", scopes=["read"])
-        assert await check_tileset_access_v2(db_conn, row, ctx) is False
+        assert check_tileset_access_v2(db_conn, row, ctx) is False
 
-    @pytest.mark.asyncio
-    async def test_api_key_no_read_scope_denied(self, setup_tileset, db_conn):
+    def test_api_key_no_read_scope_denied(self, setup_tileset, db_conn):
         tid, owner = setup_tileset(is_public=False)
         with db_conn.cursor() as cur:
             cur.execute("SELECT id, user_id, is_public FROM tilesets WHERE id = %s", (tid,))
             row = dict(zip([d[0] for d in cur.description], cur.fetchone()))
 
         ctx = AuthContext(user_id=owner, is_api_key=True, scopes=[])  # 空スコープ
-        assert await check_tileset_access_v2(db_conn, row, ctx) is False
+        assert check_tileset_access_v2(db_conn, row, ctx) is False

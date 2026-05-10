@@ -162,7 +162,7 @@ async def get_raster_tile(
         "is_public": is_public,
         "user_id": owner_user_id,
     }
-    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+    if not check_tileset_access_v2(conn, tileset_for_access, auth):
         if auth is None:
             raise HTTPException(
                 status_code=401,
@@ -214,7 +214,7 @@ async def get_raster_tile(
 
 
 @router.get("/{tileset_id}/tilejson.json")
-async def get_raster_tilejson_endpoint(
+def get_raster_tilejson_endpoint(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
@@ -260,7 +260,7 @@ async def get_raster_tilejson_endpoint(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -367,7 +367,7 @@ async def get_raster_preview(
                 "is_public": is_public,
                 "user_id": owner_id,
             }
-            if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if not check_tileset_access_v2(conn, tileset_for_access, auth):
                 if auth is None:
                     raise HTTPException(
                         status_code=401,
@@ -420,7 +420,7 @@ async def get_raster_preview(
 
 
 @router.get("/{tileset_id}/info")
-async def get_raster_info(
+def get_raster_info(
     tileset_id: str,
     conn=Depends(get_connection),
     auth: Optional[AuthContext] = Depends(get_auth_context_optional),
@@ -464,7 +464,7 @@ async def get_raster_info(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -496,7 +496,7 @@ async def get_raster_info(
 
 
 @router.get("/{tileset_id}/statistics")
-async def get_raster_statistics(
+def get_raster_statistics(
     tileset_id: str,
     indexes: str = Query(None, description="Comma-separated band indexes"),
     conn=Depends(get_connection),
@@ -542,7 +542,7 @@ async def get_raster_statistics(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,

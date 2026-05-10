@@ -147,7 +147,7 @@ async def get_pmtiles_tile_endpoint(
         "is_public": is_public,
         "user_id": owner_user_id,
     }
-    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+    if not check_tileset_access_v2(conn, tileset_for_access, auth):
         if auth is None:
             raise HTTPException(
                 status_code=401,
@@ -189,7 +189,7 @@ async def get_pmtiles_tile_endpoint(
 
 
 @router.get("/{tileset_id}/tilejson.json")
-async def get_pmtiles_tilejson_endpoint(
+def get_pmtiles_tilejson_endpoint(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
@@ -235,7 +235,7 @@ async def get_pmtiles_tilejson_endpoint(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -315,7 +315,7 @@ async def get_pmtiles_metadata_endpoint(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,

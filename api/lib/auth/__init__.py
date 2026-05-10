@@ -167,8 +167,11 @@ async def require_auth_context(
     return ctx
 
 
-async def check_tileset_access_v2(conn, tileset: dict, ctx: Optional["AuthContext"]) -> bool:
-    """タイルセットアクセス判定。
+def check_tileset_access_v2(conn, tileset: dict, ctx: Optional["AuthContext"]) -> bool:
+    """タイルセットアクセス判定（sync）。
+
+    sync な psycopg2 を直接呼ぶ。FastAPI が `def` ハンドラを threadpool
+    で実行する仕組みに乗せる方針（issue #64 Option A、#66 で sync 化）。
 
     ルール:
     1. 公開タイルセット → 誰でも可
@@ -178,8 +181,6 @@ async def check_tileset_access_v2(conn, tileset: dict, ctx: Optional["AuthContex
     5. API キー（チーム紐付け）+ team_tilesets で共有 → 可
     6. JWT ユーザー + 所属チーム経由で共有 → 可
     """
-    import asyncio
-
     if tileset.get("is_public"):
         return True
     if ctx is None:
@@ -196,10 +197,10 @@ async def check_tileset_access_v2(conn, tileset: dict, ctx: Optional["AuthContex
     if ctx.is_api_key:
         if ctx.team_id is None:
             return False
-        return await asyncio.to_thread(_is_tileset_shared_with_team, conn, tileset_id, ctx.team_id)
+        return _is_tileset_shared_with_team(conn, tileset_id, ctx.team_id)
 
     # JWT ユーザー: 所属する全チームを横断
-    return await asyncio.to_thread(_user_has_team_access, conn, ctx.user_id, tileset_id)
+    return _user_has_team_access(conn, ctx.user_id, tileset_id)
 
 
 def _is_tileset_shared_with_team(conn, tileset_id: str, team_id: str) -> bool:
@@ -258,13 +259,16 @@ _ACTION_REQUIRED_SCOPE = {
 }
 
 
-async def check_tileset_write_access_v2(
+def check_tileset_write_access_v2(
     conn,
     tileset: dict,
     ctx: Optional["AuthContext"],
     required_action: str,
 ) -> bool:
-    """タイルセット書き込み認可判定（create / update / delete 専用）。
+    """タイルセット書き込み認可判定（create / update / delete 専用、sync）。
+
+    sync な psycopg2 を直接呼ぶ。FastAPI が `def` ハンドラを threadpool
+    で実行する仕組みに乗せる方針（issue #64 Option A、#66 で sync 化）。
 
     読み取り認可は `check_tileset_access_v2` を使うこと。
 
@@ -286,8 +290,6 @@ async def check_tileset_write_access_v2(
         required_action: `"create"`、`"update"`、`"delete"` のいずれか。
             `"read"` を含む他の値は False（タイポ防止）。
     """
-    import asyncio
-
     if ctx is None:
         return False
 
@@ -307,13 +309,9 @@ async def check_tileset_write_access_v2(
     if ctx.is_api_key:
         if ctx.team_id is None:
             return False
-        return await asyncio.to_thread(
-            _team_permission_allows, conn, ctx.team_id, tileset_id, required_action
-        )
+        return _team_permission_allows(conn, ctx.team_id, tileset_id, required_action)
 
-    return await asyncio.to_thread(
-        _user_can_perform_action, conn, ctx.user_id, tileset_id, required_action
-    )
+    return _user_can_perform_action(conn, ctx.user_id, tileset_id, required_action)
 
 
 def _user_can_perform_action(

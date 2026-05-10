@@ -198,7 +198,7 @@ def list_datasources(
 
 
 @router.get("/{datasource_id}")
-async def get_datasource(
+def get_datasource(
     datasource_id: str,
     conn=Depends(get_connection),
     auth: Optional[AuthContext] = Depends(get_auth_context_optional),
@@ -232,7 +232,7 @@ async def get_datasource(
                     "user_id": row[16],
                 }
 
-                if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                if not check_tileset_access_v2(conn, tileset_for_access, auth):
                     if auth is None:
                         raise HTTPException(
                             status_code=401,
@@ -288,7 +288,7 @@ async def get_datasource(
                     "user_id": row[15],
                 }
 
-                if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                if not check_tileset_access_v2(conn, tileset_for_access, auth):
                     if auth is None:
                         raise HTTPException(
                             status_code=401,

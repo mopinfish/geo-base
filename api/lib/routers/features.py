@@ -456,7 +456,7 @@ def create_features_bulk(
 
 
 @router.get("")
-async def list_features(
+def list_features(
     tileset_id: str = Query(None, description="Filter by tileset ID"),
     layer: str = Query(None, description="Filter by layer name"),
     bbox: str = Query(None, description="Bounding box filter (minx,miny,maxx,maxy)"),
@@ -494,7 +494,7 @@ async def list_features(
                         "user_id": row[2],
                     }
 
-                    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                    if not check_tileset_access_v2(conn, tileset_for_access, auth):
                         if auth is None:
                             raise HTTPException(
                                 status_code=401,
@@ -590,7 +590,7 @@ async def list_features(
 
 
 @router.get("/{feature_id}")
-async def get_feature(
+def get_feature(
     feature_id: str,
     conn=Depends(get_connection),
     auth: Optional[AuthContext] = Depends(get_auth_context_optional),
@@ -624,7 +624,7 @@ async def get_feature(
                 "user_id": row[8],
             }
 
-            if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+            if not check_tileset_access_v2(conn, tileset_for_access, auth):
                 if auth is None:
                     raise HTTPException(
                         status_code=401,
