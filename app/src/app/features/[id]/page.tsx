@@ -353,11 +353,13 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
             </CardHeader>
             <CardContent>
               {geoJsonFeature && (
-                <MapView
-                  geoJson={geoJsonFeature}
-                  height="350px"
-                  interactive={true}
-                />
+                <div data-testid="feature-detail-map">
+                  <MapView
+                    geoJson={geoJsonFeature}
+                    height="350px"
+                    interactive={true}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>

@@ -309,7 +309,7 @@ export function FeatureForm({
               onValueChange={(value) => setValue("tileset_id", value)}
               disabled={isEditMode}
             >
-              <SelectTrigger>
+              <SelectTrigger data-testid="feature-form-tileset">
                 <SelectValue placeholder="タイルセットを選択" />
               </SelectTrigger>
               <SelectContent>
@@ -331,6 +331,7 @@ export function FeatureForm({
           <div className="space-y-2">
             <Label htmlFor="layer_name">レイヤー名</Label>
             <Input
+              data-testid="feature-form-layer-name"
               id="layer_name"
               placeholder="default"
               {...register("layer_name")}
@@ -479,14 +480,16 @@ export function FeatureForm({
         </CardHeader>
         <CardContent className="space-y-4">
           {properties.map((prop, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={index} className="flex items-center gap-2" data-testid="feature-form-property-row">
               <Input
+                data-testid="feature-form-property-key"
                 placeholder="キー"
                 value={prop.key}
                 onChange={(e) => updateProperty(index, "key", e.target.value)}
                 className="flex-1"
               />
               <Input
+                data-testid="feature-form-property-value"
                 placeholder="値"
                 value={prop.value}
                 onChange={(e) => updateProperty(index, "value", e.target.value)}
@@ -503,6 +506,7 @@ export function FeatureForm({
             </div>
           ))}
           <Button
+            data-testid="feature-form-property-add"
             type="button"
             variant="outline"
             onClick={addProperty}
@@ -521,7 +525,11 @@ export function FeatureForm({
             キャンセル
           </Button>
         )}
-        <Button type="submit" disabled={isSubmitting || !isGeometryValid}>
+        <Button
+          data-testid="feature-form-submit"
+          type="submit"
+          disabled={isSubmitting || !isGeometryValid}
+        >
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isEditMode ? "更新" : "作成"}
         </Button>

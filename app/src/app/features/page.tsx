@@ -474,8 +474,9 @@ export default function FeaturesPage() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               更新
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              data-testid="feature-export-open"
+              variant="outline"
               size="sm"
               onClick={() => setExportDialogOpen(true)}
               disabled={selectedTileset === "all"}
@@ -506,6 +507,7 @@ export default function FeaturesPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  data-testid="feature-search-input"
                   placeholder="フィーチャーを検索..."
                   className="pl-9"
                   value={searchQuery}
@@ -515,6 +517,7 @@ export default function FeaturesPage() {
               {/* ネイティブselectを使用（Radix UIのポータル問題を回避） */}
               <div className="relative">
                 <select
+                  data-testid="feature-filter-tileset"
                   value={selectedTileset}
                   onChange={(e) => setSelectedTileset(e.target.value)}
                   className="h-9 w-[200px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -530,6 +533,7 @@ export default function FeaturesPage() {
               </div>
               <div className="relative">
                 <select
+                  data-testid="feature-limit-select"
                   value={String(limit)}
                   onChange={(e) => setLimit(Number(e.target.value))}
                   className="h-9 w-[120px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -592,6 +596,7 @@ export default function FeaturesPage() {
                     選択をエクスポート
                   </Button>
                   <Button
+                    data-testid="feature-bulk-update"
                     variant="outline"
                     size="sm"
                     onClick={() => setBatchUpdateDialogOpen(true)}
@@ -600,6 +605,7 @@ export default function FeaturesPage() {
                     一括更新
                   </Button>
                   <Button
+                    data-testid="feature-bulk-delete"
                     variant="destructive"
                     size="sm"
                     onClick={handleBulkDeletePreview}
@@ -660,6 +666,7 @@ export default function FeaturesPage() {
                   <TableRow>
                     <TableHead className="w-12">
                       <input
+                        data-testid="feature-select-all"
                         type="checkbox"
                         checked={selectedIds.size === filteredFeatures.length && filteredFeatures.length > 0}
                         onChange={toggleAllSelection}
@@ -684,6 +691,7 @@ export default function FeaturesPage() {
                     >
                       <TableCell>
                         <input
+                          data-testid="feature-row-checkbox"
                           type="checkbox"
                           checked={selectedIds.has(feature.id)}
                           onChange={() => toggleSelection(feature.id)}
@@ -777,6 +785,7 @@ export default function FeaturesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
             <AlertDialogAction
+              data-testid="feature-bulk-delete-confirm"
               onClick={handleBulkDelete}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -820,6 +829,7 @@ export default function FeaturesPage() {
               <div className="flex gap-4">
                 <label className="flex items-center gap-2">
                   <input
+                    data-testid="feature-export-format-geojson"
                     type="radio"
                     checked={exportFormat === 'geojson'}
                     onChange={() => setExportFormat('geojson')}
@@ -829,6 +839,7 @@ export default function FeaturesPage() {
                 </label>
                 <label className="flex items-center gap-2">
                   <input
+                    data-testid="feature-export-format-csv"
                     type="radio"
                     checked={exportFormat === 'csv'}
                     onChange={() => setExportFormat('csv')}
@@ -839,12 +850,16 @@ export default function FeaturesPage() {
               </div>
             </div>
           </div>
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
               キャンセル
             </Button>
-            <Button onClick={handleExport} disabled={isExporting}>
+            <Button
+              data-testid="feature-export-submit"
+              onClick={handleExport}
+              disabled={isExporting}
+            >
               {isExporting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -885,6 +900,7 @@ export default function FeaturesPage() {
             <div className="space-y-2">
               <Label htmlFor="properties">プロパティ（JSON形式、任意）</Label>
               <textarea
+                data-testid="feature-bulk-update-properties"
                 id="properties"
                 className="min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 placeholder='{"status": "reviewed", "category": "landmark"}'
@@ -910,7 +926,11 @@ export default function FeaturesPage() {
             <Button variant="outline" onClick={() => setBatchUpdateDialogOpen(false)}>
               キャンセル
             </Button>
-            <Button onClick={handleBatchUpdate} disabled={isUpdating}>
+            <Button
+              data-testid="feature-bulk-update-submit"
+              onClick={handleBatchUpdate}
+              disabled={isUpdating}
+            >
               {isUpdating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
