@@ -13,7 +13,9 @@ import { request, type FullConfig } from "@playwright/test";
 
 import { waitForServer } from "./utils/wait-for-server";
 
-export const E2E_ADMIN_EMAIL = "e2e-admin@test.local";
+// EmailStr (email-validator) は `.local` 等の special-use TLD を拒否するため、
+// RFC 2606 で文書化用に予約されている example.com を使う (issue #110)。
+export const E2E_ADMIN_EMAIL = "e2e-admin@example.com";
 export const E2E_ADMIN_PASSWORD = "E2E-pass-1!";
 export const E2E_ADMIN_NAME = "E2E Admin";
 
