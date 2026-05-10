@@ -81,7 +81,7 @@ sleep 2
 # パスワードを取得（マシン内環境変数を覗く）
 set PG_PASS (flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1)
 
-PGPASSWORD=$PG_PASS psql -h localhost -p 5433 -U postgres -d geo_base \
+env PGPASSWORD=$PG_PASS psql -h localhost -p 5433 -U postgres -d geo_base \
     -c '\dt' \
     -c "SELECT extname FROM pg_extension WHERE extname LIKE 'postgis%';"
 
@@ -123,7 +123,7 @@ deploy 後、Fly app の health check が通れば移行完了。
 ```fish
 flyctl proxy 5433:5432 -a geo-base-pg
 # 別ターミナルで
-PGPASSWORD=$(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
+env PGPASSWORD=(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
     psql -h localhost -p 5433 -U postgres -d geo_base
 ```
 
@@ -152,7 +152,8 @@ flyctl machine list -a geo-base-pg
 # 1. ローカルで変更内容を docker/postgis-init/*.sql に反映（次回 fresh init で取り込まれる）
 # 2. 本番に DDL を適用
 flyctl proxy 5433:5432 -a geo-base-pg
-PGPASSWORD=... psql -h localhost -p 5433 -U postgres -d geo_base -f path/to/migration.sql
+env PGPASSWORD=(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
+    psql -h localhost -p 5433 -U postgres -d geo_base -f path/to/migration.sql
 ```
 
 冪等な書き方（`IF NOT EXISTS`、`CREATE OR REPLACE` 等）にしておくと再実行に強い。
@@ -186,7 +187,7 @@ flyctl volumes create pg_data_restored \
 
 ```fish
 flyctl proxy 5433:5432 -a geo-base-pg &
-PGPASSWORD=$(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
+env PGPASSWORD=(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
     pg_dump -h localhost -p 5433 -U postgres -d geo_base -F c \
     > geo_base_(date -u +%Y%m%dT%H%M%SZ).dump
 ```
@@ -226,8 +227,9 @@ flyctl volumes create pg_data_new \
 
 ```fish
 # 1. 新しい空の DB に restore
-PGPASSWORD=... psql -h localhost -p 5433 -U postgres -c 'CREATE DATABASE geo_base_restore'
-PGPASSWORD=... pg_restore -h localhost -p 5433 -U postgres -d geo_base_restore geo_base_*.dump
+set -lx PGPASSWORD (flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1)
+psql -h localhost -p 5433 -U postgres -c 'CREATE DATABASE geo_base_restore'
+pg_restore -h localhost -p 5433 -U postgres -d geo_base_restore geo_base_*.dump
 
 # 2. 動作確認後、API の DATABASE_URL を新 DB に切替か、本番 DB を rename して入れ替え
 ```

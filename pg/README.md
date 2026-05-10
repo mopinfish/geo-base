@@ -19,7 +19,7 @@ pg/
 ```fish
 # 接続（ローカルから）
 flyctl proxy 5433:5432 -a geo-base-pg
-PGPASSWORD=$(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD') \
+env PGPASSWORD=(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
   psql -h localhost -p 5433 -U postgres -d geo_base
 
 # デプロイ
