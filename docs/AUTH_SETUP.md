@@ -272,7 +272,46 @@ curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
 | `reset-password --email <email>` | パスワードリセットメールを送信 |
 | `list-users [--json]` | 登録ユーザー一覧 |
 
-定期実行（cron 等）には `cleanup-expired` を 1 日 1 回程度走らせると DB が肥大化しません。
+### `cleanup-expired` の定期実行
+
+`refresh_tokens` / `login_attempts` / `password_reset_tokens` / `team_invitations` テーブルが
+期限切れレコードで肥大化するのを防ぐため、`cleanup-expired` を **1 日 1 回**実行します。
+
+#### GitHub Actions による自動実行（運用）
+
+`.github/workflows/cleanup-expired.yml` に定義済み。Fly.io 上で本番イメージをそのまま再利用した
+`--rm` 一時マシンを起動して CLI を実行する方式です。
+
+| 項目 | 値 |
+|---|---|
+| スケジュール | 毎日 18:00 UTC（= 03:00 JST） |
+| ワークフロー名 | `Cleanup expired tokens` |
+| 必要な Secret | `FLY_API_TOKEN`（GitHub repo Settings → Secrets and variables → Actions） |
+
+**初期セットアップ:**
+
+1. Fly.io API トークンを取得:
+   ```bash
+   flyctl auth token
+   ```
+2. GitHub リポジトリで `Settings` → `Secrets and variables` → `Actions` → `New repository secret` を開き、
+   `FLY_API_TOKEN` という名前で貼り付ける。
+3. ワークフローは push 後の最初の 18:00 UTC から自動実行されます。
+
+**手動実行（即時クリーンアップしたい場合）:**
+
+GitHub の `Actions` タブ → `Cleanup expired tokens` → `Run workflow` ボタンで起動できます。
+
+**ローカル実行（開発時）:**
+
+```bash
+cd api && uv run python -m lib.auth.cli cleanup-expired
+```
+
+**失敗時のアラート:**
+
+GitHub Actions のデフォルト通知（リポジトリ Watcher / 失敗通知設定） に依存します。
+Slack / Sentry 連携は別途検討（将来的な改善余地）。
 
 ---
 

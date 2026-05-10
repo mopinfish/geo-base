@@ -1,0 +1,69 @@
+name: Cleanup expired tokens
+
+# 期限切れトークン（refresh_tokens / login_attempts / password_reset_tokens / team_invitations）
+# を毎日 1 回削除する。
+#
+# Issue #42: cleanup-expired コマンドの定期実行を運用化
+# 対応 CLI: api/lib/auth/cli.py の cmd_cleanup_expired
+#
+# 動作概要:
+#   1. Fly.io 上の現行 production イメージの参照を解決
+#   2. そのイメージで `--rm` 一時マシンを起動し `python -m lib.auth.cli cleanup-expired` を実行
+#   3. マシンは終了後に自動破棄される（API 本体には影響しない）
+#
+# 必要な GitHub Secrets:
+#   - FLY_API_TOKEN: `flyctl auth token` で取得した Fly.io API トークン
+#
+# 手動実行:
+#   GitHub Actions の "Cleanup expired tokens" ワークフローから "Run workflow" で起動可能。
+
+on:
+  schedule:
+    # 毎日 18:00 UTC = 03:00 JST に実行
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cleanup-expired
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Run cleanup-expired
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FLY_APP: geo-base-api
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Resolve current production image
+        run: |
+          set -euo pipefail
+          IMAGE_INFO=$(flyctl image show --app "$FLY_APP" --json)
+          REGISTRY=$(echo "$IMAGE_INFO" | jq -r '.Registry')
+          REPOSITORY=$(echo "$IMAGE_INFO" | jq -r '.Repository')
+          TAG=$(echo "$IMAGE_INFO" | jq -r '.Tag')
+          if [ -z "$REGISTRY" ] || [ -z "$REPOSITORY" ] || [ -z "$TAG" ] \
+             || [ "$REGISTRY" = "null" ] || [ "$REPOSITORY" = "null" ] || [ "$TAG" = "null" ]; then
+            echo "Failed to resolve image. Output was:"
+            echo "$IMAGE_INFO"
+            exit 1
+          fi
+          IMAGE="$REGISTRY/$REPOSITORY:$TAG"
+          echo "Resolved image: $IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Execute cleanup-expired on ephemeral machine
+        run: |
+          set -euo pipefail
+          flyctl machine run \
+            --app "$FLY_APP" \
+            --rm \
+            "$IMAGE" \
+            python -m lib.auth.cli cleanup-expired
