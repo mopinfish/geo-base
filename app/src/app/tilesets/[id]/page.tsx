@@ -128,6 +128,23 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
     router.push("/tilesets");
   };
 
+  /**
+   * is_public フラグをトグルする (TS-10)。
+   * 楽観的更新せず、API レスポンスを再取得して反映する。
+   */
+  const handleTogglePublic = async () => {
+    if (!tileset) return;
+    try {
+      const updated = await api.updateTileset(id, {
+        is_public: !tileset.is_public,
+      });
+      setTileset(updated);
+    } catch (err) {
+      console.error("Toggle public failed:", err);
+      setError(err instanceof Error ? err.message : "公開設定の切り替えに失敗しました");
+    }
+  };
+
   const copyToClipboard = async (text: string, label: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedUrl(label);
@@ -275,19 +292,23 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-bold">{tileset.name}</h1>
-                <Badge variant={tileset.is_public ? "default" : "secondary"}>
-                  {tileset.is_public ? (
-                    <>
-                      <Globe className="mr-1 h-3 w-3" />
-                      公開
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="mr-1 h-3 w-3" />
-                      非公開
-                    </>
-                  )}
-                </Badge>
+                {tileset.is_public ? (
+                  <Badge
+                    variant="default"
+                    data-testid="tileset-public-badge"
+                  >
+                    <Globe className="mr-1 h-3 w-3" />
+                    公開
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="secondary"
+                    data-testid="tileset-private-badge"
+                  >
+                    <Lock className="mr-1 h-3 w-3" />
+                    非公開
+                  </Badge>
+                )}
               </div>
               {tileset.description && (
                 <p className="mt-1 text-muted-foreground">
@@ -307,6 +328,25 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
               />
               更新
+            </Button>
+            <Button
+              onClick={handleTogglePublic}
+              variant="outline"
+              size="sm"
+              data-testid="tileset-public-toggle"
+              title={tileset.is_public ? "非公開にする" : "公開にする"}
+            >
+              {tileset.is_public ? (
+                <>
+                  <Lock className="mr-2 h-4 w-4" />
+                  非公開にする
+                </>
+              ) : (
+                <>
+                  <Globe className="mr-2 h-4 w-4" />
+                  公開にする
+                </>
+              )}
             </Button>
             <Link href={`/tilesets/${id}/edit`}>
               <Button variant="outline" size="sm">
