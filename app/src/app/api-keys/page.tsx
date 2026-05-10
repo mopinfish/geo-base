@@ -438,11 +438,14 @@ export default function ApiKeysPage() {
               <div className="space-y-2">
                 <Label>チーム（オプション）</Label>
                 <Select
-                  value={createForm.team_id ?? ""}
+                  // Radix UI の SelectItem は空文字 value を許容しないため、
+                  // 「個人キー」を表す sentinel `__personal__` を使い、
+                  // onValueChange で undefined に変換する。
+                  value={createForm.team_id ?? "__personal__"}
                   onValueChange={(value) =>
                     setCreateForm((prev) => ({
                       ...prev,
-                      team_id: value || undefined,
+                      team_id: value === "__personal__" ? undefined : value,
                     }))
                   }
                 >
@@ -450,7 +453,7 @@ export default function ApiKeysPage() {
                     <SelectValue placeholder="チームを選択（個人キーの場合は空）" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">個人キー</SelectItem>
+                    <SelectItem value="__personal__">個人キー</SelectItem>
                     {teams.map((team) => (
                       <SelectItem key={team.id} value={team.id}>
                         {team.name}
@@ -463,11 +466,13 @@ export default function ApiKeysPage() {
             <div className="space-y-2">
               <Label>有効期限（オプション）</Label>
               <Select
-                value={createForm.expires_in_days?.toString() ?? ""}
+                // 同上: 「無期限」を表す sentinel を使う。
+                value={createForm.expires_in_days?.toString() ?? "__never__"}
                 onValueChange={(value) =>
                   setCreateForm((prev) => ({
                     ...prev,
-                    expires_in_days: value ? parseInt(value) : undefined,
+                    expires_in_days:
+                      value === "__never__" ? undefined : parseInt(value),
                   }))
                 }
               >
@@ -475,7 +480,7 @@ export default function ApiKeysPage() {
                   <SelectValue placeholder="無期限" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">無期限</SelectItem>
+                  <SelectItem value="__never__">無期限</SelectItem>
                   <SelectItem value="7">7日</SelectItem>
                   <SelectItem value="30">30日</SelectItem>
                   <SelectItem value="90">90日</SelectItem>
