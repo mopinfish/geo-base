@@ -68,10 +68,16 @@ class AuthProvider(ABC):
         password: str,
         name: Optional[str] = None,
         email_verified: bool = False,
+        role: Optional[str] = None,
         app_metadata: Optional[dict] = None,
         user_metadata: Optional[dict] = None,
     ) -> User:
         """新規ユーザーを作成。
+
+        Args:
+            role: `users.role` カラム値。None の場合はスキーマ default
+                (`'authenticated'`) が適用される。`'admin'` を渡すと
+                JWT payload にも `role: 'admin'` が乗る。
 
         Raises:
             UserAlreadyExists: email 重複
@@ -84,9 +90,16 @@ class AuthProvider(ABC):
         user_id: str,
         name: Optional[str] = None,
         email: Optional[str] = None,
+        role: Optional[str] = None,
         user_metadata: Optional[dict] = None,
     ) -> User:
-        """ユーザープロフィールを更新。"""
+        """ユーザープロフィールを更新。
+
+        Args:
+            role: 指定時のみ `users.role` を上書き。既存 admin の修復や
+                将来の昇格 / 降格用。公開 API 経由ではなく admin 限定
+                operation で利用すること。
+        """
 
     @abstractmethod
     async def update_password(self, user_id: str, new_password: str) -> None:

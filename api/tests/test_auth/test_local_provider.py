@@ -58,6 +58,54 @@ class TestCreateUser:
         u = await provider.create_user("UPPER@example.com", "ValidPass123")
         assert u.email == "upper@example.com"
 
+    @pytest.mark.asyncio
+    async def test_default_role_is_authenticated(self, provider, db_conn, clean_auth_tables):
+        """role 未指定でスキーマ default ('authenticated') が適用される (issue #78)。"""
+        u = await provider.create_user("a@b.com", "ValidPass123")
+        assert u.role == "authenticated"
+
+    @pytest.mark.asyncio
+    async def test_role_admin_is_persisted(self, provider, db_conn, clean_auth_tables):
+        """role='admin' で作成すると users.role が 'admin' になる (issue #78)。
+
+        旧実装では app_metadata={"role": "admin"} だけ渡していたため
+        users.role は default の 'authenticated' のまま記録されていた。
+        """
+        u = await provider.create_user(
+            "admin@example.com", "ValidPass123",
+            role="admin",
+            app_metadata={"role": "admin"},
+        )
+        assert u.role == "admin"
+        assert u.app_metadata.get("role") == "admin"
+
+        # DB から直接読んで永続化されていることを確認
+        with db_conn.cursor() as cur:
+            cur.execute("SELECT role FROM users WHERE email = %s", ("admin@example.com",))
+            row = cur.fetchone()
+            assert row[0] == "admin"
+
+
+class TestUpdateUser:
+    @pytest.mark.asyncio
+    async def test_role_can_be_promoted(self, provider, db_conn, clean_auth_tables):
+        """update_user(role=...) で既存ユーザーの role を昇格できる (issue #78 修復用)。"""
+        created = await provider.create_user("a@b.com", "ValidPass123")
+        assert created.role == "authenticated"
+
+        updated = await provider.update_user(created.id, role="admin")
+        assert updated.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_role_omitted_does_not_change(self, provider, db_conn, clean_auth_tables):
+        """role=None なら他フィールド更新時も role は変わらない。"""
+        created = await provider.create_user(
+            "a@b.com", "ValidPass123", role="admin",
+        )
+        updated = await provider.update_user(created.id, name="renamed")
+        assert updated.role == "admin"
+        assert updated.name == "renamed"
+
 
 class TestAuthenticate:
     @pytest.mark.asyncio

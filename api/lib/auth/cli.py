@@ -33,6 +33,10 @@ async def cmd_create_admin(args):
         user = await provider.create_user(
             email=email, password=password, name=name,
             email_verified=True,
+            # `users.role` カラムに直接 'admin' を書く (issue #78)。
+            # 旧 `app_metadata` のみだと JWT payload に role が乗らないので
+            # 将来 admin 限定 endpoint を足した時に既存 admin が弾かれる。
+            role="admin",
             app_metadata={"role": "admin"},
         )
     except UserAlreadyExists:

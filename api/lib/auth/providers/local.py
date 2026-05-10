@@ -231,16 +231,19 @@ class LocalAuthProvider(AuthProvider):
         password: str,
         name: Optional[str] = None,
         email_verified: bool = False,
+        role: Optional[str] = None,
         app_metadata: Optional[dict] = None,
         user_metadata: Optional[dict] = None,
     ) -> User:
         check_password_policy(password)
         return await asyncio.to_thread(
             self._create_user_sync, email, password, name,
-            email_verified, app_metadata, user_metadata,
+            email_verified, role, app_metadata, user_metadata,
         )
 
-    def _create_user_sync(self, email, password, name, email_verified, app_meta, user_meta) -> User:
+    def _create_user_sync(
+        self, email, password, name, email_verified, role, app_meta, user_meta
+    ) -> User:
         import json
         password_hash_str = hash_password(password)
         email_lower = email.lower()
@@ -251,20 +254,38 @@ class LocalAuthProvider(AuthProvider):
                 if cur.fetchone():
                     raise UserAlreadyExists(f"User with email {email_lower} already exists")
 
-                cur.execute(
-                    """INSERT INTO users
-                          (email, password_hash, name, email_verified_at,
-                           app_metadata, user_metadata)
-                       VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb)
-                       RETURNING id, email, name, role, app_metadata,
-                                 user_metadata, email_verified_at""",
-                    (
-                        email_lower, password_hash_str, name,
-                        datetime.now(timezone.utc) if email_verified else None,
-                        json.dumps(app_meta or {}),
-                        json.dumps(user_meta or {}),
-                    ),
-                )
+                # `role` is None → スキーマ default ('authenticated') を効かせるために
+                # カラムを INSERT 文から省略する。明示指定時のみカラム+値を含める。
+                if role is None:
+                    cur.execute(
+                        """INSERT INTO users
+                              (email, password_hash, name, email_verified_at,
+                               app_metadata, user_metadata)
+                           VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                           RETURNING id, email, name, role, app_metadata,
+                                     user_metadata, email_verified_at""",
+                        (
+                            email_lower, password_hash_str, name,
+                            datetime.now(timezone.utc) if email_verified else None,
+                            json.dumps(app_meta or {}),
+                            json.dumps(user_meta or {}),
+                        ),
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO users
+                              (email, password_hash, name, role, email_verified_at,
+                               app_metadata, user_metadata)
+                           VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                           RETURNING id, email, name, role, app_metadata,
+                                     user_metadata, email_verified_at""",
+                        (
+                            email_lower, password_hash_str, name, role,
+                            datetime.now(timezone.utc) if email_verified else None,
+                            json.dumps(app_meta or {}),
+                            json.dumps(user_meta or {}),
+                        ),
+                    )
                 row = cur.fetchone()
             conn.commit()
 
@@ -279,13 +300,14 @@ class LocalAuthProvider(AuthProvider):
         user_id: str,
         name: Optional[str] = None,
         email: Optional[str] = None,
+        role: Optional[str] = None,
         user_metadata: Optional[dict] = None,
     ) -> User:
         return await asyncio.to_thread(
-            self._update_user_sync, user_id, name, email, user_metadata
+            self._update_user_sync, user_id, name, email, role, user_metadata
         )
 
-    def _update_user_sync(self, user_id, name, email, user_metadata) -> User:
+    def _update_user_sync(self, user_id, name, email, role, user_metadata) -> User:
         import json
         updates = []
         params = []
@@ -295,6 +317,9 @@ class LocalAuthProvider(AuthProvider):
         if email is not None:
             updates.append("email = %s")
             params.append(email.lower())
+        if role is not None:
+            updates.append("role = %s")
+            params.append(role)
         if user_metadata is not None:
             updates.append("user_metadata = %s::jsonb")
             params.append(json.dumps(user_metadata))
