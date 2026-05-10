@@ -1,15 +1,24 @@
 # 認証セットアップガイド
 
-geo-base API は **プラガブル認証** をサポートします（Phase 3 / Step 3.3-A で導入）。
-`AUTH_PROVIDER` 環境変数で切り替えられます:
+> [!IMPORTANT]
+> **2026-05-10 更新: `AUTH_PROVIDER=supabase` モードは廃止されました (#72)**
+>
+> 本番 DB を Fly Postgres に移行 (PR #73) し、Supabase Auth プロバイダの実装を
+> 削除 (PR #74) したため、現状サポートされる `AUTH_PROVIDER` は **`local` のみ**
+> です。本ドキュメント内の **Supabase モードの記述は legacy 資料**として残して
+> いますが、今後の運用は `local` 前提でお読みください。
+> 全面リライトは Issue #72 Phase 3 のドキュメント整備で行います。
 
-- **`local`**: geo-base が `users` テーブルを所有し、自前で JWT を発行する。Supabase 不要。
-- **`supabase`**: 従来通り Supabase Auth に委譲する。
+geo-base API は **プラガブル認証** の枠組みを残しており、`AUTH_PROVIDER` 環境変数で
+プロバイダを選択する設計です:
+
+- **`local`**: geo-base が `users` テーブルを所有し、自前で JWT を発行する（**現行サポート**）
+- ~~**`supabase`**: 従来通り Supabase Auth に委譲する~~（**廃止 / #72**）
 
 設計の背景・全体像は `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
 本ドキュメントは **ローカル / 本番の構築手順** に絞ったハンズオンです。
 
-関連: 移行手順は `docs/AUTH_MIGRATION.md`、リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`、認可仕様の網羅レビューは `docs/ACCESS_CONTROL_REVIEW.md`。
+関連: 移行手順は `docs/AUTH_MIGRATION.md`、リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`、認可仕様の網羅レビューは `docs/ACCESS_CONTROL_REVIEW.md`、本番 DB 構築は `docs/POSTGRES_SETUP.md`。
 
 ---
 
