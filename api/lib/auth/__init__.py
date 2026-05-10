@@ -42,9 +42,6 @@ def get_auth_provider() -> AuthProvider:
     if settings.auth_provider == "local":
         from .providers.local import LocalAuthProvider
         return LocalAuthProvider()
-    elif settings.auth_provider == "supabase":
-        from .providers.supabase import SupabaseAuthProvider
-        return SupabaseAuthProvider()
 
     raise ValueError(f"Unknown AUTH_PROVIDER: {settings.auth_provider}")
 

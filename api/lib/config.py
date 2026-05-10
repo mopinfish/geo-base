@@ -32,23 +32,20 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://postgres:postgres@localhost:5432/geo_base"
 
-    # Supabase (optional, for production)
+    # Supabase Storage (optional, レガシー — 段階的に廃止予定 / Issue #72)
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     supabase_service_role_key: Optional[str] = None
-    
-    # Supabase Auth settings
-    supabase_jwt_secret: Optional[str] = None  # JWT secret for verification
 
-    # Supabase Storage settings
-    supabase_storage_bucket: str = "geo-tiles"  # Default bucket name for COG/PMTiles files
-    supabase_storage_public_url: Optional[str] = None  # Public URL for storage
+    # Supabase Storage settings (COG/PMTiles 保管先として一部利用中、撤去は別 PR)
+    supabase_storage_bucket: str = "geo-tiles"
+    supabase_storage_public_url: Optional[str] = None
 
     # Auth provider
-    auth_provider: str = "supabase"  # local | supabase
+    auth_provider: str = "local"  # 現状 local のみ。Supabase Auth は #72 で廃止済み
 
     # JWT
-    jwt_secret: Optional[str] = None  # local モード必須、supabase モードでは SUPABASE_JWT_SECRET にフォールバック
+    jwt_secret: Optional[str] = None  # local モードでは必須
     jwt_audience: str = "authenticated"
     jwt_issuer: str = "geo-base"
     access_token_ttl_seconds: int = 900
@@ -148,25 +145,24 @@ class Settings(BaseSettings):
     
     @property
     def effective_jwt_secret(self) -> Optional[str]:
-        """JWT_SECRET 優先、SUPABASE_JWT_SECRET にフォールバック（後方互換）"""
-        return self.jwt_secret or self.supabase_jwt_secret
+        """JWT 検証に使う実効的な secret。
+
+        以前は SUPABASE_JWT_SECRET をフォールバックしていたが、Supabase Auth
+        プロバイダ廃止 (#72) により単純に JWT_SECRET を返すだけになった。
+        既存の呼び出し箇所を変えないようプロパティ自体は残している。
+        """
+        return self.jwt_secret
 
     @model_validator(mode='after')
     def validate_auth_config(self) -> 'Settings':
         if self.auth_provider == "local":
-            if not self.effective_jwt_secret:
-                raise ValueError(
-                    "AUTH_PROVIDER=local requires JWT_SECRET (or SUPABASE_JWT_SECRET as fallback)"
-                )
-        elif self.auth_provider == "supabase":
-            if not self.supabase_url:
-                raise ValueError("AUTH_PROVIDER=supabase requires SUPABASE_URL")
-            if not self.supabase_service_role_key:
-                raise ValueError("AUTH_PROVIDER=supabase requires SUPABASE_SERVICE_ROLE_KEY")
-            if not self.supabase_jwt_secret:
-                raise ValueError("AUTH_PROVIDER=supabase requires SUPABASE_JWT_SECRET")
+            if not self.jwt_secret:
+                raise ValueError("AUTH_PROVIDER=local requires JWT_SECRET")
         else:
-            raise ValueError(f"Unknown AUTH_PROVIDER: {self.auth_provider}")
+            raise ValueError(
+                f"Unknown AUTH_PROVIDER: {self.auth_provider} "
+                "(only 'local' is supported)"
+            )
 
         if self.email_backend == "smtp":
             if not self.smtp_host:
