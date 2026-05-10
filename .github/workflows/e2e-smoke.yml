@@ -55,6 +55,11 @@ jobs:
       JWT_SECRET: ci-test-secret-not-for-production
       E2E_MODE: "1"
       AUTH_PROVIDER: local
+      # /api/auth/* は state-changing endpoint なので Origin ヘッダ検証が走る
+      # (api/lib/routers/auth.py の `_check_origin`)。デフォルトの ["*"] では
+      # 文字列照合に通らず 403 を返してブラウザの login/refresh が落ちるため、
+      # CI からアクセスする http://localhost:3000 を明示的に許可する。
+      CORS_ORIGINS: '["http://localhost:3000"]'
       # ブラウザは /api/* 相対で叩き、Next.js rewrites で API へ proxy する。
       # NEXT_PUBLIC_API_URL は空のままにすることで HttpOnly cookie が
       # localhost:3000 ドメインに保存される（同一オリジン）。

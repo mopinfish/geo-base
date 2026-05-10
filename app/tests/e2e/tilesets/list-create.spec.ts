@@ -29,7 +29,12 @@ test("TS-07 @smoke タイルセット新規作成 → 詳細ページへ遷移",
   await page.getByTestId("tileset-form-name").fill("ts-create-smoke");
   await page.getByTestId("tileset-form-submit").click();
 
-  await page.waitForURL(/\/tilesets\/[^/]+(\?|$)/, { timeout: 15_000 });
+  // `/tilesets/[^/]+` だと現在地の `/tilesets/new` 自体に即マッチしてしまい、
+  // フォーム送信前に waitForURL が解決して後続の assertion が壊れる。`new` を
+  // 否定先読みで除外して、詳細ページ (`/tilesets/<UUID>`) への遷移だけ待つ。
+  await page.waitForURL(/\/tilesets\/(?!new(?:\/|$|\?))[^/]+(\?|$)/, {
+    timeout: 15_000,
+  });
   // 詳細ページの h1 (`<h1>{tileset.name}</h1>`) が hydrate されるまで待つ。
   // 名前を heading role で待つことで、ローディング状態の他要素にマッチしない。
   await expect(

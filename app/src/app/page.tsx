@@ -39,7 +39,7 @@ export default function DashboardPage() {
     try {
       const results = await Promise.allSettled([
         api.getHealthDb(),
-        api.listTilesets(),
+        api.listTilesets({ include_private: true }),
         api.getSystemStats(),
       ]);
       

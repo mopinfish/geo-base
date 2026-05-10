@@ -4,9 +4,13 @@ import { resetDatabase } from "../utils/reset-db";
 import {
   E2E_ADMIN_EMAIL,
   E2E_ADMIN_PASSWORD,
-} from "../globalSetup";
+  loginAsAdmin,
+} from "../utils/session";
 
 test.beforeAll(async () => {
+  // resetDatabase が POST /api/test/reset を Bearer 付きで叩くので、
+  // unauthenticated project でも 1 回 admin ログインしてセッションを確保する。
+  await loginAsAdmin();
   await resetDatabase();
 });
 

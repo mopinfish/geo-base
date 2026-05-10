@@ -130,7 +130,9 @@ export default function TeamDetailPage() {
         api.listTeamMembers(teamId),
         api.listTeamInvitations(teamId),
         api.listTeamTilesets(teamId),
-        api.listTilesets(),
+        // チームに追加可能なタイルセットの候補。自分が所有する非公開タイルセットも
+        // 候補に出すべきなので include_private: true を渡す（Issue #115）。
+        api.listTilesets({ include_private: true }),
       ]);
 
     if (membersRes.status === "fulfilled") {
