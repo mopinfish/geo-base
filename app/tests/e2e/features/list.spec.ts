@@ -1,0 +1,28 @@
+import { test, expect } from "@playwright/test";
+
+import { resetDatabase } from "../utils/reset-db";
+import { createTileset, createFeature } from "../fixtures/factories";
+
+test.beforeAll(async () => {
+  await resetDatabase();
+  const tileset = await createTileset({ name: "ft-list-smoke", type: "vector" });
+  await createFeature({
+    tilesetId: tileset.id,
+    layer: "points",
+    geometry: { type: "Point", coordinates: [139.767, 35.681] },
+    properties: { name: "Tokyo" },
+  });
+  await createFeature({
+    tilesetId: tileset.id,
+    layer: "points",
+    geometry: { type: "Point", coordinates: [135.502, 34.693] },
+    properties: { name: "Osaka" },
+  });
+});
+
+test("FT-01 @smoke フィーチャー一覧が表示される", async ({ page }) => {
+  await page.goto("/features");
+
+  const rows = page.getByTestId("feature-list-row");
+  await expect(rows).toHaveCount(2, { timeout: 10_000 });
+});

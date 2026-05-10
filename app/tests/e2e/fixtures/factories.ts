@@ -144,3 +144,43 @@ export async function createTeam(input: {
     await ctx.dispose();
   }
 }
+
+/**
+ * Feature レスポンスは GeoJSON Feature 形式。`tileset_id` は top-level に
+ * 存在せず、`properties.layer_name` に layer 名が射影される
+ * (`api/lib/routers/features.py` の create_feature 参照)。
+ * 呼び出し側で tileset_id が必要な場合は、リクエスト時の値を保持しておくこと。
+ */
+export interface CreatedFeature {
+  id: string;
+  type: "Feature";
+  geometry: unknown;
+  properties: Record<string, unknown>;
+}
+
+export async function createFeature(input: {
+  tilesetId: string;
+  layer: string;
+  geometry: unknown;
+  properties?: Record<string, unknown>;
+}): Promise<CreatedFeature> {
+  const ctx = await createApiClient();
+  try {
+    // API は `layer_name` を受け取る (FeatureCreate モデル)。Phase 1 plan の
+    // `layer` フィールドはこちらに射影する。
+    const res = await ctx.post("/api/features", {
+      data: {
+        tileset_id: input.tilesetId,
+        layer_name: input.layer,
+        geometry: input.geometry,
+        properties: input.properties ?? {},
+      },
+    });
+    if (!res.ok()) {
+      throw new Error(`createFeature failed: ${res.status()} ${await res.text()}`);
+    }
+    return (await res.json()) as CreatedFeature;
+  } finally {
+    await ctx.dispose();
+  }
+}
