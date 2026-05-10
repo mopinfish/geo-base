@@ -2,6 +2,7 @@
 Raster tile serving endpoints (COG-backed).
 """
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -126,7 +127,9 @@ async def get_raster_tile(
         owner_user_id = cached_info["owner_user_id"]
     else:
         # Get COG URL from database with access check
-        try:
+        # async handler 内なので sync DB I/O は asyncio.to_thread で
+        # threadpool にオフロード（issue #66 / Option A）
+        def _fetch_raster_info():
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -139,14 +142,17 @@ async def get_raster_tile(
                     """,
                     (tileset_id,),
                 )
-                row = cur.fetchone()
-            
+                return cur.fetchone()
+
+        try:
+            row = await asyncio.to_thread(_fetch_raster_info)
+
             if not row:
                 raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
-            
+
             cog_url, min_zoom, max_zoom, is_public, owner_user_id = row
             owner_user_id = str(owner_user_id) if owner_user_id else None
-            
+
             # Cache the tileset info
             cache_tileset_info(cache_key, {
                 "cog_url": cog_url,
@@ -155,12 +161,12 @@ async def get_raster_tile(
                 "is_public": is_public,
                 "owner_user_id": owner_user_id,
             })
-            
+
         except HTTPException:
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Check access
     tileset_for_access = {
         "id": tileset_id,
@@ -344,9 +350,10 @@ async def get_raster_preview(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    try:
+    # async handler 内なので sync DB I/O は asyncio.to_thread で
+    # threadpool にオフロード（issue #66 / Option A）
+    def _fetch_preview_info():
         with conn.cursor() as cur:
-            # Get tileset and COG URL
             cur.execute(
                 """
                 SELECT t.id, t.is_public, t.user_id,
@@ -357,35 +364,38 @@ async def get_raster_preview(
                 """,
                 (tileset_id,),
             )
-            row = cur.fetchone()
-            
-            if not row:
-                raise HTTPException(status_code=404, detail="Raster tileset not found")
-            
-            is_public = row[1]
-            owner_id = str(row[2]) if row[2] else None
-            cog_url = row[3]
-            
-            # Check access
-            tileset_for_access = {
-                "id": tileset_id,
-                "is_public": is_public,
-                "user_id": owner_id,
-            }
-            if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
-                if auth is None:
-                    raise HTTPException(
-                        status_code=401,
-                        detail="Authentication required",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-                raise HTTPException(status_code=403, detail="Access denied")
-            
-            if not cog_url:
+            return cur.fetchone()
+
+    try:
+        row = await asyncio.to_thread(_fetch_preview_info)
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Raster tileset not found")
+
+        is_public = row[1]
+        owner_id = str(row[2]) if row[2] else None
+        cog_url = row[3]
+
+        # Check access
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": owner_id,
+        }
+        if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
-                    status_code=404,
-                    detail="No COG datasource configured for this tileset"
+                    status_code=401,
+                    detail="Authentication required",
+                    headers={"WWW-Authenticate": "Bearer"},
                 )
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if not cog_url:
+            raise HTTPException(
+                status_code=404,
+                detail="No COG datasource configured for this tileset"
+            )
         
         # Parse band indexes
         indexes = None

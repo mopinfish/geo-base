@@ -2,6 +2,7 @@
 PMTiles tile serving endpoints.
 """
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -108,7 +109,9 @@ async def get_pmtiles_tile_endpoint(
         owner_user_id = cached_info["owner_user_id"]
     else:
         # Get PMTiles source from database with access check
-        try:
+        # async handler 内なので sync DB I/O は asyncio.to_thread で
+        # threadpool にオフロード（issue #66 / Option A）
+        def _fetch_pmtiles_info():
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -122,14 +125,17 @@ async def get_pmtiles_tile_endpoint(
                     """,
                     (tileset_id,),
                 )
-                row = cur.fetchone()
-            
+                return cur.fetchone()
+
+        try:
+            row = await asyncio.to_thread(_fetch_pmtiles_info)
+
             if not row:
                 raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
-            
+
             pmtiles_url, tile_type, compression, min_zoom, max_zoom, is_public, owner_user_id = row
             owner_user_id = str(owner_user_id) if owner_user_id else None
-            
+
             # Cache the tileset info
             cache_tileset_info(cache_key, {
                 "pmtiles_url": pmtiles_url,
@@ -140,12 +146,12 @@ async def get_pmtiles_tile_endpoint(
                 "is_public": is_public,
                 "owner_user_id": owner_user_id,
             })
-            
+
         except HTTPException:
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Check access
     tileset_for_access = {
         "id": tileset_id,
@@ -294,7 +300,9 @@ async def get_pmtiles_metadata_endpoint(
             detail="PMTiles service is not available."
         )
     
-    try:
+    # async handler 内なので sync DB I/O は asyncio.to_thread で
+    # threadpool にオフロード（issue #66 / Option A）
+    def _fetch_pmtiles_metadata_info():
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -306,14 +314,17 @@ async def get_pmtiles_metadata_endpoint(
                 """,
                 (tileset_id,),
             )
-            row = cur.fetchone()
-        
+            return cur.fetchone()
+
+    try:
+        row = await asyncio.to_thread(_fetch_pmtiles_metadata_info)
+
         if not row:
             raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
-        
+
         pmtiles_url, name, description, is_public, owner_user_id = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
-        
+
         # Check access
         tileset_for_access = {
             "id": tileset_id,
