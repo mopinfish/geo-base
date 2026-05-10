@@ -642,11 +642,11 @@ async def upload_cog(
     conn=Depends(get_connection),
 ):
     """
-    Upload a COG file to Supabase Storage and create a datasource.
+    Upload a COG file to S3 互換 storage (Fly Tigris by default) and create a datasource.
 
     The file will be validated as a valid Cloud Optimized GeoTIFF,
-    uploaded to Supabase Storage, and a new datasource record will be created
-    linked to the specified tileset.
+    uploaded to the configured S3 bucket, and a new datasource record will be
+    created linked to the specified tileset.
 
     JWT または `write` scope の API キーで認証が必要（issue #50）。
     親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
@@ -697,7 +697,7 @@ async def upload_cog(
                 detail=f"Invalid COG file: {validation_message}"
             )
         
-        # Upload to Supabase Storage
+        # Upload to S3 互換 storage (Fly Tigris by default)
         storage = get_storage_client()
         if not storage:
             raise HTTPException(
@@ -767,7 +767,7 @@ async def upload_cog(
                 (
                     tileset_id,
                     cog_url,
-                    "supabase",
+                    "s3",
                     None,
                     band_count,
                     band_descriptions_json,

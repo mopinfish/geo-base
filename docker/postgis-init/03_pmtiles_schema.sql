@@ -5,14 +5,16 @@
 -- Run after 01_init.sql
 
 -- PMTiles source table
--- Stores references to PMTiles files hosted on external storage (Supabase Storage, S3, etc.)
+-- Stores references to PMTiles files hosted on external storage (Fly Tigris / S3 / HTTP).
 CREATE TABLE IF NOT EXISTS pmtiles_sources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tileset_id UUID NOT NULL REFERENCES tilesets(id) ON DELETE CASCADE,
-    
+
     -- PMTiles file location
     pmtiles_url TEXT NOT NULL,              -- URL to the PMTiles file
-    storage_provider VARCHAR(50) DEFAULT 'supabase',  -- 'supabase', 's3', 'http'
+    -- 's3' は AWS S3 / Fly Tigris / R2 / MinIO 等 S3 互換 storage の総称。
+    -- Supabase Storage は Issue #72 (PR #88) で廃止済み。
+    storage_provider VARCHAR(50) DEFAULT 's3',  -- 's3' or 'http'
     
     -- Metadata from PMTiles header (cached for performance)
     tile_type VARCHAR(20),                  -- 'vector', 'raster', 'unknown'
@@ -55,6 +57,6 @@ CREATE TRIGGER trigger_pmtiles_sources_updated_at
 -- Comments
 COMMENT ON TABLE pmtiles_sources IS 'Stores references to PMTiles files for tile serving';
 COMMENT ON COLUMN pmtiles_sources.pmtiles_url IS 'URL to the PMTiles file (supports HTTP range requests)';
-COMMENT ON COLUMN pmtiles_sources.storage_provider IS 'Storage provider: supabase, s3, or http';
+COMMENT ON COLUMN pmtiles_sources.storage_provider IS 'Storage provider: s3 (S3 互換: Fly Tigris / AWS S3 / R2 等) or http';
 COMMENT ON COLUMN pmtiles_sources.tile_type IS 'Type of tiles: vector or raster';
 COMMENT ON COLUMN pmtiles_sources.tile_compression IS 'Compression used: gzip, zstd, br, or none';

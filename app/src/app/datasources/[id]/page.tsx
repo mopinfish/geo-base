@@ -132,12 +132,13 @@ export default function DatasourceDetailPage() {
 
   const getStorageProviderLabel = (provider: string) => {
     switch (provider) {
-      case "supabase":
-        return "Supabase Storage";
       case "s3":
-        return "AWS S3";
+        return "S3 互換 (Fly Tigris / AWS S3 / R2)";
       case "http":
         return "HTTP";
+      // 旧 'supabase' 値は Issue #72 で廃止済み (PR #88)。既存 DB レコードに残っていた場合の表示用 fallback として残置。
+      case "supabase":
+        return "Supabase Storage (legacy)";
       default:
         return provider;
     }

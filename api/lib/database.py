@@ -86,7 +86,6 @@ def _prepare_connection_string(database_url: str) -> str:
 
     # Determine SSL requirement
     is_production = settings.is_production
-    is_supabase = "supabase" in database_url.lower()
     host = (parsed.hostname or "").lower()
     # `.internal` / `.flycast` の SSL 自動付与スキップは **Fly 上で動いている時だけ**
     # 適用する。万一非 Fly な本番で同サフィックスのホストが来た場合に SSL が外れる
@@ -96,7 +95,7 @@ def _prepare_connection_string(database_url: str) -> str:
     )
 
     if (
-        (is_production or is_supabase)
+        is_production
         and not is_fly_internal
         and "sslmode" not in query_params
     ):

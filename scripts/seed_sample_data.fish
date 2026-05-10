@@ -5,13 +5,13 @@
 # 使用方法:
 #   # 環境変数を設定してから実行
 #   set -x API_URL http://localhost:8000
-#   set -x AUTH_TOKEN "your-supabase-access-token"
+#   set -x AUTH_TOKEN (curl -sS -X POST $API_URL/api/auth/login \
+#       -H "Content-Type: application/json" \
+#       -d '{"email":"<your-email>","password":"<your-password>"}' \
+#       | jq -r .access_token)
 #   fish scripts/seed_sample_data.fish
 #
-# トークンの取得方法:
-#   1. ブラウザで geo-base-app にログイン
-#   2. 開発者ツール > Application > Local Storage
-#   3. sb-xxx-auth-token の value から access_token をコピー
+# トークンは POST /api/auth/login で取得する（AUTH_PROVIDER=local）。
 
 # 設定
 set API_URL (test -n "$API_URL"; and echo $API_URL; or echo "http://localhost:8000")
@@ -21,7 +21,7 @@ if test -z "$AUTH_TOKEN"
     echo "❌ AUTH_TOKEN が設定されていません"
     echo ""
     echo "使用方法:"
-    echo "  set -x AUTH_TOKEN 'your-supabase-access-token'"
+    echo "  set -x AUTH_TOKEN (curl -sS -X POST \$API_URL/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"<email>\",\"password\":\"<pw>\"}' | jq -r .access_token)"
     echo "  fish scripts/seed_sample_data.fish"
     exit 1
 end

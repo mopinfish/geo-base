@@ -25,7 +25,7 @@ rasterio>=1.4.0
 # HTTP client
 httpx==0.28.1
 
-# Authentication - Supabase JWT verification
+# Authentication - JWT verification (local provider)
 PyJWT>=2.8.0
 cryptography>=41.0.0
 

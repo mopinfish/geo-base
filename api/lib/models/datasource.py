@@ -14,8 +14,13 @@ class DatasourceType(str, Enum):
 
 
 class StorageProvider(str, Enum):
-    """Storage provider enum."""
-    supabase = "supabase"
+    """Storage provider enum.
+
+    `s3` は S3 API 互換 storage の総称（既定: Fly Tigris、AWS S3 / R2 / MinIO 等
+    も同じ enum で扱う）。エンドポイント URL の差異は `lib.config.Settings.s3_*`
+    で吸収する。Issue #72 で旧 `supabase` provider は廃止。
+    """
+
     s3 = "s3"
     http = "http"
 

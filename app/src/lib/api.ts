@@ -163,7 +163,10 @@ export interface ApiError {
 // ============================
 
 export type DatasourceType = 'pmtiles' | 'cog';
-export type StorageProvider = 'supabase' | 's3' | 'http';
+// `s3` は S3 API 互換 storage の総称（Fly Tigris / AWS S3 / Cloudflare R2 等）。
+// 旧 `supabase` は Issue #72 (PR #88) で廃止済み。既存 DB レコードの表示 fallback
+// は `app/src/app/datasources/{page,[id]/page}.tsx` の getStorageProviderLabel で行う。
+export type StorageProvider = 's3' | 'http';
 
 export interface Datasource {
   id: string;

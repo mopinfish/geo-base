@@ -7,13 +7,13 @@ CREATE TABLE IF NOT EXISTS raster_sources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tileset_id UUID NOT NULL REFERENCES tilesets(id) ON DELETE CASCADE,
     
-    -- COGファイルのURL（Supabase Storage, S3, HTTP URL等）
+    -- COGファイルのURL（S3 互換 storage / HTTP URL 等）
     cog_url TEXT NOT NULL,
-    
+
     -- ストレージプロバイダ
-    -- 'supabase': Supabase Storage
-    -- 's3': AWS S3
+    -- 's3': S3 API 互換 storage（Fly Tigris / AWS S3 / Cloudflare R2 等を含む）
     -- 'http': 直接HTTPアクセス
+    -- 旧 'supabase' 値は Issue #72 (PR #88) で廃止済み
     storage_provider VARCHAR(50) DEFAULT 'http',
     
     -- バンド情報

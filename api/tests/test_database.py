@@ -86,10 +86,9 @@ class TestSSLAutoAppend:
         url = "postgresql://postgres:postgres@localhost:5432/geo_base"
         assert _sslmode(_prepare_connection_string(url)) is None
 
-    def test_local_dev_supabase_url_still_gets_sslmode(self, force_local):
-        """is_production=False でも URL に supabase を含む場合は SSL を付ける。"""
-        url = "postgresql://user:pass@db.aws.supabase.co:6543/postgres"
-        assert _sslmode(_prepare_connection_string(url)) == "require"
+    # 旧 test_local_dev_supabase_url_still_gets_sslmode は Issue #72 で削除済み。
+    # `is_supabase` URL ヒューリスティックは Supabase 廃止に伴って不要になった
+    # （本番 DB は Fly Postgres のみ）。
 
     def test_explicit_sslmode_in_url_is_preserved(self, force_production):
         """ユーザーが明示的に sslmode を指定している場合は上書きしない。"""
