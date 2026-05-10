@@ -37,13 +37,18 @@ function LoginForm() {
         <input
           type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder="メールアドレス" className="w-full p-2 border rounded"
+          data-testid="login-email"
         />
         <input
           type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
           placeholder="パスワード" className="w-full p-2 border rounded"
+          data-testid="login-password"
         />
-        {error && <p className="text-red-600">{error}</p>}
-        <button type="submit" disabled={loading} className="w-full p-2 bg-blue-600 text-white rounded">
+        {error && <p className="text-red-600" data-testid="login-error">{error}</p>}
+        <button
+          type="submit" disabled={loading} className="w-full p-2 bg-blue-600 text-white rounded"
+          data-testid="login-submit"
+        >
           {loading ? "..." : "ログイン"}
         </button>
         <a href="/password-reset/request" className="block text-center text-sm">
