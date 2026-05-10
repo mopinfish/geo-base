@@ -6,13 +6,13 @@ import { fileURLToPath } from "node:url";
 import {
   PUBLIC_PATHS,
   AUTH_ONLY_PATHS,
-  MIDDLEWARE_MATCHER,
-  decideMiddleware,
-} from "./middleware-decisions";
+  PROXY_MATCHER,
+  decideProxy,
+} from "./proxy-decisions";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-describe("decideMiddleware", () => {
+describe("decideProxy", () => {
   describe("未ログイン (hasRefresh=false)", () => {
     it.each([
       "/",
@@ -30,7 +30,7 @@ describe("decideMiddleware", () => {
       "/settings/profile",
       "/settings/password",
     ])("保護ルート %s は /login にリダイレクトする", (pathname) => {
-      const result = decideMiddleware(pathname, false);
+      const result = decideProxy(pathname, false);
       expect(result).toEqual({ kind: "redirect-login", next: pathname });
     });
 
@@ -40,17 +40,17 @@ describe("decideMiddleware", () => {
       "/password-reset/request",
       "/password-reset/confirm",
     ])("公開ルート %s はそのまま通す", (pathname) => {
-      const result = decideMiddleware(pathname, false);
+      const result = decideProxy(pathname, false);
       expect(result).toEqual({ kind: "next" });
     });
 
     it("将来追加された未知のルート（例: /reports）も自動的に保護対象になる", () => {
-      const result = decideMiddleware("/reports", false);
+      const result = decideProxy("/reports", false);
       expect(result).toEqual({ kind: "redirect-login", next: "/reports" });
     });
 
     it("公開ルートのサブパス（例: /password-reset/confirm/foo）も公開扱い", () => {
-      const result = decideMiddleware(
+      const result = decideProxy(
         "/password-reset/confirm/extra",
         false,
       );
@@ -58,7 +58,7 @@ describe("decideMiddleware", () => {
     });
 
     it("公開ルートに似た別名（例: /login-foo）は公開扱いしない", () => {
-      const result = decideMiddleware("/login-foo", false);
+      const result = decideProxy("/login-foo", false);
       expect(result).toEqual({ kind: "redirect-login", next: "/login-foo" });
     });
   });
@@ -71,13 +71,13 @@ describe("decideMiddleware", () => {
     ])(
       "AUTH_ONLY パス %s に到達したら / にリダイレクトする",
       (pathname) => {
-        const result = decideMiddleware(pathname, true);
+        const result = decideProxy(pathname, true);
         expect(result).toEqual({ kind: "redirect-home" });
       },
     );
 
     it("/accept-invitation は AUTH_ONLY ではないのでそのまま通す（ログイン中の招待受諾を許容）", () => {
-      const result = decideMiddleware("/accept-invitation", true);
+      const result = decideProxy("/accept-invitation", true);
       expect(result).toEqual({ kind: "next" });
     });
 
@@ -88,7 +88,7 @@ describe("decideMiddleware", () => {
       "/settings/profile",
       "/api-keys",
     ])("保護ルート %s はそのまま通す", (pathname) => {
-      const result = decideMiddleware(pathname, true);
+      const result = decideProxy(pathname, true);
       expect(result).toEqual({ kind: "next" });
     });
   });
@@ -102,10 +102,10 @@ describe("decideMiddleware", () => {
   });
 });
 
-describe("MIDDLEWARE_MATCHER", () => {
+describe("PROXY_MATCHER", () => {
   // Next.js は matcher 文字列を内部で正規表現にコンパイルする。
   // ここでは同じ正規表現として直接評価し、対象/除外を検証する。
-  const re = new RegExp(`^${MIDDLEWARE_MATCHER}$`);
+  const re = new RegExp(`^${PROXY_MATCHER}$`);
 
   it.each([
     "/",
@@ -117,7 +117,7 @@ describe("MIDDLEWARE_MATCHER", () => {
     "/teams/abc-123",
     "/settings/profile",
     "/accept-invitation",
-  ])("UI ルート %s は middleware 対象（matcher にマッチ）", (pathname) => {
+  ])("UI ルート %s は proxy 対象（matcher にマッチ）", (pathname) => {
     expect(re.test(pathname)).toBe(true);
   });
 
@@ -137,23 +137,23 @@ describe("MIDDLEWARE_MATCHER", () => {
     "/manifest.json",
     "/file.svg",
     "/logo.png",
-  ])("除外パス %s は middleware を skip（matcher にマッチしない）", (pathname) => {
+  ])("除外パス %s は proxy を skip（matcher にマッチしない）", (pathname) => {
     expect(re.test(pathname)).toBe(false);
   });
 
   // Next.js (Turbopack) は config.matcher にリテラル文字列を要求するため、
-  // middleware.ts では MIDDLEWARE_MATCHER を import 経由で使えない。
-  // 同一ファイル内のリテラルが MIDDLEWARE_MATCHER と一致することを保証する。
-  it("middleware.ts のリテラルが MIDDLEWARE_MATCHER と同期している", () => {
-    const middlewareSrc = readFileSync(
-      path.resolve(__dirname, "../../middleware.ts"),
+  // proxy.ts では PROXY_MATCHER を import 経由で使えない。
+  // 同一ファイル内のリテラルが PROXY_MATCHER と一致することを保証する。
+  it("proxy.ts のリテラルが PROXY_MATCHER と同期している", () => {
+    const proxySrc = readFileSync(
+      path.resolve(__dirname, "../../proxy.ts"),
       "utf8",
     );
     // matcher: ["..."] からリテラルを抜き出し
-    const m = middlewareSrc.match(/matcher:\s*\[\s*"((?:[^"\\]|\\.)*)"\s*\]/);
-    expect(m, "middleware.ts に matcher: [\"...\"] 形式のリテラルが見つからない").not.toBeNull();
+    const m = proxySrc.match(/matcher:\s*\[\s*"((?:[^"\\]|\\.)*)"\s*\]/);
+    expect(m, "proxy.ts に matcher: [\"...\"] 形式のリテラルが見つからない").not.toBeNull();
     // JSON.parse で JS 文字列リテラルのエスケープを解決
     const literal = JSON.parse(`"${m![1]}"`);
-    expect(literal).toBe(MIDDLEWARE_MATCHER);
+    expect(literal).toBe(PROXY_MATCHER);
   });
 });

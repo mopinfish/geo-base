@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { decideMiddleware } from "@/lib/auth/middleware-decisions";
+import { decideProxy } from "@/lib/auth/proxy-decisions";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasRefresh = !!request.cookies.get("geo_base_refresh");
-  const decision = decideMiddleware(pathname, hasRefresh);
+  const decision = decideProxy(pathname, hasRefresh);
 
   switch (decision.kind) {
     case "redirect-login": {
@@ -27,13 +27,13 @@ export function middleware(request: NextRequest) {
   }
 }
 
-// matcher パターン（仕様は middleware-decisions.ts の `MIDDLEWARE_MATCHER` を参照）。
+// matcher パターン（仕様は proxy-decisions.ts の `PROXY_MATCHER` を参照）。
 //
 // Next.js (Turbopack) は `config.matcher` を **コンパイル時に静的解析** するため、
 // 別ファイルの定数を import しても受け付けず、リテラル文字列を直接渡す必要がある。
-// そのため `middleware-decisions.ts` の `MIDDLEWARE_MATCHER` と本ファイルのリテラル
+// そのため `proxy-decisions.ts` の `PROXY_MATCHER` と本ファイルのリテラル
 // は **同一文字列** に保つ必要があり、テスト
-// （`middleware-decisions.test.ts` の "matcher と middleware.ts のリテラル同期"）
+// （`proxy-decisions.test.ts` の "matcher と proxy.ts のリテラル同期"）
 // で同期を担保している。
 export const config = {
   matcher: ["/((?!api(?:/|$)|_next/|.*\\.\\w+$).*)"],

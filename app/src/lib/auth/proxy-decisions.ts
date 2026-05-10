@@ -1,5 +1,5 @@
 /**
- * Middleware decision logic (route guard) — pure, framework-agnostic.
+ * Proxy decision logic (route guard) — pure, framework-agnostic.
  *
  * Allow-list 方式（issue #46）:
  * - PUBLIC_PATHS に列挙されたパスは未ログインでもアクセス可
@@ -8,6 +8,10 @@
  *
  * 切り出した理由: `next/server` の NextRequest/NextResponse は単体テストで
  * モックしにくいので、決定ロジックを純粋関数に分離してテスト容易にする。
+ *
+ * Next.js 16 で `middleware` ファイル規約が `proxy` に renamed されたため
+ * (issue #61)、本ファイルも `middleware-decisions.ts` から改称している。
+ * 中身のロジック（route guard）は変わらない。
  */
 
 export const PUBLIC_PATHS = [
@@ -24,21 +28,21 @@ export const AUTH_ONLY_PATHS = [
 ] as const;
 
 /**
- * Next.js middleware の `config.matcher` パターン。
+ * Next.js proxy の `config.matcher` パターン。
  *
- * 除外する（middleware を経由させない）対象:
+ * 除外する（proxy を経由させない）対象:
  * - `/api` 単体および `/api/...` 配下（FastAPI に直接または rewrites 経由で転送）
  *   `/api-keys` 等の **`/api` で始まるが API ではない UI ルート** を誤って除外
  *   しないよう `api(?:/|$)` で厳密マッチ
  * - `/_next/...` 配下すべて（HMR / static / image / data 等）
  * - 拡張子付きパス（favicon.ico / robots.txt / public 配下の画像など）
  *
- * 上記以外は middleware を通り、`decideMiddleware` で認証判定される。
+ * 上記以外は proxy を通り、`decideProxy` で認証判定される。
  */
-export const MIDDLEWARE_MATCHER =
+export const PROXY_MATCHER =
   "/((?!api(?:/|$)|_next/|.*\\.\\w+$).*)";
 
-export type MiddlewareDecision =
+export type ProxyDecision =
   | { kind: "next" }
   | { kind: "redirect-login"; next: string }
   | { kind: "redirect-home" };
@@ -46,10 +50,10 @@ export type MiddlewareDecision =
 const matchesAny = (paths: readonly string[], pathname: string): boolean =>
   paths.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
-export function decideMiddleware(
+export function decideProxy(
   pathname: string,
   hasRefresh: boolean,
-): MiddlewareDecision {
+): ProxyDecision {
   const isPublic = matchesAny(PUBLIC_PATHS, pathname);
   const isAuthOnly = matchesAny(AUTH_ONLY_PATHS, pathname);
 
