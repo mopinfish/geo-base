@@ -24,7 +24,13 @@ from lib.models.feature import (
     BulkFeatureCreate,
     BulkFeatureResponse,
 )
-from lib.auth import User, get_current_user, require_auth, check_tileset_access
+from lib.auth import (
+    AuthContext,
+    User,
+    check_tileset_access_v2,
+    get_auth_context_optional,
+    require_auth,
+)
 from lib.validators import (
     validate_feature,
     validate_geometry,
@@ -450,40 +456,46 @@ def create_features_bulk(
 
 
 @router.get("")
-def list_features(
+async def list_features(
     tileset_id: str = Query(None, description="Filter by tileset ID"),
     layer: str = Query(None, description="Filter by layer name"),
     bbox: str = Query(None, description="Bounding box filter (minx,miny,maxx,maxy)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of features"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
     """
     List features with optional filters.
-    
+
     Returns GeoJSON FeatureCollection.
+
+    アクセス判定は v2（issue #51）— 個人 / 公開 / team_tilesets 共有を
+    一貫して評価する。
     """
     try:
         with conn.cursor() as cur:
             # Build query
             conditions = []
             params = []
-            
+
             if tileset_id:
                 # Check access to tileset
                 cur.execute(
-                    "SELECT is_public, user_id FROM tilesets WHERE id = %s",
+                    "SELECT id, is_public, user_id FROM tilesets WHERE id = %s",
                     (tileset_id,),
                 )
                 row = cur.fetchone()
-                
+
                 if row:
-                    is_public, owner_user_id = row
-                    owner_user_id = str(owner_user_id) if owner_user_id else None
-                    
-                    if not check_tileset_access(tileset_id, is_public, owner_user_id, user):
-                        if not user:
+                    tileset_for_access = {
+                        "id": row[0],
+                        "is_public": row[1],
+                        "user_id": row[2],
+                    }
+
+                    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                        if auth is None:
                             raise HTTPException(
                                 status_code=401,
                                 detail="Authentication required to access this tileset",
@@ -578,12 +590,16 @@ def list_features(
 
 
 @router.get("/{feature_id}")
-def get_feature(
+async def get_feature(
     feature_id: str,
     conn=Depends(get_connection),
-    user: Optional[User] = Depends(get_current_user),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
-    """Get a specific feature by ID."""
+    """Get a specific feature by ID.
+
+    アクセス判定は v2（issue #51）— team_tilesets 経由のチーム共有読み取りも
+    許可される。
+    """
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -598,16 +614,18 @@ def get_feature(
                 (feature_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Feature not found")
-            
-            is_public = row[7]
-            owner_user_id = str(row[8]) if row[8] else None
-            
-            # Check access
-            if not check_tileset_access(str(row[4]), is_public, owner_user_id, user):
-                if not user:
+
+            tileset_for_access = {
+                "id": row[4],
+                "is_public": row[7],
+                "user_id": row[8],
+            }
+
+            if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+                if auth is None:
                     raise HTTPException(
                         status_code=401,
                         detail="Authentication required to access this feature",

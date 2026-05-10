@@ -8,7 +8,7 @@
 - require_auth, get_current_user: FastAPI dependencies (既存互換)
 - verify_jwt_token: 後方互換用エイリアス
 - extract_token_from_header: 既存ヘルパ
-- check_tileset_access, get_tileset_with_access_check, is_auth_configured: 既存タイル系認可
+- is_auth_configured: 認証設定チェック
 - check_tileset_access_v2: タイルセット読み取り認可（ctx ベース）
 - check_tileset_write_access_v2: タイルセット書き込み認可（ctx ベース、issue #49）
 """
@@ -116,58 +116,9 @@ async def require_auth(
     return result.user
 
 
-# === 既存タイル認可関数（既存 auth.py から移設） ===
-
-def check_tileset_access(
-    tileset_id: str,
-    is_public: bool,
-    owner_user_id: Optional[str],
-    current_user: Optional[User],
-) -> bool:
-    """旧来のタイルセットアクセスチェック（後方互換）。
-
-    新規コードは AuthContext + check_tileset_access_v2 を使うこと。
-    """
-    if is_public:
-        return True
-    if not current_user:
-        return False
-    if owner_user_id and current_user.id == owner_user_id:
-        return True
-    return False
-
-
-async def get_tileset_with_access_check(
-    tileset_id: str,
-    conn,
-    current_user: Optional[User],
-) -> dict:
-    """既存 auth.py から移設。新規コードは AuthContext 版を使うこと。"""
-    with conn.cursor() as cur:
-        cur.execute(
-            """SELECT id, name, description, type, format, min_zoom, max_zoom,
-                      is_public, user_id, metadata, created_at, updated_at
-               FROM tilesets WHERE id = %s""",
-            (tileset_id,),
-        )
-        columns = [desc[0] for desc in cur.description]
-        row = cur.fetchone()
-
-    if not row:
-        raise HTTPException(404, f"Tileset not found: {tileset_id}")
-
-    tileset = dict(zip(columns, row))
-    is_public = tileset.get("is_public", True)
-    owner_user_id = str(tileset.get("user_id")) if tileset.get("user_id") else None
-
-    if not is_public and not current_user:
-        raise HTTPException(401, "Authentication required to access this tileset",
-                            headers={"WWW-Authenticate": "Bearer"})
-
-    if not check_tileset_access(tileset_id, is_public, owner_user_id, current_user):
-        raise HTTPException(403, "You do not have permission to access this tileset")
-
-    return tileset
+# 旧 `check_tileset_access` / `get_tileset_with_access_check` は team_tilesets
+# 共有を考慮できなかったため、issue #51（ACCESS_CONTROL_REVIEW C-3）で削除。
+# 認可判定は `check_tileset_access_v2(conn, tileset, ctx)` に統一されている。
 
 
 def is_auth_configured() -> bool:
@@ -429,12 +380,11 @@ __all__ = [
     "get_current_user", "require_auth",
     # Helpers
     "extract_token_from_header", "verify_jwt_token",
-    # Tile access (legacy)
-    "check_tileset_access", "get_tileset_with_access_check", "is_auth_configured",
-    # NEW (Task 3.2): unified context for JWT + API key
+    "is_auth_configured",
+    # Unified context for JWT + API key (Task 3.2)
     "AuthContext", "validate_api_key", "API_KEY_PREFIX", "log_api_key_request",
     "get_auth_context_optional", "require_auth_context",
-    # NEW (Task 3.3): team-based tileset authorization
+    # Tileset authorization (team-aware, ctx-based)
     "check_tileset_access_v2",
     # NEW (issue #49 / C-1): team-based tileset write authorization
     "check_tileset_write_access_v2",
