@@ -167,12 +167,12 @@ export default function DashboardPage() {
               <Layers className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold" data-testid="dashboard-tilesets-count">
                 {!isReady || isLoading ? "-" : stats?.tilesets?.total ?? safeFilterTilesets.length}
               </div>
               <p className="text-xs text-muted-foreground">
-                ベクタ: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.vector ?? vectorTilesets.length} / 
-                PMTiles: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.pmtiles ?? pmtilesTilesets.length} / 
+                ベクタ: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.vector ?? vectorTilesets.length} /
+                PMTiles: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.pmtiles ?? pmtilesTilesets.length} /
                 ラスタ: {!isReady || isLoading ? "-" : stats?.tilesets?.by_type?.raster ?? rasterTilesets.length}
               </p>
             </CardContent>
@@ -185,7 +185,7 @@ export default function DashboardPage() {
               <MapPin className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold" data-testid="dashboard-features-count">
                 {!isReady || isLoading ? "-" : stats?.features?.total?.toLocaleString() ?? "-"}
               </div>
               {stats?.features && (
@@ -234,7 +234,9 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-bold">{stats.datasources.total}</div>
+                    <div className="text-2xl font-bold" data-testid="dashboard-datasources-count">
+                      {stats.datasources.total}
+                    </div>
                     <p className="text-xs text-muted-foreground">登録済み</p>
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
