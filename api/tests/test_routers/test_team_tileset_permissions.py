@@ -3,9 +3,10 @@
 ACCESS_CONTROL_REVIEW.md I-1 で発覚した非対称（追加は member 可、削除は owner/admin
 のみ）を案 B（両方 owner/admin のみ）に統一した変更の回帰防止。
 
-最小限の FastAPI app + TestClient を立ち上げ、`get_connection` / `require_auth` を
-dependency_overrides で差し替える方式は `test_features_datasources_team_access.py`
-と同じ。
+`add_team_tileset` / `remove_team_tileset` は handler 内で `conn.commit()` を呼ぶ
+ため、`_CommitNoOpConn` で commit を no-op に包んでテスト DB の汚染を防ぐ
+（`db_conn.rollback()` でテスト終了時に巻き戻す）。`test_write_api_key_auth.py` /
+`test_invitation_token_revoke.py` と同じ流儀。
 """
 import uuid
 
@@ -23,14 +24,40 @@ from lib.routers.teams import router as teams_router
 # ---------------------------------------------------------------------------
 
 
+class _CommitNoOpConn:
+    """`db_conn` の薄い proxy。`commit()` を no-op にしてテスト分離を担保する。
+
+    psycopg2 の Connection は `commit` 属性が read-only なので
+    `monkeypatch.setattr(conn, 'commit', ...)` は使えない。本クラスは
+    `__getattr__` 経由で他属性を委譲しつつ、`commit` だけ空実装にする。
+    """
+
+    def __init__(self, conn):
+        object.__setattr__(self, "_conn", conn)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def commit(self):
+        # no-op: handler 内の commit を黙って吸収。実 DB 変更は test 終了時に
+        # `db_conn.rollback()` で巻き戻る。
+        pass
+
+
 @pytest.fixture
 def app(db_conn):
-    """teams router のみ載せた最小 FastAPI app。"""
+    """teams router のみ載せた最小 FastAPI app。
+
+    handler 内の `conn.commit()` を no-op に包む `_CommitNoOpConn` を
+    依存性注入で渡し、テスト DB にデータが残留しないようにする。
+    """
+    no_commit_conn = _CommitNoOpConn(db_conn)
+
     a = FastAPI()
     a.include_router(teams_router)
 
     def _get_conn():
-        yield db_conn
+        yield no_commit_conn
 
     a.dependency_overrides[get_connection] = _get_conn
     return a

@@ -102,7 +102,7 @@ class AuthContext:
 
 > 追加と削除の権限は Issue #54 (案 B) で `[OWNER, ADMINISTRATOR]` に統一済み（2026-05-11）。member 以下は team-shared なタイルセットの「利用（読み取り / 配信）」のみ可能。
 
-実装: `api/lib/routers/teams.py:76-79` の `check_team_permission()` が `role NOT IN ('owner', 'administrator')` で 403 を返す。member/guest 区別は不徹底（後述）。
+実装: `api/lib/routers/teams.py` の `check_team_permission(conn, team_id, user_id, required_roles)` が `team_members` から取得した `role` を `required_roles` (Python の `list[TeamRole]`) に含めるかで真偽を返す。各エンドポイントが必要なロール集合を明示的に渡すスタイル。member/guest 区別は不徹底（後述）。
 
 ---
 
@@ -254,7 +254,7 @@ if str(row[1]) != user.id:  # row[1] = tilesets.user_id
 
 #### I-1. メンバーがチームタイルセットを「追加」できるが「削除」できない非対称 ✅ 対応済み
 
-`api/lib/routers/teams.py:892` (add) は member も許可していたが、`953` (delete) は owner/admin のみ。誤って追加したものを当人が取り消せなかった。
+`api/lib/routers/teams.py` の `add_team_tileset` (POST `/teams/{id}/tilesets`) は member も許可していたが、`remove_team_tileset` (DELETE `/teams/{id}/tilesets/{tid}`) は owner/admin のみ。誤って追加したものを当人が取り消せなかった。
 
 **対応（Issue #54、案 B）:** 追加側 (`add_team_tileset`) の `check_team_permission` から `TeamRole.MEMBER` を外し、削除側と同じ `[OWNER, ADMINISTRATOR]` に統一。「owner/admin = 管理、member = 利用」の境界を明確化。回帰テスト `tests/test_routers/test_team_tileset_permissions.py` で owner/admin/member × add/delete の 6 ケースを検証。
 
