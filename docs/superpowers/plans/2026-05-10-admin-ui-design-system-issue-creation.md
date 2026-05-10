@@ -9,14 +9,23 @@
 **Tech Stack:** GitHub CLI (`gh`), GitHub REST API, GitHub Projects v2 (GraphQL)
 
 **前提:**
-- ブランチ `docs/admin-ui-design-system-spec` 上に spec `0c0da89` がコミット済み
+- ブランチ `docs/admin-ui-design-system-spec` 上に spec ファイル
+  (`docs/superpowers/specs/2026-05-10-admin-ui-design-system-migration-design.md`)
+  がコミット済み（PR #89 として review 中）
 - リポジトリ: `mopinfish/geo-base`、デフォルトブランチ: `develop`
 - Project 8 (`mopinfish/projects/8`) は作成済み
-- Project 8 のフィールド ID（事前取得済み・本プランで使用）:
+- Project 8 のフィールド ID（**起票時点のスナップショット**・本プランで使用）:
   - Project ID: `PVT_kwHOABCFkM4BXQr_`
   - Status field: `PVTSSF_lAHOABCFkM4BXQr_zhSevlg` / Backlog: `f75ad846`
   - Priority field: `PVTSSF_lAHOABCFkM4BXQr_zhSevsw` / P1: `0a877460`, P2: `da944a9c`
   - Size field: `PVTSSF_lAHOABCFkM4BXQr_zhSevs0` / S: `f784b110`, M: `7515a9f1`, L: `817d0097`, XL: `db339eb2`
+
+> **注:** Project の構成（フィールド追加・名称変更・選択肢の編集 / Project 自体の作り直し）で
+> 上記 ID は変わり得る。再実行・流用前には以下のコマンドで最新の ID を取得して差し替えること:
+> ```fish
+> gh project field-list 8 --owner mopinfish --format json
+> ```
+> 出力される各 field の `id` と、`options[].id` を本セクションの値と照合する。
 
 **実行時に維持する状態（環境変数）:**
 - `EPIC_NUM` — Epic Issue の番号（Task 4 で設定）
@@ -49,12 +58,10 @@ Expected: `Branch 'docs/admin-ui-design-system-spec' set up to track 'origin/doc
 
 - [ ] **Step 3: develop 向けの PR を作成**
 
+fish には bash の `$(...)` 形式のコマンド置換が無いため、PR 本文は一時ファイルに書き出して `--body-file` で参照する。
+
 ```fish
-gh pr create \
-  --base develop \
-  --head docs/admin-ui-design-system-spec \
-  --title "docs(spec): Admin UI のデザインシステム移行設計を追加" \
-  --body "$(cat <<'EOF'
+cat > /tmp/spec-pr-body.md <<'EOF'
 ## Summary
 
 - `app/`（Admin UI）をデジタル庁デザインシステムに段階移行するための設計 spec を追加
@@ -68,7 +75,12 @@ gh pr create \
 - [ ] Issue 起票プラン（`docs/superpowers/plans/2026-05-10-admin-ui-design-system-issue-creation.md`）と整合している
 - [ ] 非ゴールの記述が要求どおり（色テイスト保持、shadcn 維持）になっている
 EOF
-)"
+
+gh pr create \
+  --base develop \
+  --head docs/admin-ui-design-system-spec \
+  --title "docs(spec): Admin UI のデザインシステム移行設計を追加" \
+  --body-file /tmp/spec-pr-body.md
 ```
 
 Expected: PR URL が出力される（例: `https://github.com/mopinfish/geo-base/pull/XX`）
