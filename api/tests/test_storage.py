@@ -346,3 +346,71 @@ class TestS3UriToGdalPath:
     def test_passthrough_already_vsis3(self):
         from lib.storage import s3_uri_to_gdal_path
         assert s3_uri_to_gdal_path("/vsis3/bucket/key.tif") == "/vsis3/bucket/key.tif"
+
+
+class TestSetupGdalS3Env:
+    """Issue #101 round 5: スキーム有無 / ポート付き endpoint の堅牢パース。
+
+    `urlparse("localhost:9000")` は scheme='localhost' / path='9000' と誤解析する
+    ため、`_setup_gdal_s3_env` は `://` を含まない値を `//` で補ってから netloc
+    として読む。
+    """
+
+    GDAL_KEYS = ["AWS_S3_ENDPOINT", "AWS_HTTPS", "AWS_VIRTUAL_HOSTING"]
+
+    def _clean_env(self, monkeypatch):
+        # 既存の env を取り除いて関数の挙動を独立に検証する
+        for key in [
+            *self.GDAL_KEYS,
+            "AWS_ENDPOINT_URL_S3",
+            "S3_ENDPOINT_URL",
+        ]:
+            monkeypatch.delenv(key, raising=False)
+
+    def test_https_url_with_explicit_scheme(self, monkeypatch):
+        from lib.storage import _setup_gdal_s3_env
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://fly.storage.tigris.dev")
+        _setup_gdal_s3_env()
+        import os
+        assert os.environ["AWS_S3_ENDPOINT"] == "fly.storage.tigris.dev"
+        assert os.environ["AWS_HTTPS"] == "YES"
+        assert os.environ["AWS_VIRTUAL_HOSTING"] == "FALSE"
+
+    def test_http_url_explicit_scheme(self, monkeypatch):
+        from lib.storage import _setup_gdal_s3_env
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("S3_ENDPOINT_URL", "http://localhost:9000")
+        _setup_gdal_s3_env()
+        import os
+        assert os.environ["AWS_S3_ENDPOINT"] == "localhost:9000"
+        assert os.environ["AWS_HTTPS"] == "NO"
+
+    def test_schemeless_host_port(self, monkeypatch):
+        """`localhost:9000` のようなスキーム無し endpoint も誤解析しない。"""
+        from lib.storage import _setup_gdal_s3_env
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("S3_ENDPOINT_URL", "localhost:9000")
+        _setup_gdal_s3_env()
+        import os
+        assert os.environ["AWS_S3_ENDPOINT"] == "localhost:9000"
+        # スキーム不明 → HTTPS=YES を既定（production 大半が HTTPS）。
+        # ローカル minio で http にしたい場合は AWS_HTTPS を明示で渡す前提。
+        assert os.environ["AWS_HTTPS"] == "YES"
+
+    def test_empty_env_does_nothing(self, monkeypatch):
+        from lib.storage import _setup_gdal_s3_env
+        self._clean_env(monkeypatch)
+        _setup_gdal_s3_env()
+        import os
+        for key in self.GDAL_KEYS:
+            assert key not in os.environ
+
+    def test_existing_aws_s3_endpoint_not_overwritten(self, monkeypatch):
+        from lib.storage import _setup_gdal_s3_env
+        self._clean_env(monkeypatch)
+        monkeypatch.setenv("AWS_S3_ENDPOINT", "preset.example.com")
+        monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://override.example.com")
+        _setup_gdal_s3_env()
+        import os
+        assert os.environ["AWS_S3_ENDPOINT"] == "preset.example.com"
