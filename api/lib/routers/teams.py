@@ -731,9 +731,9 @@ def accept_team_invitation(
                 raise HTTPException(status_code=400, detail=f"Invitation is {status}")
 
             if expires_at and expires_at < datetime.utcnow():
-                # Update status to expired
+                # Update status to expired and clear token (#55: replay prevention)
                 cur.execute(
-                    "UPDATE team_invitations SET status = 'expired' WHERE id = %s",
+                    "UPDATE team_invitations SET status = 'expired', token = NULL WHERE id = %s",
                     (inv_id,)
                 )
                 conn.commit()
@@ -761,9 +761,9 @@ def accept_team_invitation(
             columns = [desc[0] for desc in cur.description]
             member_row = cur.fetchone()
             
-            # Update invitation status
+            # Update invitation status and clear token (#55: replay prevention)
             cur.execute(
-                "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW() WHERE id = %s",
+                "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW(), token = NULL WHERE id = %s",
                 (inv_id,)
             )
         
@@ -802,9 +802,10 @@ def cancel_team_invitation(
             raise HTTPException(status_code=403, detail="Only owners and administrators can cancel invitations")
         
         with conn.cursor() as cur:
+            # token も NULL にしてキャンセル後の再利用を防ぐ (#55)
             cur.execute(
-                """UPDATE team_invitations 
-                   SET status = 'cancelled'
+                """UPDATE team_invitations
+                   SET status = 'cancelled', token = NULL
                    WHERE id = %s AND team_id = %s AND status = 'pending'
                    RETURNING id""",
                 (invitation_id, team_id)
