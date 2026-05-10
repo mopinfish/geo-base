@@ -97,7 +97,9 @@ class TestHelperFunctions:
         
         assert full_key.startswith("gb_live_")
         assert prefix.startswith("gb_live_")
-        assert len(prefix) == 16  # gb_live_ (8) + 8 random chars
+        # prefix は DB 側 VARCHAR(12) 制約に合わせて 12 文字（gb_live_ + 4 random）。
+        # 以前は 16 文字 (8 random) で本番 INSERT が 500 になっていた（issue #79）。
+        assert len(prefix) == 12
         assert len(key_hash) == 64  # SHA-256 hex
         assert key_hash == hash_api_key(full_key)
     

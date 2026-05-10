@@ -2,6 +2,7 @@
 API Keys CRUD endpoints and management.
 """
 
+import json
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -129,14 +130,19 @@ def create_api_key(
         
         # Convert scopes to list of strings
         scopes = [s.value for s in key_data.scopes]
-        
+
+        # JSONB バインドは json.dumps + ::jsonb キャストで行う。psycopg2 は dict を
+        # JSONB に直接 adapt できず "can't adapt type 'dict'" になるため、本リポジトリ
+        # の他の JSONB 書き込み (tilesets / teams / users 等) と同じパターンに揃える。
+        metadata_json = json.dumps(key_data.metadata) if key_data.metadata else "{}"
+
         with conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO api_keys (
                        name, description, prefix, key_hash, user_id, team_id,
                        scopes, rate_limit_per_minute, rate_limit_per_day,
                        expires_at, metadata
-                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
                    RETURNING id, name, description, prefix, user_id, team_id,
                              scopes, rate_limit_per_minute, rate_limit_per_day,
                              is_active, last_used_at, expires_at, revoked_at,
@@ -152,7 +158,7 @@ def create_api_key(
                     key_data.rate_limit_per_minute,
                     key_data.rate_limit_per_day,
                     expires_at,
-                    key_data.metadata if key_data.metadata else {}
+                    metadata_json,
                 )
             )
             columns = [desc[0] for desc in cur.description]
@@ -305,8 +311,9 @@ def update_api_key(
             params.append(update_data.is_active)
         
         if update_data.metadata is not None:
-            updates.append("metadata = %s")
-            params.append(update_data.metadata)
+            # create_api_key と同じく JSONB バインドは json.dumps + ::jsonb キャスト
+            updates.append("metadata = %s::jsonb")
+            params.append(json.dumps(update_data.metadata))
         
         if not updates:
             raise HTTPException(status_code=400, detail="No fields to update")

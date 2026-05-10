@@ -68,7 +68,11 @@ def generate_api_key(environment: ApiKeyEnvironment = ApiKeyEnvironment.LIVE) ->
         Tuple of (full_key, prefix, key_hash)
     """
     random_part = secrets.token_urlsafe(API_KEY_LENGTH)
-    prefix = f"{API_KEY_PREFIX}_{environment.value}_{random_part[:8]}"
+    # prefix は DB 側 VARCHAR(12) 制約に合わせて 12 文字以内（"gb_live_xxxx" / "gb_test_xxxx"）。
+    # スキーマコメント "gb_live_abc1" の意図に揃える。以前は [:8] だったため
+    # 16 文字の prefix が生成され "value too long for type character varying(12)" で
+    # POST /api/api-keys が 500 になっていた（issue #79）。
+    prefix = f"{API_KEY_PREFIX}_{environment.value}_{random_part[:4]}"
     full_key = f"{API_KEY_PREFIX}_{environment.value}_{random_part}"
     key_hash = hash_api_key(full_key)
     return full_key, prefix, key_hash
