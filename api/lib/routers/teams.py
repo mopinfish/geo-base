@@ -900,11 +900,15 @@ def add_team_tileset(
     conn=Depends(get_connection),
     user: User = Depends(require_auth)
 ):
-    """Add a tileset to the team."""
+    """Add a tileset to the team. Owner / administrator のみ実行可能。
+
+    Issue #54 (案 B) で削除側 (DELETE /teams/{id}/tilesets/{tid}) と権限を対称化。
+    member の追加権限は廃止し、「owner/admin = 管理、member = 利用」の境界を統一。
+    """
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER]):
+
+        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise HTTPException(status_code=403, detail="You don't have permission to add tilesets")
         
         with conn.cursor() as cur:
