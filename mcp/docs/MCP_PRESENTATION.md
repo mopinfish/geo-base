@@ -429,11 +429,16 @@ Claude: フィーチャーを作成します...
 
 ### 5.2 認証
 
-CRUD操作（作成・更新・削除）には `API_TOKEN` が必要です：
+CRUD操作（作成・更新・削除）には `API_TOKEN` が必要です。geo-base の **local auth provider が発行する JWT** を使います。`TILE_SERVER_URL` で指定したホスト（ローカル開発: `http://localhost:8000`、本番: `https://geo-base-api.fly.dev`）の `/api/auth/login` に POST して `access_token` を取得し、それを `API_TOKEN` に設定します:
 
 ```bash
-# 環境変数で設定（geo-base local auth provider が発行する JWT）
-export API_TOKEN="<access_token from POST /api/auth/login>"
+# 1. アクセストークンを取得（TILE_SERVER_URL と同じホストにログイン）
+export API_TOKEN=$(curl -s -X POST "${TILE_SERVER_URL:-https://geo-base-api.fly.dev}/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"<your-email>","password":"<your-password>"}' \
+  | jq -r .access_token)
+
+# 2. MCP サーバー起動時に環境変数として渡す
 ```
 
 ### 5.3 対応データ形式
