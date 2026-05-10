@@ -108,7 +108,12 @@ flyctl secrets set DATABASE_URL=$DATABASE_URL -a geo-base-api
 flyctl secrets set AUTH_PROVIDER=local -a geo-base-api
 flyctl secrets set JWT_SECRET=(openssl rand -base64 64) -a geo-base-api
 
-# Supabase 関連 secret は不要なので削除
+# Supabase 関連 secret は不要なので削除する。
+# まず実際に何がセットされているか確認:
+flyctl secrets list -a geo-base-api | grep -i supabase
+# 出てきた名前を unset する。本プロジェクトで使われ得る候補は以下。
+# 環境によって有無が異なるので、上記 list の結果に合わせて指定:
+#   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET, SUPABASE_SERVICE_ROLE_KEY
 flyctl secrets unset SUPABASE_URL SUPABASE_JWT_SECRET -a geo-base-api
 ```
 
@@ -196,9 +201,12 @@ flyctl volumes create pg_data_restored \
 
 ```fish
 flyctl proxy 5433:5432 -a geo-base-pg &
+set PG_PROXY_PID $last_pid
+sleep 2
 env PGPASSWORD=(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
     pg_dump -h localhost -p 5433 -U postgres -d geo_base -F c \
     > geo_base_(date -u +%Y%m%dT%H%M%SZ).dump
+kill $PG_PROXY_PID
 ```
 
 #### 定期実行（運用化）

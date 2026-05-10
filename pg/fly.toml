@@ -5,11 +5,7 @@
 # Fly apps in the same org reach this DB via 6PN (`geo-base-pg.internal:5432`).
 # 開発端末からは `flyctl proxy 5433:5432 -a geo-base-pg` でローカル転送。
 #
-# Deploy:
-#   flyctl deploy --config pg/fly.toml --dockerfile pg/Dockerfile
-#   ※ build context が repo root になるよう、必ず repo root から実行する
-#
-# 詳細手順は docs/POSTGRES_SETUP.md を参照。
+# （Deploy 手順は下の `[build]` セクション直前のコメント参照）
 # =============================================================================
 
 app = "geo-base-pg"
