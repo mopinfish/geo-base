@@ -60,8 +60,12 @@ flyctl secrets set POSTGRES_PASSWORD=(openssl rand -base64 32 | tr -d '/+=' | he
 
 ### 1.3. デプロイ
 
+`flyctl deploy <workdir>` の workdir で build context を repo root に明示的に指定する。
+Dockerfile から `docker/postgis-init/*` を `COPY` するため、build context が pg/
+だと build に失敗する。
+
 ```fish
-flyctl deploy --config pg/fly.toml --dockerfile pg/Dockerfile -a geo-base-pg
+flyctl deploy . --config pg/fly.toml -a geo-base-pg
 ```
 
 `Dockerfile` で `docker/postgis-init/01_*.sql` 〜 `06_*.sql` を
@@ -152,10 +156,13 @@ flyctl machine list -a geo-base-pg
 
 ```fish
 # 1. ローカルで変更内容を docker/postgis-init/*.sql に反映（次回 fresh init で取り込まれる）
-# 2. 本番に DDL を適用
-flyctl proxy 5433:5432 -a geo-base-pg
+# 2. 本番に DDL を適用（proxy は同一ターミナルで psql を続けて打つためバックグラウンド起動）
+flyctl proxy 5433:5432 -a geo-base-pg &
+set PG_PROXY_PID $last_pid
+sleep 2
 env PGPASSWORD=(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
     psql -h localhost -p 5433 -U postgres -d geo_base -f path/to/migration.sql
+kill $PG_PROXY_PID
 ```
 
 冪等な書き方（`IF NOT EXISTS`、`CREATE OR REPLACE` 等）にしておくと再実行に強い。

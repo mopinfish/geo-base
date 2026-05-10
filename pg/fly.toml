@@ -16,9 +16,15 @@ app = "geo-base-pg"
 primary_region = "nrt"
 
 [build]
-  # fly.toml と同じディレクトリを基準にしたパス。build context は
-  # `flyctl deploy <workdir>` で repo root を渡して上書きする
-  # （Dockerfile 内 COPY が docker/postgis-init/* を参照する都合）。
+  # `dockerfile` の値は **fly.toml と同じディレクトリ (= pg/) からの相対パス**
+  # として flyctl が解決する。build context は別パラメータで、
+  # `flyctl deploy <workdir>` の workdir 引数（または cwd）で決まる。
+  # 本プロジェクトでは Dockerfile 内 COPY が docker/postgis-init/* を参照するため、
+  # build context = repo root が必要。よって必ず以下の形で実行すること:
+  #     flyctl deploy . --config pg/fly.toml -a geo-base-pg
+  # 先頭の `.` で workdir を明示的に repo root に指定。`pg/` ディレクトリで
+  # `flyctl deploy --config fly.toml` のように実行すると build context が
+  # pg/ になり、`COPY docker/postgis-init/...` が解決できず失敗する。
   dockerfile = "Dockerfile"
 
 [env]

@@ -17,13 +17,16 @@ pg/
 よくある操作だけ抜粋:
 
 ```fish
-# 接続（ローカルから）
-flyctl proxy 5433:5432 -a geo-base-pg
+# 接続（ローカルから）— proxy は同一ターミナルで使うのでバックグラウンド起動
+flyctl proxy 5433:5432 -a geo-base-pg &
+set PG_PROXY_PID $last_pid
+sleep 2
 env PGPASSWORD=(flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1) \
   psql -h localhost -p 5433 -U postgres -d geo_base
+kill $PG_PROXY_PID
 
-# デプロイ
-flyctl deploy --config pg/fly.toml -a geo-base-pg
+# デプロイ（必ず repo root から実行 — build context に docker/postgis-init/ を含めるため）
+flyctl deploy . --config pg/fly.toml -a geo-base-pg
 
 # ログ
 flyctl logs -a geo-base-pg
