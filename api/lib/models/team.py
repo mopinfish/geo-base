@@ -221,13 +221,14 @@ class TeamInvitationResponse(BaseModel):
     role: TeamRole
     invited_by: str
     message: Optional[str] = None
-    token: str
+    # token は受諾/失効/キャンセル時に NULL に書き換えられるため Optional (#55)
+    token: Optional[str] = None
     status: InvitationStatus
     expires_at: datetime
     accepted_at: Optional[datetime] = None
     created_at: datetime
     team_name: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 

@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS team_members (
 COMMENT ON TABLE team_members IS 'チームメンバーシップの管理テーブル';
 
 -- Team invitations table
+-- token is nullable: cleared (set to NULL) when the invitation is no longer usable
+-- (accepted / expired / cancelled) so that a leaked token cannot be replayed
+-- even within `expires_at`. See issue #55 for rationale.
+-- Note: the `declined` enum value exists but no handler currently transitions to
+-- it; if a decline flow is added later, it should also clear the token.
 CREATE TABLE IF NOT EXISTS team_invitations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
@@ -73,7 +78,7 @@ CREATE TABLE IF NOT EXISTS team_invitations (
     role team_role NOT NULL DEFAULT 'member',
     invited_by UUID NOT NULL,
     message TEXT,
-    token VARCHAR(64) UNIQUE NOT NULL,
+    token VARCHAR(64) UNIQUE,
     status invitation_status NOT NULL DEFAULT 'pending',
     expires_at TIMESTAMPTZ NOT NULL,
     accepted_at TIMESTAMPTZ,
@@ -81,7 +86,18 @@ CREATE TABLE IF NOT EXISTS team_invitations (
     CONSTRAINT unique_pending_invitation UNIQUE (team_id, email, status)
 );
 
+-- Idempotent migration for existing databases initialized with NOT NULL token.
+-- (No-op on fresh DBs since the CREATE TABLE above already declares it nullable.)
+ALTER TABLE team_invitations ALTER COLUMN token DROP NOT NULL;
+
+-- Backfill: clear tokens of any non-pending invitations that pre-date issue #55.
+-- Without this, plaintext tokens of older accepted/expired/cancelled invitations
+-- would remain in the DB. Idempotent (no-op on fresh DBs and after first run).
+UPDATE team_invitations SET token = NULL
+ WHERE status <> 'pending' AND token IS NOT NULL;
+
 COMMENT ON TABLE team_invitations IS 'チーム招待の管理テーブル';
+COMMENT ON COLUMN team_invitations.token IS '受諾/失効/キャンセル時に NULL に設定（漏洩した token のリプレイ防止）';
 
 -- Tileset-Team association table
 CREATE TABLE IF NOT EXISTS team_tilesets (
@@ -237,7 +253,9 @@ RETURNS INTEGER AS $$
 DECLARE
     expired_count INTEGER;
 BEGIN
-    UPDATE team_invitations SET status = 'expired'
+    -- Also clear the token so an expired invitation cannot be replayed even if
+    -- the status check is somehow bypassed in the future.
+    UPDATE team_invitations SET status = 'expired', token = NULL
     WHERE status = 'pending' AND expires_at < NOW();
     GET DIAGNOSTICS expired_count = ROW_COUNT;
     RETURN expired_count;

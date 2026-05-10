@@ -403,8 +403,9 @@ async def accept_invitation(
                VALUES (%s, %s, %s)""",
             (team_id, user.id, role),
         )
+        # token は受諾と同時に NULL に書き換えて、漏洩しても再利用できないようにする (#55)
         cur.execute(
-            "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW() WHERE id = %s",
+            "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW(), token = NULL WHERE id = %s",
             (inv_id,),
         )
     conn.commit()

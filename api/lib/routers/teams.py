@@ -2,7 +2,7 @@
 Teams management CRUD endpoints.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 from typing import Optional
 
@@ -714,10 +714,14 @@ def accept_team_invitation(
     """Accept a team invitation."""
     try:
         with conn.cursor() as cur:
-            # Find invitation
+            # Find invitation. FOR UPDATE で同一 token に対する並行受諾レースを直列化する
+            # （auth.py の accept-invitation と同じパターン）。受諾時に token を NULL 化
+            # するため、2 件目のリクエストは 1 件目の commit 後に READ COMMITTED の
+            # WHERE 再評価でマッチする行が消え、`if not row` 分岐に落ちて 404 を返す
+            # （UNIQUE 制約違反の 500 にはならない）。
             cur.execute(
                 """SELECT id, team_id, email, role, status, expires_at
-                   FROM team_invitations WHERE token = %s""",
+                   FROM team_invitations WHERE token = %s FOR UPDATE""",
                 (accept_data.token,)
             )
             row = cur.fetchone()
@@ -730,14 +734,24 @@ def accept_team_invitation(
             if status != 'pending':
                 raise HTTPException(status_code=400, detail=f"Invitation is {status}")
 
-            if expires_at and expires_at < datetime.utcnow():
-                # Update status to expired
-                cur.execute(
-                    "UPDATE team_invitations SET status = 'expired' WHERE id = %s",
-                    (inv_id,)
+            if expires_at:
+                # psycopg2 が TIMESTAMPTZ を tz-aware で返すケースに合わせて
+                # 比較対象も tz-aware にしておく。naive で来たら UTC 扱いに正規化。
+                # auth.py の accept-invitation と同じパターン。
+                now = datetime.now(timezone.utc)
+                expires_at_aware = (
+                    expires_at.replace(tzinfo=timezone.utc)
+                    if expires_at.tzinfo is None
+                    else expires_at
                 )
-                conn.commit()
-                raise HTTPException(status_code=400, detail="Invitation has expired")
+                if expires_at_aware < now:
+                    # Update status to expired and clear token (#55: replay prevention)
+                    cur.execute(
+                        "UPDATE team_invitations SET status = 'expired', token = NULL WHERE id = %s",
+                        (inv_id,)
+                    )
+                    conn.commit()
+                    raise HTTPException(status_code=400, detail="Invitation has expired")
 
             # Email 一致検証: invitation.email と user.email が一致しないと受諾不可
             if user.email and user.email.lower() != email.lower():
@@ -761,9 +775,9 @@ def accept_team_invitation(
             columns = [desc[0] for desc in cur.description]
             member_row = cur.fetchone()
             
-            # Update invitation status
+            # Update invitation status and clear token (#55: replay prevention)
             cur.execute(
-                "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW() WHERE id = %s",
+                "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW(), token = NULL WHERE id = %s",
                 (inv_id,)
             )
         
@@ -802,9 +816,10 @@ def cancel_team_invitation(
             raise HTTPException(status_code=403, detail="Only owners and administrators can cancel invitations")
         
         with conn.cursor() as cur:
+            # token も NULL にしてキャンセル後の再利用を防ぐ (#55)
             cur.execute(
-                """UPDATE team_invitations 
-                   SET status = 'cancelled'
+                """UPDATE team_invitations
+                   SET status = 'cancelled', token = NULL
                    WHERE id = %s AND team_id = %s AND status = 'pending'
                    RETURNING id""",
                 (invitation_id, team_id)
