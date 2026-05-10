@@ -95,10 +95,9 @@ tests/test_crud.py::TestCreateTileset::test_create_tileset_auth_required PASSED
 
 #### APIサーバー（api/.env）
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/geo_base
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_JWT_SECRET=your-jwt-secret
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/geo_base
+AUTH_PROVIDER=local
+JWT_SECRET=$(openssl rand -base64 64)   # 実際の値を貼り付ける
 ```
 
 #### MCPサーバー（mcp/.env）
@@ -288,7 +287,14 @@ uv tool install mcp-proxy
 
 ### 4.1 JWTトークンの取得
 
-Supabase Authでログイン後、セッションから `access_token` を取得します。
+`POST /api/auth/login` で取得します:
+
+```fish
+curl -s -X POST https://geo-base-api.fly.dev/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"<your-email>","password":"<your-password>"}' \
+  | jq -r .access_token
+```
 
 ### 4.2 タイルセット作成テスト
 

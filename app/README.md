@@ -44,7 +44,6 @@ NEXT_PUBLIC_MCP_URL=http://localhost:8001
 > - **`NEXT_PUBLIC_API_URL`** = 空（client.ts は同一オリジン fetch するため）
 
 > Phase 3 / Step 3.3-A 以降、Admin UI は API の `/api/auth/*` 経由で認証します。
-> Supabase 関連の環境変数（`NEXT_PUBLIC_SUPABASE_*`）は不要です。
 > 認証バックエンドのセットアップは [`docs/AUTH_SETUP.md`](../docs/AUTH_SETUP.md) を参照。
 
 ### 3. ローカル開発サーバーの起動

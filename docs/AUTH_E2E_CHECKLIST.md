@@ -7,8 +7,8 @@ Phase 3 / Step 3.3-A（プラガブル認証）のリリース前に手動で実
 関連ドキュメント:
 
 - `docs/AUTH_SETUP.md` — local モードのセットアップ詳細
-- `docs/AUTH_MIGRATION.md` — supabase → local 切替手順
-- `docs/superpowers/plans/2026-05-08-pluggable-auth.md` — 元の実装計画（Task 8.2 / 8.3）
+- `docs/AUTH_MIGRATION.md` — Supabase → local 切替手順（履歴。2026-05-10 移行完了済み）
+- `docs/superpowers/plans/2026-05-08-pluggable-auth.md` — 元の実装計画（Task 8.2 / 8.3、履歴）
 
 ---
 
@@ -127,45 +127,16 @@ cd docker && docker compose down -v
 
 ---
 
-## Part B: supabase モード E2E
+## Part B: ~~supabase モード E2E~~（2026-05-10 廃止）
 
-> 既存の Supabase テストプロジェクトと、それに登録済みのテストユーザーが必要。
-
-### B-1. 設定切替
-
-`api/.env` を以下に変更（既存の local モード設定をコメントアウトまたは削除）:
-
-```bash
-AUTH_PROVIDER=supabase
-SUPABASE_URL=https://your-test-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<test-service-role-key>
-SUPABASE_JWT_SECRET=<test-jwt-secret>
-DATABASE_URL=postgresql://...   # 必要に応じてテスト Supabase の DB URL に
-CORS_ORIGINS=["http://localhost:3000"]
-```
-
-API を再起動（uvicorn を Ctrl-C → 再実行）。
-
-### B-2. チェック項目
-
-- [ ] **B-2-1 Supabase ユーザーでログイン**: Supabase Dashboard で事前作成したテストユーザー（email + password）で `/login` から成功
-- [ ] **B-2-2 タイル一覧表示**: `/tilesets` が表示される（過去データの ownership は Supabase の `auth.uid()` 紐付けに依存）
-- [ ] **B-2-3 チーム表示**: 既存チームが表示される
-- [ ] **B-2-4 ログアウト**: サイドバーのログアウトで `/login` に戻る → 再度認証ガードが効く
-
-> Supabase モードでの新規招待 / パスワードリセットの完全フローは Supabase Auth の仕様に依存するため、`SupabaseAuthProvider` の対応範囲（spec §1.3）に応じて検証範囲を判断する。
-
-### B-3. 後始末
-
-```bash
-# .env を local モードに戻すか、テスト用の値を削除
-```
+`AUTH_PROVIDER=supabase` は Issue #72 / PR #74 で完全廃止されたため本セクションは削除しました。
+過去の検証手順を確認したい場合は git history（〜2026-05-10）を参照してください。
 
 ---
 
 ## Part C: 統合観点（横断チェック）
 
-local / supabase 両モードで共通に確認したい横断項目:
+local モードで確認したい横断項目:
 
 - [ ] **C-1 401 自動 refresh**: ログイン後、ブラウザ DevTools で `geo_base_access` cookie を削除して再リクエスト → `/api/auth/refresh` 経由で自動的に新アクセストークン取得 → 元のリクエストが retry されて成功
 - [ ] **C-2 CORS**: `/api/auth/*` は strict（`CORS_ORIGINS` 一致のみ）、`/api/tiles/*` は寛容（ワイルドカード）の挙動
@@ -182,7 +153,7 @@ local / supabase 両モードで共通に確認したい横断項目:
 | `/api/auth/refresh` で 401 | `geo_base_refresh` cookie が未送信 → Admin UI と API のオリジン違いで `credentials: include` が効いていない可能性。`next.config.ts` の dev rewrites か `NEXT_PUBLIC_API_URL` を確認 |
 | 招待メール / リセットメールが出ない | `EMAIL_BACKEND=console` が API .env に入っていない。SMTP モードなら `SMTP_*` 環境変数を確認 |
 | ログインで「ロックされました」 | 同一 IP/email から短時間に 5 回失敗 → 15 分待つか、Postgres から `auth_login_attempts` テーブルをクリア |
-| `npm run dev` で `@supabase/*` の import エラー | Phase 6 で削除した残骸。`grep -rn "@supabase" app/src/` を実行して洗い出し |
+| `npm run dev` で `@supabase/*` の import エラー | Issue #72 で残骸が残っているケース。`grep -rn "@supabase" app/src/` を実行して洗い出し |
 | Docker compose 起動で port conflict | 既に別プロジェクトが 5432 を占有 → `docker/docker-compose.override.yml` 等で 15432 に変更（HANDOVER_S3.md 参照） |
 
 ---

@@ -1,7 +1,14 @@
-# Supabase Auth → local 移行手順
+# Supabase Auth → local 移行手順（**完了済み: 2026-05-10**）
+
+> [!NOTE]
+> **本ドキュメントは履歴資料です。** geo-base の Supabase Auth → local 移行は
+> 2026-05-10 に Issue #72 (PR #71 / #73 / #74) で完了し、現状の本番環境は
+> `AUTH_PROVIDER=local` + Fly Postgres (`geo-base-pg`) で動作しています。
+> **新規セットアップは `docs/AUTH_SETUP.md` を参照してください。** 本ドキュメントは
+> 移行時のオペレーション手順を将来の参考として残しています。
 
 geo-base の認証バックエンドを Supabase Auth から local（自前 JWT 発行）に切り替えるための
-オペレーション手順です。Phase 3 / Step 3.3-A で導入されたプラガブル認証を前提とします。
+オペレーション手順です（履歴）。Phase 3 / Step 3.3-A で導入されたプラガブル認証を前提とします。
 
 ## 前提
 
