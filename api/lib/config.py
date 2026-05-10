@@ -32,14 +32,18 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://postgres:postgres@localhost:5432/geo_base"
 
-    # Supabase Storage (optional, レガシー — 段階的に廃止予定 / Issue #72)
-    supabase_url: Optional[str] = None
-    supabase_anon_key: Optional[str] = None
-    supabase_service_role_key: Optional[str] = None
-
-    # Supabase Storage settings (COG/PMTiles 保管先として一部利用中、撤去は別 PR)
-    supabase_storage_bucket: str = "geo-tiles"
-    supabase_storage_public_url: Optional[str] = None
+    # S3 互換 storage (COG/PMTiles のアップロード先)
+    # 既定で Fly Tigris 互換: https://fly.io/docs/tigris/
+    # AWS S3 / Cloudflare R2 等を使う場合は s3_endpoint_url / s3_region を上書き。
+    # アクセスキーは標準の AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY 環境変数で渡す
+    # （boto3 のデフォルト credential resolver に乗る）。
+    s3_endpoint_url: str = "https://fly.storage.tigris.dev"
+    s3_region: str = "auto"
+    s3_bucket: str = "geo-base-tiles"
+    # public な配信に使う base URL（任意）。設定された場合は upload 後の url を
+    # この prefix で組み立てる。Tigris の場合は通常 endpoint URL の bucket 配下が
+    # public 化されるが、別途 CDN を挟む構成では指定が必要。
+    s3_public_base_url: Optional[str] = None
 
     # Auth provider
     auth_provider: str = "local"  # 現状 local のみ。Supabase Auth は #72 で廃止済み
@@ -69,9 +73,6 @@ class Settings(BaseSettings):
 
     # API key log sampling rate (0.0 - 1.0)
     api_key_log_sample_rate: float = 1.0
-
-    # Vercel Blob (optional, for production)
-    blob_read_write_token: Optional[str] = None
 
     # Server
     cors_origins: List[str] = ["*"]
@@ -134,15 +135,17 @@ class Settings(BaseSettings):
             return "local"
 
     @property
-    def supabase_storage_base_url(self) -> Optional[str]:
-        """Get Supabase Storage base URL for public access."""
-        if self.supabase_storage_public_url:
-            return self.supabase_storage_public_url
-        if self.supabase_url:
-            # Default Supabase Storage URL pattern
-            return f"{self.supabase_url}/storage/v1/object/public/{self.supabase_storage_bucket}"
-        return None
-    
+    def s3_storage_base_url(self) -> str:
+        """S3 互換 storage の public 配信用 base URL。
+
+        s3_public_base_url が明示設定されていればそれを返す。未設定の場合は
+        endpoint_url / bucket から組み立てる（Tigris などは bucket public 化で
+        `<endpoint_url>/<bucket>` が公開 URL になる）。
+        """
+        if self.s3_public_base_url:
+            return self.s3_public_base_url.rstrip("/")
+        return f"{self.s3_endpoint_url.rstrip('/')}/{self.s3_bucket}"
+
     @property
     def effective_jwt_secret(self) -> Optional[str]:
         """JWT 検証に使う実効的な secret。

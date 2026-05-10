@@ -115,14 +115,16 @@ export default function NewDatasourcePage() {
     setUrl(value);
     validateUrl(value);
 
-    // URLからストレージプロバイダーを自動判定
-    if (value.includes("supabase.co") || value.includes("supabase.in")) {
-      setStorageProvider("supabase");
-    } else if (value.includes("amazonaws.com") || value.includes("s3.")) {
-      setStorageProvider("s3");
-    } else {
-      setStorageProvider("http");
-    }
+    // URL からストレージプロバイダーを自動判定
+    // S3 互換 storage には Fly Tigris (`*.fly.storage.tigris.dev`) /
+    // AWS S3 (`amazonaws.com` / `s3.`) / Cloudflare R2 (`r2.cloudflarestorage.com`)
+    // を含める。Issue #72 (PR #88) で旧 supabase 自動判定は廃止。
+    const isS3Compatible =
+      value.includes("fly.storage.tigris.dev") ||
+      value.includes("amazonaws.com") ||
+      value.includes("s3.") ||
+      value.includes("r2.cloudflarestorage.com");
+    setStorageProvider(isS3Compatible ? "s3" : "http");
   };
 
   // タイプ変更時にタイルセット選択をリセット
@@ -376,8 +378,7 @@ export default function NewDatasourcePage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="http">HTTP（汎用）</SelectItem>
-                      <SelectItem value="supabase">Supabase Storage</SelectItem>
-                      <SelectItem value="s3">AWS S3</SelectItem>
+                      <SelectItem value="s3">S3 互換 (Fly Tigris / AWS S3 / R2)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-sm text-muted-foreground">
@@ -446,8 +447,7 @@ export default function NewDatasourcePage() {
             <div>
               <h4 className="font-medium text-foreground">対応ストレージ</h4>
               <ul className="list-disc list-inside space-y-1 mt-1">
-                <li>Supabase Storage - Supabaseプロジェクトのストレージ</li>
-                <li>AWS S3 - Amazon S3バケット</li>
+                <li>S3 互換 - Fly Tigris / AWS S3 / Cloudflare R2 等（API キーで認証）</li>
                 <li>HTTP - 一般的なHTTPサーバー（CORSとRange Requestsが必要）</li>
               </ul>
             </div>

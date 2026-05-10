@@ -8,15 +8,16 @@ geo-base サンプルデータ投入スクリプト
 
 使用方法:
   # ローカル環境
-  python scripts/seed_sample_data.py --api-url http://localhost:8000 --token YOUR_SUPABASE_TOKEN
+  python scripts/seed_sample_data.py --api-url http://localhost:8000 --token YOUR_JWT_ACCESS_TOKEN
 
   # 本番環境
-  python scripts/seed_sample_data.py --api-url https://geo-base-api.fly.dev --token YOUR_SUPABASE_TOKEN
+  python scripts/seed_sample_data.py --api-url https://geo-base-api.fly.dev --token YOUR_JWT_ACCESS_TOKEN
 
-トークンの取得方法:
-  1. ブラウザで geo-base-app にログイン
-  2. 開発者ツール > Application > Local Storage > supabase.auth.token
-  3. access_token の値をコピー
+トークンの取得方法（local provider、AUTH_PROVIDER=local）:
+  curl -s -X POST $API_URL/api/auth/login \\
+    -H "Content-Type: application/json" \\
+    -d '{"email":"<your-email>","password":"<your-password>"}' \\
+    | jq -r .access_token
 """
 
 import argparse
@@ -289,7 +290,7 @@ class GeoBaseClient:
 def main():
     parser = argparse.ArgumentParser(description="geo-base サンプルデータ投入スクリプト")
     parser.add_argument("--api-url", default="http://localhost:8000", help="API URL")
-    parser.add_argument("--token", required=True, help="Supabase access token")
+    parser.add_argument("--token", required=True, help="JWT access token (POST /api/auth/login で取得)")
     parser.add_argument("--dry-run", action="store_true", help="実際には作成しない")
     args = parser.parse_args()
     

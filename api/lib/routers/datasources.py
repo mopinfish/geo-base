@@ -3,9 +3,13 @@ Datasources CRUD endpoints.
 """
 
 import json
+import re
+import uuid
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from lib.database import get_connection
@@ -642,11 +646,11 @@ async def upload_cog(
     conn=Depends(get_connection),
 ):
     """
-    Upload a COG file to Supabase Storage and create a datasource.
+    Upload a COG file to S3 互換 storage (Fly Tigris by default) and create a datasource.
 
     The file will be validated as a valid Cloud Optimized GeoTIFF,
-    uploaded to Supabase Storage, and a new datasource record will be created
-    linked to the specified tileset.
+    uploaded to the configured S3 bucket, and a new datasource record will be
+    created linked to the specified tileset.
 
     JWT または `write` scope の API キーで認証が必要（issue #50）。
     親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
@@ -697,7 +701,7 @@ async def upload_cog(
                 detail=f"Invalid COG file: {validation_message}"
             )
         
-        # Upload to Supabase Storage
+        # Upload to S3 互換 storage (Fly Tigris by default)
         storage = get_storage_client()
         if not storage:
             raise HTTPException(
@@ -705,12 +709,29 @@ async def upload_cog(
                 detail="Storage service is not available"
             )
         
-        # Generate storage path
-        filename = file.filename or "upload.tif"
-        storage_path = f"cog/{tileset_id}/{filename}"
-        
-        # Upload file
-        cog_url = storage.upload_file(storage_path, file_content, "image/tiff")
+        # Generate storage path. file.filename はクライアントが任意の文字列を投入できる
+        # ため、S3 key として使う前にサニタイズする:
+        #   - basename のみ使う（path traversal 防止、`/` と `\\` の両方に対応）
+        #   - 安全文字 [A-Za-z0-9._-] 以外を `_` に置換
+        #   - 空文字 / dot-only fallback で `cog.tif` に
+        # ファイル種別 (TIFF) の検証は本処理の上流の `validate_cog_file(file_content)`
+        # で magic bytes チェック済みなので、ここでは拡張子の正規化はしない（拡張子は
+        # ユーザー由来の表示用情報として元の値を保持）。衝突回避のために uuid4 + ISO
+        # 日付プレフィックスを付与する。
+        original_filename = (file.filename or "upload.tif").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", original_filename)
+        if not safe_filename or safe_filename.startswith("."):
+            safe_filename = "cog.tif"
+        date_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
+        unique_token = uuid.uuid4().hex[:8]
+        storage_path = f"cog/{tileset_id}/{date_prefix}_{unique_token}_{safe_filename}"
+
+        # Upload file. boto3 は同期 I/O なので `run_in_threadpool` でオフロードして
+        # async ハンドラのイベントループをブロックしないようにする (issue #64 Option A
+        # と整合: 既存の同期コアロジックは触らず、async 境界でのみ threadpool に乗せる)。
+        cog_url = await run_in_threadpool(
+            storage.upload_file, storage_path, file_content, "image/tiff"
+        )
         if not cog_url:
             raise HTTPException(
                 status_code=500,
@@ -767,7 +788,7 @@ async def upload_cog(
                 (
                     tileset_id,
                     cog_url,
-                    "supabase",
+                    "s3",
                     None,
                     band_count,
                     band_descriptions_json,

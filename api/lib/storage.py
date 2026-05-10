@@ -1,26 +1,34 @@
 """
-Supabase Storage integration for geo-base API.
+S3 互換ストレージ統合（COG / PMTiles のアップロード backend）。
+
+既定で Fly Tigris (https://fly.storage.tigris.dev) を想定するが、boto3 の
+S3 client を使うので AWS S3 / Cloudflare R2 / MinIO 等 S3 API 互換のサービスを
+endpoint URL の差し替えで利用できる（`S3_ENDPOINT_URL` env →
+`lib.config.Settings.s3_endpoint_url` 経由で読まれる）。
+
+Issue #72 で旧 SupabaseStorageClient から本実装に移行 (PR #88)。
 
 Features:
-- COG file upload to Supabase Storage
-- Presigned URL generation
-- File validation and metadata extraction
+- COG ファイルの S3 互換 storage へのアップロード
+- 公開 URL 生成（bucket public 化前提）
+- COG メタデータ抽出（rio-tiler 経由）
+- ファイル形式 / サイズ検証
 """
 
-import os
-import hashlib
 import logging
-from typing import Optional, BinaryIO
+import os
 from dataclasses import dataclass
-from datetime import datetime
-from urllib.parse import urljoin
+from datetime import datetime, timezone
+from typing import BinaryIO, Optional
 
-import httpx
+import boto3
+from botocore.client import Config as BotoConfig
+from botocore.exceptions import BotoCoreError, ClientError
 
 from lib.config import get_settings
 
-# Logger
 logger = logging.getLogger(__name__)
+
 
 # =============================================================================
 # Constants
@@ -32,9 +40,6 @@ COG_EXTENSIONS = {".tif", ".tiff", ".geotiff"}
 # Maximum file size (500MB)
 MAX_FILE_SIZE = 500 * 1024 * 1024
 
-# Default bucket name
-DEFAULT_BUCKET = "geo-tiles"
-
 
 # =============================================================================
 # Data Classes
@@ -44,6 +49,7 @@ DEFAULT_BUCKET = "geo-tiles"
 @dataclass
 class UploadResult:
     """Result of a file upload operation."""
+
     success: bool
     url: Optional[str] = None
     path: Optional[str] = None
@@ -55,6 +61,7 @@ class UploadResult:
 @dataclass
 class COGMetadata:
     """Metadata extracted from a COG file."""
+
     bounds: Optional[list[float]] = None
     center: Optional[list[float]] = None
     crs: Optional[str] = None
@@ -68,110 +75,106 @@ class COGMetadata:
 
 
 # =============================================================================
-# Supabase Storage Client
+# S3 互換 Storage Client
 # =============================================================================
 
 
-class SupabaseStorageClient:
+class S3StorageClient:
+    """S3 API 互換 storage（既定: Fly Tigris）への薄いラッパ。
+
+    boto3 を sync で呼ぶ。FastAPI handler で呼ぶ場合は `def` ハンドラ経由で
+    threadpool 実行に乗せること（issue #64 Option A と同じ方針）。
+
+    認証情報は標準の AWS credential resolver（環境変数 / IAM role / ~/.aws）
+    に委ねる。本リポジトリの想定では以下の env を `fly secrets set` する:
+
+    - AWS_ACCESS_KEY_ID            (boto3 が直接読む)
+    - AWS_SECRET_ACCESS_KEY        (boto3 が直接読む)
+    - S3_ENDPOINT_URL              (`lib.config.Settings.s3_endpoint_url`、既定値 Tigris)
+    - S3_REGION                    (`lib.config.Settings.s3_region`、既定 `auto`)
+    - S3_BUCKET                    (`lib.config.Settings.s3_bucket`)
+    - S3_PUBLIC_BASE_URL           (任意。設定なしなら endpoint+bucket を使う)
     """
-    Client for Supabase Storage operations.
-    
-    Uses the Supabase REST API for file uploads and management.
-    """
-    
+
     def __init__(
         self,
-        supabase_url: Optional[str] = None,
-        service_role_key: Optional[str] = None,
-        bucket: str = DEFAULT_BUCKET,
+        bucket: Optional[str] = None,
+        endpoint_url: Optional[str] = None,
+        region: Optional[str] = None,
+        public_base_url: Optional[str] = None,
     ):
-        """
-        Initialize the storage client.
-        
-        Args:
-            supabase_url: Supabase project URL
-            service_role_key: Supabase service role key (for server-side operations)
-            bucket: Storage bucket name
-        """
         settings = get_settings()
-        
-        self.supabase_url = supabase_url or settings.supabase_url
-        self.service_role_key = service_role_key or settings.supabase_service_role_key
-        self.bucket = bucket or settings.supabase_storage_bucket or DEFAULT_BUCKET
-        
-        if not self.supabase_url:
-            raise ValueError("Supabase URL is required")
-        
-        # Build storage API base URL
-        self.storage_url = f"{self.supabase_url}/storage/v1"
-        
-        # HTTP client with auth headers
-        self._client: Optional[httpx.AsyncClient] = None
-    
-    @property
-    def _headers(self) -> dict:
-        """Get headers for API requests."""
-        headers = {
-            "Content-Type": "application/json",
-        }
-        if self.service_role_key:
-            headers["Authorization"] = f"Bearer {self.service_role_key}"
-            headers["apikey"] = self.service_role_key
-        return headers
-    
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=60.0,
-                headers=self._headers,
+        self.bucket = bucket or settings.s3_bucket
+        self.endpoint_url = endpoint_url or settings.s3_endpoint_url
+        self.region = region or settings.s3_region
+        self._public_base_url = public_base_url or settings.s3_public_base_url
+
+        # boto3 client は遅延初期化（test 等で endpoint 差し替え時に再生成しやすい）
+        self._client = None
+
+    # -- internal --
+
+    def _get_client(self):
+        if self._client is None:
+            self._client = boto3.client(
+                "s3",
+                endpoint_url=self.endpoint_url,
+                region_name=self.region,
+                # Tigris などは path-style URL を要求するケースがある。virtual-hosted
+                # も path-style も受け付けるので、互換性最大化のため virtual を既定に。
+                config=BotoConfig(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "virtual"},
+                    retries={"max_attempts": 3, "mode": "standard"},
+                ),
             )
         return self._client
-    
-    async def close(self):
-        """Close the HTTP client."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-            self._client = None
-    
-    def _generate_file_path(
-        self,
-        filename: str,
-        tileset_id: str,
-        user_id: Optional[str] = None,
-    ) -> str:
-        """
-        Generate a unique file path for storage.
-        
-        Path format: {user_id}/{tileset_id}/{timestamp}_{filename}
-        """
-        # Sanitize filename
-        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-")
-        if not safe_filename:
-            safe_filename = "cog.tif"
-        
-        # Generate timestamp
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        
-        # Build path
-        if user_id:
-            return f"{user_id}/{tileset_id}/{timestamp}_{safe_filename}"
-        else:
-            return f"public/{tileset_id}/{timestamp}_{safe_filename}"
-    
+
+    # -- public API --
+
     def get_public_url(self, path: str) -> str:
+        """指定 path の public URL を返す（bucket が public 化されている前提）。"""
+        if self._public_base_url:
+            base = self._public_base_url.rstrip("/")
+        else:
+            base = f"{self.endpoint_url.rstrip('/')}/{self.bucket}"
+        return f"{base}/{path.lstrip('/')}"
+
+    def upload_file(
+        self,
+        path: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> Optional[str]:
+        """`content` を `path` に PUT する。成功時は public URL を返し、失敗時は None。
+
+        この sync インターフェースは `api/lib/routers/datasources.py` の COG
+        アップロード経路と整合させたもの。Bytes をオンメモリで扱う前提（最大
+        MAX_FILE_SIZE = 500MB）なので大ファイル multipart upload は別途。
         """
-        Get the public URL for a file.
-        
-        Args:
-            path: File path in the bucket
-            
-        Returns:
-            Public URL for the file
-        """
-        return f"{self.storage_url}/object/public/{self.bucket}/{path}"
-    
-    async def upload_file(
+        if len(content) > MAX_FILE_SIZE:
+            logger.error(
+                f"upload_file: content size {len(content)} exceeds MAX_FILE_SIZE {MAX_FILE_SIZE}"
+            )
+            return None
+
+        try:
+            client = self._get_client()
+            client.put_object(
+                Bucket=self.bucket,
+                Key=path,
+                Body=content,
+                ContentType=content_type,
+            )
+        except (ClientError, BotoCoreError) as e:
+            logger.exception(f"S3 put_object failed: {e}")
+            return None
+
+        url = self.get_public_url(path)
+        logger.info(f"Uploaded {len(content)} bytes to s3://{self.bucket}/{path} ({url})")
+        return url
+
+    def upload_fileobj(
         self,
         file: BinaryIO,
         filename: str,
@@ -179,120 +182,61 @@ class SupabaseStorageClient:
         user_id: Optional[str] = None,
         content_type: str = "image/tiff",
     ) -> UploadResult:
+        """File-like を path 自動生成で upload する版（旧 API 互換）。
+
+        path は `<user_id|public>/<tileset_id>/<timestamp>_<safe_filename>`。
         """
-        Upload a file to Supabase Storage.
-        
-        Args:
-            file: File-like object to upload
-            filename: Original filename
-            tileset_id: Parent tileset ID
-            user_id: User ID (for path organization)
-            content_type: MIME type of the file
-            
-        Returns:
-            UploadResult with URL or error
-        """
+        path = self._generate_file_path(filename, tileset_id, user_id)
+
+        file.seek(0)
+        content = file.read()
+        url = self.upload_file(path, content, content_type)
+        if url is None:
+            return UploadResult(success=False, error="upload failed")
+        return UploadResult(
+            success=True,
+            url=url,
+            path=path,
+            size=len(content),
+            content_type=content_type,
+        )
+
+    def delete_file(self, path: str) -> bool:
         try:
-            # Generate storage path
-            path = self._generate_file_path(filename, tileset_id, user_id)
-            
-            # Read file content
-            file.seek(0)
-            content = file.read()
-            file_size = len(content)
-            
-            # Check file size
-            if file_size > MAX_FILE_SIZE:
-                return UploadResult(
-                    success=False,
-                    error=f"File size ({file_size} bytes) exceeds maximum ({MAX_FILE_SIZE} bytes)"
-                )
-            
-            # Upload using Supabase Storage API
-            client = await self._get_client()
-            
-            upload_url = f"{self.storage_url}/object/{self.bucket}/{path}"
-            
-            response = await client.post(
-                upload_url,
-                content=content,
-                headers={
-                    **self._headers,
-                    "Content-Type": content_type,
-                    "x-upsert": "true",  # Overwrite if exists
-                },
-            )
-            
-            if response.status_code in (200, 201):
-                public_url = self.get_public_url(path)
-                logger.info(f"Uploaded file to {path}, public URL: {public_url}")
-                
-                return UploadResult(
-                    success=True,
-                    url=public_url,
-                    path=path,
-                    size=file_size,
-                    content_type=content_type,
-                )
-            else:
-                error_msg = f"Upload failed: {response.status_code} - {response.text}"
-                logger.error(error_msg)
-                return UploadResult(success=False, error=error_msg)
-                
-        except Exception as e:
-            error_msg = f"Upload error: {str(e)}"
-            logger.exception(error_msg)
-            return UploadResult(success=False, error=error_msg)
-    
-    async def delete_file(self, path: str) -> bool:
-        """
-        Delete a file from storage.
-        
-        Args:
-            path: File path in the bucket
-            
-        Returns:
-            True if deleted successfully
-        """
+            self._get_client().delete_object(Bucket=self.bucket, Key=path)
+            return True
+        except (ClientError, BotoCoreError) as e:
+            logger.exception(f"S3 delete_object failed: {e}")
+            return False
+
+    def file_exists(self, path: str) -> bool:
         try:
-            client = await self._get_client()
-            
-            delete_url = f"{self.storage_url}/object/{self.bucket}/{path}"
-            
-            response = await client.delete(delete_url)
-            
-            if response.status_code in (200, 204):
-                logger.info(f"Deleted file: {path}")
-                return True
-            else:
-                logger.error(f"Delete failed: {response.status_code} - {response.text}")
+            self._get_client().head_object(Bucket=self.bucket, Key=path)
+            return True
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code")
+            if code in ("404", "NoSuchKey", "NotFound"):
                 return False
-                
-        except Exception as e:
-            logger.exception(f"Delete error: {e}")
+            logger.exception(f"S3 head_object failed: {e}")
             return False
-    
-    async def file_exists(self, path: str) -> bool:
-        """
-        Check if a file exists in storage.
-        
-        Args:
-            path: File path in the bucket
-            
-        Returns:
-            True if file exists
-        """
-        try:
-            client = await self._get_client()
-            
-            # Try HEAD request
-            url = f"{self.storage_url}/object/{self.bucket}/{path}"
-            response = await client.head(url)
-            
-            return response.status_code == 200
-            
-        except Exception:
+        except BotoCoreError as e:
+            logger.exception(f"S3 head_object error: {e}")
             return False
+
+    # -- helpers --
+
+    def _generate_file_path(
+        self,
+        filename: str,
+        tileset_id: str,
+        user_id: Optional[str] = None,
+    ) -> str:
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-")
+        if not safe_filename:
+            safe_filename = "cog.tif"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        prefix = user_id if user_id else "public"
+        return f"{prefix}/{tileset_id}/{timestamp}_{safe_filename}"
 
 
 # =============================================================================
@@ -301,27 +245,20 @@ class SupabaseStorageClient:
 
 
 def extract_cog_metadata(cog_url: str) -> COGMetadata:
-    """
-    Extract metadata from a COG file.
-    
-    Args:
-        cog_url: URL or path to the COG file
-        
-    Returns:
-        COGMetadata object with extracted information
-    """
+    """COG ファイルからメタデータ抽出（rio-tiler 経由、optional dependency）。"""
     try:
-        # Import rio-tiler (may not be available)
-        from lib.raster_tiles import get_cog_info, get_cog_statistics, is_rasterio_available
-        
+        from lib.raster_tiles import (
+            get_cog_info,
+            get_cog_statistics,
+            is_rasterio_available,
+        )
+
         if not is_rasterio_available():
             logger.warning("rio-tiler not available, returning empty metadata")
             return COGMetadata()
-        
-        # Get COG info
+
         info = get_cog_info(cog_url)
-        
-        # Build metadata
+
         metadata = COGMetadata(
             bounds=info.get("bounds"),
             crs=info.get("crs"),
@@ -332,24 +269,21 @@ def extract_cog_metadata(cog_url: str) -> COGMetadata:
             min_zoom=info.get("minzoom"),
             max_zoom=info.get("maxzoom"),
         )
-        
-        # Calculate center from bounds
+
         if metadata.bounds and len(metadata.bounds) == 4:
             west, south, east, north = metadata.bounds
-            center_lon = (west + east) / 2
-            center_lat = (south + north) / 2
-            center_zoom = metadata.min_zoom or 10
-            metadata.center = [center_lon, center_lat, center_zoom]
-        
-        # Get statistics
+            metadata.center = [
+                (west + east) / 2,
+                (south + north) / 2,
+                metadata.min_zoom or 10,
+            ]
+
         try:
-            stats = get_cog_statistics(cog_url)
-            metadata.statistics = stats
+            metadata.statistics = get_cog_statistics(cog_url)
         except Exception as e:
             logger.warning(f"Could not get COG statistics: {e}")
-        
+
         return metadata
-        
     except Exception as e:
         logger.exception(f"Error extracting COG metadata: {e}")
         return COGMetadata()
@@ -360,70 +294,55 @@ def extract_cog_metadata(cog_url: str) -> COGMetadata:
 # =============================================================================
 
 
-def validate_cog_file(filename: str, file_size: int) -> tuple[bool, Optional[str]]:
+def validate_cog_file(file_bytes: bytes) -> tuple[bool, Optional[str]]:
+    """COG ファイルの簡易検証（magic bytes + サイズ）。
+
+    呼び出し側は既に bytes を read 済みの状態で渡す。署名検証等の厳密チェックは
+    `is_cloud_optimized` で行うが、本関数は簡易ガードとして:
+
+    - サイズが MAX_FILE_SIZE 以下
+    - 0 byte でない
+    - TIFF magic bytes を持つ
     """
-    Validate a COG file before upload.
-    
-    Args:
-        filename: Original filename
-        file_size: File size in bytes
-        
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    # Check file extension
+    if not file_bytes:
+        return False, "File is empty"
+
+    if len(file_bytes) > MAX_FILE_SIZE:
+        max_mb = MAX_FILE_SIZE / (1024 * 1024)
+        return False, f"File size exceeds maximum ({max_mb:.0f} MB)"
+
+    if not is_cloud_optimized(file_bytes):
+        return (
+            False,
+            "File does not appear to be a valid TIFF / GeoTIFF (magic bytes mismatch)",
+        )
+
+    return True, None
+
+
+def validate_cog_filename(filename: str, file_size: int) -> tuple[bool, Optional[str]]:
+    """ファイル名 + サイズだけで簡易検証する別バリエーション（multipart upload 前用）。"""
     ext = os.path.splitext(filename.lower())[1]
     if ext not in COG_EXTENSIONS:
         return False, f"Invalid file type. Allowed: {', '.join(COG_EXTENSIONS)}"
-    
-    # Check file size
+
     if file_size > MAX_FILE_SIZE:
         max_mb = MAX_FILE_SIZE / (1024 * 1024)
         return False, f"File size exceeds maximum ({max_mb:.0f} MB)"
-    
+
     if file_size == 0:
         return False, "File is empty"
-    
+
     return True, None
 
 
 def is_cloud_optimized(file_bytes: bytes) -> bool:
-    """
-    Check if a GeoTIFF file is Cloud Optimized.
-    
-    This is a basic check that looks for COG-specific internal tiling.
-    
-    Args:
-        file_bytes: First few KB of the file
-        
-    Returns:
-        True if the file appears to be a COG
-    """
-    try:
-        # COGs typically have BigTIFF or regular TIFF magic bytes
-        # with internal tiling enabled
-        
-        # Check TIFF magic bytes
-        if len(file_bytes) < 8:
-            return False
-        
-        # Little-endian TIFF: 49 49 2A 00
-        # Big-endian TIFF: 4D 4D 00 2A
-        # BigTIFF LE: 49 49 2B 00
-        # BigTIFF BE: 4D 4D 00 2B
-        magic = file_bytes[:4]
-        
-        is_tiff = magic in (b'II\x2a\x00', b'MM\x00\x2a', b'II\x2b\x00', b'MM\x00\x2b')
-        
-        if not is_tiff:
-            return False
-        
-        # For a more thorough check, we'd need to parse TIFF tags
-        # For now, we assume any TIFF with correct magic is potentially a COG
-        return True
-        
-    except Exception:
+    """ファイル先頭が TIFF / BigTIFF magic bytes を持つかチェック（簡易判定）。"""
+    if len(file_bytes) < 8:
         return False
+
+    magic = file_bytes[:4]
+    return magic in (b"II\x2a\x00", b"MM\x00\x2a", b"II\x2b\x00", b"MM\x00\x2b")
 
 
 # =============================================================================
@@ -431,23 +350,18 @@ def is_cloud_optimized(file_bytes: bytes) -> bool:
 # =============================================================================
 
 
-_storage_client: Optional[SupabaseStorageClient] = None
+_storage_client: Optional[S3StorageClient] = None
 
 
-def get_storage_client() -> SupabaseStorageClient:
+def get_storage_client() -> S3StorageClient:
     """Get or create the singleton storage client."""
     global _storage_client
-    
     if _storage_client is None:
-        _storage_client = SupabaseStorageClient()
-    
+        _storage_client = S3StorageClient()
     return _storage_client
 
 
-async def close_storage_client():
-    """Close the storage client."""
+def close_storage_client() -> None:
+    """Reset the singleton（boto3 client は明示 close 不要だが、再生成のため）。"""
     global _storage_client
-    
-    if _storage_client:
-        await _storage_client.close()
-        _storage_client = None
+    _storage_client = None
