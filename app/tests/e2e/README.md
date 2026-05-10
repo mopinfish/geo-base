@@ -6,10 +6,19 @@ Issue #110 / [E2E 戦略 spec](../../../docs/superpowers/specs/2026-05-10-e2e-te
 
 ### 1. 専用 DB を用意する
 
-初回のみ:
+#### Fresh volume の場合（推奨）
+
+`docker/postgis-init/98_create_e2e_db.sh` が postgis 初回起動時に `geo_base_e2e` を自動作成するので、追加コマンドは不要:
 
 ```fish
 docker compose -f docker/docker-compose.yml up -d
+```
+
+#### 既存 volume の場合（postgis を以前から動かしていた場合）
+
+init script は新規 volume にしか流れないので、手動で作成する:
+
+```fish
 docker compose -f docker/docker-compose.yml exec postgis \
   psql -U postgres -c "CREATE DATABASE geo_base_e2e;"
 docker compose -f docker/docker-compose.yml exec postgis bash -c \
@@ -17,7 +26,7 @@ docker compose -f docker/docker-compose.yml exec postgis bash -c \
      | psql -U postgres -d geo_base_e2e'
 ```
 
-ローカル環境で postgis のホストポートが 5432 ではない場合は、以降の `DATABASE_URL` の port 部分を実際のポートに合わせること。
+> 注: ローカル環境で postgis のホストポートが 5432 でない場合は、以降の `DATABASE_URL` の port 部分を実際のポートに合わせること。
 
 ### 2. API を `E2E_MODE=1` で起動する
 

@@ -15,7 +15,7 @@ async def test_cmd_create_admin_uses_password_flag_when_provided():
     from lib.auth import cli
 
     args = MagicMock()
-    args.email = "e2e-admin@test.local"
+    args.email = "e2e-admin@example.com"
     args.password = "E2E-pass-1!"
     args.name = "E2E Admin"
 
@@ -31,7 +31,7 @@ async def test_cmd_create_admin_uses_password_flag_when_provided():
     mock_input.assert_not_called()
     mock_provider.create_user.assert_awaited_once()
     call_kwargs = mock_provider.create_user.await_args.kwargs
-    assert call_kwargs["email"] == "e2e-admin@test.local"
+    assert call_kwargs["email"] == "e2e-admin@example.com"
     assert call_kwargs["password"] == "E2E-pass-1!"
     assert call_kwargs["name"] == "E2E Admin"
 
@@ -42,7 +42,7 @@ async def test_cmd_create_admin_falls_back_to_getpass_when_password_flag_absent(
     from lib.auth import cli
 
     args = MagicMock()
-    args.email = "interactive@test.local"
+    args.email = "interactive@example.com"
     args.password = None
     args.name = None
 
