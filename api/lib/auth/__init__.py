@@ -404,8 +404,9 @@ def _team_permission_allows(
             if not row:
                 return False
             level = row[0]
-            if action == "read":
-                return level in ("read", "write", "admin")
+            # 呼び出し元 (`check_tileset_write_access_v2`) で
+            # `_ACTION_REQUIRED_SCOPE` (`{create, update, delete}`) に絞って
+            # validate 済み。read は別ヘルパ (`check_tileset_access_v2`) を使う。
             if action in ("create", "update"):
                 return level in ("write", "admin")
             if action == "delete":
