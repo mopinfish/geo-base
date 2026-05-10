@@ -67,8 +67,10 @@ COMMENT ON TABLE team_members IS 'チームメンバーシップの管理テー�
 
 -- Team invitations table
 -- token is nullable: cleared (set to NULL) when the invitation is no longer usable
--- (accepted / declined / expired / cancelled) so that a leaked token cannot be
--- replayed even within `expires_at`. See issue #55 for rationale.
+-- (accepted / expired / cancelled) so that a leaked token cannot be replayed
+-- even within `expires_at`. See issue #55 for rationale.
+-- Note: the `declined` enum value exists but no handler currently transitions to
+-- it; if a decline flow is added later, it should also clear the token.
 CREATE TABLE IF NOT EXISTS team_invitations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
