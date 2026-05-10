@@ -146,6 +146,31 @@ def make_pmtiles_datasource(db_conn):
 
 
 @pytest.fixture
+def make_cog_datasource(db_conn):
+    """tileset + raster_sources (COG) レコードを 1 件作って ID を返す。"""
+
+    def _make(owner_id=None, is_public=False):
+        owner_id = owner_id or str(uuid.uuid4())
+        ts_id = str(uuid.uuid4())
+        ds_id = str(uuid.uuid4())
+        with db_conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO tilesets (id, name, type, format, user_id, is_public)
+                   VALUES (%s, 'tx', 'raster', 'cog', %s, %s)""",
+                (ts_id, owner_id, is_public),
+            )
+            cur.execute(
+                """INSERT INTO raster_sources (id, tileset_id, cog_url, storage_provider)
+                   VALUES (%s, %s, 'https://example.test/foo.tif', 'http')""",
+                (ds_id, ts_id),
+            )
+        db_conn.commit()
+        return {"tileset_id": ts_id, "datasource_id": ds_id, "owner_id": owner_id}
+
+    return _make
+
+
+@pytest.fixture
 def attach_to_team(db_conn):
     """team_tilesets に紐付ける factory。"""
 
@@ -298,3 +323,33 @@ class TestDatasourcesTeamShare:
         client = client_for(None)  # anonymous
         res = client.get(f"/api/datasources/{ds['datasource_id']}")
         assert res.status_code == 200
+
+    # COG (raster_sources) 経路 — get_datasource は PMTiles でヒットしなかった
+    # 場合に raster_sources を引く 2 段構成のため、別経路として明示的にテスト
+    def test_get_cog_datasource_team_member_can_read_shared(
+        self,
+        client_for,
+        make_team_with_member,
+        make_cog_datasource,
+        attach_to_team,
+    ):
+        team = make_team_with_member()
+        ds = make_cog_datasource()
+        attach_to_team(team["team_id"], ds["tileset_id"])
+
+        client = client_for(jwt_ctx(team["member_id"]))
+        res = client.get(f"/api/datasources/{ds['datasource_id']}")
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["id"] == ds["datasource_id"]
+        assert body["type"] == "cog"
+
+    def test_get_cog_datasource_outsider_denied(
+        self,
+        client_for,
+        make_cog_datasource,
+    ):
+        ds = make_cog_datasource()
+        client = client_for(jwt_ctx(str(uuid.uuid4())))
+        res = client.get(f"/api/datasources/{ds['datasource_id']}")
+        assert res.status_code == 403
