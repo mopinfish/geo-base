@@ -30,3 +30,20 @@ test("DASH-01 @smoke ダッシュボードに各カウントが表示される",
   // tilesets は 2 件 + datasource 用に auto 作成された 1 件 = 3 件以上
   await expect(tilesetsCount).toHaveText(/[2-9]|\d{2,}/);
 });
+
+test("DASH-02 更新ボタンで件数が再取得される", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("dashboard-tilesets-count")).toBeVisible();
+
+  // ボタンクリックで /api/tilesets が再 fetch されることを network 監視で確認。
+  // dashboard は API 直叩き (`api.listTilesets`) なので
+  // `/api/tilesets` (Fly API or proxied) への GET を監視する。
+  const tilesetsRequest = page.waitForRequest(
+    (req) => req.url().includes("/api/tilesets") && req.method() === "GET",
+  );
+  await page.getByTestId("dashboard-refresh").click();
+  await tilesetsRequest;
+
+  // 再取得後もカウントが visible
+  await expect(page.getByTestId("dashboard-tilesets-count")).toBeVisible();
+});

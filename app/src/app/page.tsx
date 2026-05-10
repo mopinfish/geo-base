@@ -106,7 +106,13 @@ export default function DashboardPage() {
               geo-base タイルサーバーの管理画面へようこそ
             </p>
           </div>
-          <Button onClick={fetchData} variant="outline" size="sm" disabled={!isReady || isLoading}>
+          <Button
+            onClick={fetchData}
+            variant="outline"
+            size="sm"
+            disabled={!isReady || isLoading}
+            data-testid="dashboard-refresh"
+          >
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             更新
           </Button>
