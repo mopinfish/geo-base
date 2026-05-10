@@ -654,6 +654,27 @@ def _update_tileset_from_metadata(cur, tileset_id, source_bounds, source_center,
             )
 
 
+async def _cleanup_orphan_storage_object(storage_path: Optional[str]) -> None:
+    """アップロード成功後の DB INSERT/COMMIT 失敗で孤児化した S3 オブジェクトを
+    best-effort で削除する。
+
+    `conn.rollback()` だけでは S3 側のオブジェクトは消えないため、明示的に
+    `delete_file` を試みる。cleanup 自体が失敗しても元の例外を伝播させたいので
+    例外は握り潰して warning ログにのみ残す。
+    """
+    if not storage_path:
+        return
+    try:
+        storage = get_storage_client()
+        await run_in_threadpool(storage.delete_file, storage_path)
+    except Exception as cleanup_error:
+        logger.warning(
+            "Failed to cleanup orphan storage object %s: %s",
+            storage_path,
+            cleanup_error,
+        )
+
+
 # ============================================================================
 # COG Upload
 # ============================================================================
@@ -676,6 +697,7 @@ async def upload_cog(
     JWT または `write` scope の API キーで認証が必要（issue #50）。
     親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
     """
+    uploaded_storage_path: Optional[str] = None
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -723,13 +745,9 @@ async def upload_cog(
             )
         
         # Upload to S3 互換 storage (Fly Tigris by default)
+        # `get_storage_client()` は singleton で必ず S3StorageClient を返す。
         storage = get_storage_client()
-        if not storage:
-            raise HTTPException(
-                status_code=500,
-                detail="Storage service is not available"
-            )
-        
+
         # Generate storage path. file.filename はクライアントが任意の文字列を投入できる
         # ため、S3 key として使う前にサニタイズする:
         #   - basename のみ使う（path traversal 防止、`/` と `\\` の両方に対応）
@@ -758,6 +776,9 @@ async def upload_cog(
                 status_code=500,
                 detail="Failed to upload file to storage"
             )
+        # Mark storage object as uploaded so we can clean it up if a subsequent
+        # DB INSERT/COMMIT fails (orphan prevention).
+        uploaded_storage_path = storage_path
         
         # Get COG metadata
         source_bounds = None
@@ -854,6 +875,8 @@ async def upload_cog(
         raise
     except Exception as e:
         conn.rollback()
+        # DB INSERT/COMMIT 失敗時は upload 済み S3 オブジェクトが孤児化するため掃除
+        await _cleanup_orphan_storage_object(uploaded_storage_path)
         raise HTTPException(status_code=500, detail=f"Error uploading COG: {str(e)}")
 
 
@@ -881,6 +904,7 @@ async def upload_pmtiles(
 
     Issue #101 Phase 2 で追加。
     """
+    uploaded_storage_path: Optional[str] = None
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -927,12 +951,8 @@ async def upload_pmtiles(
             )
 
         # Upload to S3 互換 storage (Fly Tigris by default)
+        # `get_storage_client()` は singleton で必ず S3StorageClient を返す。
         storage = get_storage_client()
-        if not storage:
-            raise HTTPException(
-                status_code=500,
-                detail="Storage service is not available"
-            )
 
         # Generate storage path (COG upload と同じサニタイズ流儀):
         #   - basename のみ使う（path traversal 防止、`/` `\\` 両対応）
@@ -957,6 +977,8 @@ async def upload_pmtiles(
                 status_code=500,
                 detail="Failed to upload PMTiles to storage"
             )
+        # 後段の DB INSERT/COMMIT 失敗時に S3 を掃除するためのマーカー。
+        uploaded_storage_path = storage_path
 
         # Extract metadata via aiopmtiles (s3:// URL でも `aioboto3` 経由で読める)
         source_bounds = None
@@ -1043,6 +1065,8 @@ async def upload_pmtiles(
         raise
     except Exception as e:
         conn.rollback()
+        # DB INSERT/COMMIT 失敗時は upload 済み S3 オブジェクトが孤児化するため掃除
+        await _cleanup_orphan_storage_object(uploaded_storage_path)
         raise HTTPException(status_code=500, detail=f"Error uploading PMTiles: {str(e)}")
 
 

@@ -458,7 +458,15 @@ export default function NewDatasourcePage() {
                   /* アップロードモード (Issue #101) */
                   <div className="space-y-2">
                     <Label htmlFor="file">ファイル *</Label>
+                    {/*
+                     * `<input type="file">` は uncontrolled element のため、
+                     * `setFile(null)` だけでは DOM 側の選択ファイル名が残り
+                     * UI と state がずれる。`key` に datasourceType / inputMode
+                     * を含めることで、type 切替時に input ごと remount し
+                     * 表示・state を同期させる。
+                     */}
                     <Input
+                      key={`file-${datasourceType}-${inputMode}`}
                       id="file"
                       type="file"
                       accept={acceptHint}
