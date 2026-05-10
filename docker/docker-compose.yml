@@ -15,6 +15,13 @@
 #   docker compose --profile tools up -d
 #
 # Note: The API server is run locally with `uv run` for hot reloading
+#
+# Adding E2E DB to an existing volume:
+#   docker compose -f docker/docker-compose.yml exec postgis \
+#     psql -U postgres -c "CREATE DATABASE geo_base_e2e;"
+#   docker compose -f docker/docker-compose.yml exec postgis bash -c \
+#     'pg_dump -U postgres --schema-only --no-owner --no-acl geo_base \
+#        | psql -U postgres -d geo_base_e2e'
 
 services:
   # ==========================================================================
