@@ -280,6 +280,53 @@ class TestUrlHelpers:
         assert c.get_public_url("x.tif") == c.get_https_url("x.tif")
 
 
+class TestValidatePmtilesFile:
+    """Issue #101: PMTiles upload 用バリデータ。"""
+
+    # PMTiles v3 magic + version byte + padding
+    _PMTILES_MIN = b"PMTiles" + b"\x03" + b"\x00" * 16
+
+    def test_accepts_valid_pmtiles(self):
+        from lib.storage import validate_pmtiles_file
+        ok, msg = validate_pmtiles_file(self._PMTILES_MIN)
+        assert ok is True
+        assert msg is None
+
+    def test_rejects_empty(self):
+        from lib.storage import validate_pmtiles_file
+        ok, msg = validate_pmtiles_file(b"")
+        assert ok is False
+        assert msg == "File is empty"
+
+    def test_rejects_oversize(self, monkeypatch):
+        from lib.storage import validate_pmtiles_file
+        monkeypatch.setattr("lib.storage.MAX_FILE_SIZE", 1024)
+        big = b"PMTiles\x03" + b"\x00" * 2048
+        ok, msg = validate_pmtiles_file(big)
+        assert ok is False
+        assert "exceeds maximum" in msg
+
+    def test_rejects_non_pmtiles_magic(self):
+        from lib.storage import validate_pmtiles_file
+        ok, msg = validate_pmtiles_file(b"PK\x03\x04not_pmtiles_at_all" + b"\x00" * 16)
+        assert ok is False
+        assert "magic bytes" in msg
+
+    def test_rejects_too_short(self):
+        from lib.storage import validate_pmtiles_file
+        ok, msg = validate_pmtiles_file(b"PM")
+        assert ok is False
+        # 5 byte だと magic match しないので "magic bytes mismatch"
+        assert "magic bytes" in msg
+
+    def test_is_pmtiles_file_helper(self):
+        from lib.storage import is_pmtiles_file
+        assert is_pmtiles_file(self._PMTILES_MIN) is True
+        assert is_pmtiles_file(b"PMTilez\x03" + b"\x00" * 16) is False  # 1 char different
+        assert is_pmtiles_file(b"PMTiles") is False  # < 8 bytes
+        assert is_pmtiles_file(b"") is False
+
+
 class TestS3UriToGdalPath:
     """Issue #101: s3:// → /vsis3/ 変換ヘルパ（rasterio / GDAL 互換）。"""
 

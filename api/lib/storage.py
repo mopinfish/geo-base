@@ -417,6 +417,44 @@ def is_cloud_optimized(file_bytes: bytes) -> bool:
     return magic in (b"II\x2a\x00", b"MM\x00\x2a", b"II\x2b\x00", b"MM\x00\x2b")
 
 
+# Issue #101: PMTiles upload 用バリデータ。
+# PMTiles v3 spec (https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md):
+# - 先頭 7 バイト = 'PMTiles' (0x50 0x4D 0x54 0x69 0x6C 0x65 0x73)
+# - 8 バイト目 = spec version (現行 3、過去に 1/2 もある)
+PMTILES_MAGIC = b"PMTiles"
+
+
+def is_pmtiles_file(file_bytes: bytes) -> bool:
+    """ファイル先頭が PMTiles magic を持つかチェック（v1/v2/v3 すべて同じ magic）。"""
+    if len(file_bytes) < 8:
+        return False
+    return file_bytes[: len(PMTILES_MAGIC)] == PMTILES_MAGIC
+
+
+def validate_pmtiles_file(file_bytes: bytes) -> tuple[bool, Optional[str]]:
+    """PMTiles ファイルの簡易検証（magic bytes + サイズ）。
+
+    `validate_cog_file` と同じ流儀で、router の upload ハンドラから呼び出して
+    upload 前に rejection できる軽量チェック。詳細メタデータは aiopmtiles で
+    取得する。
+    """
+    if not file_bytes:
+        return False, "File is empty"
+
+    if len(file_bytes) > MAX_FILE_SIZE:
+        max_mb = MAX_FILE_SIZE / (1024 * 1024)
+        return False, f"File size exceeds maximum ({max_mb:.0f} MB)"
+
+    if not is_pmtiles_file(file_bytes):
+        return (
+            False,
+            "File does not appear to be a valid PMTiles archive (magic bytes mismatch)",
+        )
+
+    # spec version は v1 / v2 / v3 を許容（aiopmtiles は v3 メインだが互換あり）
+    return True, None
+
+
 # =============================================================================
 # Singleton Storage Client
 # =============================================================================
