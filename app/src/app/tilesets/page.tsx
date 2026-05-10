@@ -75,7 +75,11 @@ export default function TilesetsPage() {
     setError(null);
     try {
       console.log("Fetching tilesets...");
-      const data = await api.listTilesets();
+      // ログイン済みユーザーが所有する非公開タイルセットも一覧に出すため
+      // include_private=true を明示する（issue #102）。`/api/tilesets` の既定は
+      // 公開のみなので、これが無いと自分の非公開タイルセットが UI から消える。
+      // 公開/非公開の絞り込みは下流の `publicFilter` (client-side) で行う。
+      const data = await api.listTilesets({ include_private: true });
       console.log("API Response:", data);
 
       // APIレスポンスの形式に対応

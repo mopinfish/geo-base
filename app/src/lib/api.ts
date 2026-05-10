@@ -667,11 +667,20 @@ class ApiClient {
   async listTilesets(params?: {
     type?: 'vector' | 'raster' | 'pmtiles';
     is_public?: boolean;
+    /**
+     * 認証済みユーザーが自分の非公開タイルセットも取得したい場合に true を渡す。
+     * `/api/tilesets` の既定挙動は `is_public=true` のみを返すため、ログイン中の
+     * 所有者でも明示しないと自分の非公開タイルセットが見えない（issue #102）。
+     */
+    include_private?: boolean;
   }): Promise<Tileset[] | { tilesets: Tileset[]; count: number }> {
     const searchParams = new URLSearchParams();
     if (params?.type) searchParams.append('type', params.type);
     if (params?.is_public !== undefined) {
       searchParams.append('is_public', String(params.is_public));
+    }
+    if (params?.include_private !== undefined) {
+      searchParams.append('include_private', String(params.include_private));
     }
     const query = searchParams.toString();
     return this.request<Tileset[] | { tilesets: Tileset[]; count: number }>(`/api/tilesets${query ? `?${query}` : ''}`);
