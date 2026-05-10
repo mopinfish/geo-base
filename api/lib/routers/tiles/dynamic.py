@@ -132,7 +132,7 @@ def get_dynamic_tilejson(layer_name: str, request: Request):
 
 
 @router.get("/features/{z}/{x}/{y}.pbf")
-async def get_features_vector_tile(
+def get_features_vector_tile(
     z: int,
     x: int,
     y: int,
@@ -178,7 +178,7 @@ async def get_features_vector_tile(
                 "user_id": str(row[2]) if row[2] else None,
             }
 
-            if not await check_tileset_access_v2(conn, tileset, auth):
+            if not check_tileset_access_v2(conn, tileset, auth):
                 if auth is None:
                     raise HTTPException(
                         status_code=401,

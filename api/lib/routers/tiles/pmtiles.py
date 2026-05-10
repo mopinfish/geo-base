@@ -2,6 +2,7 @@
 PMTiles tile serving endpoints.
 """
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -17,7 +18,12 @@ from lib.pmtiles import (
     generate_pmtiles_tilejson,
 )
 from lib.cache import get_cached_tileset_info, cache_tileset_info
-from lib.auth import AuthContext, get_auth_context_optional, check_tileset_access_v2
+from lib.auth import (
+    AuthContext,
+    acheck_tileset_access_v2,
+    check_tileset_access_v2,
+    get_auth_context_optional,
+)
 
 
 router = APIRouter(prefix="/pmtiles", tags=["tiles"])
@@ -103,7 +109,9 @@ async def get_pmtiles_tile_endpoint(
         owner_user_id = cached_info["owner_user_id"]
     else:
         # Get PMTiles source from database with access check
-        try:
+        # async handler 内なので sync DB I/O は asyncio.to_thread で
+        # threadpool にオフロード（issue #66 / Option A）
+        def _fetch_pmtiles_info():
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -117,14 +125,17 @@ async def get_pmtiles_tile_endpoint(
                     """,
                     (tileset_id,),
                 )
-                row = cur.fetchone()
-            
+                return cur.fetchone()
+
+        try:
+            row = await asyncio.to_thread(_fetch_pmtiles_info)
+
             if not row:
                 raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
-            
+
             pmtiles_url, tile_type, compression, min_zoom, max_zoom, is_public, owner_user_id = row
             owner_user_id = str(owner_user_id) if owner_user_id else None
-            
+
             # Cache the tileset info
             cache_tileset_info(cache_key, {
                 "pmtiles_url": pmtiles_url,
@@ -135,19 +146,25 @@ async def get_pmtiles_tile_endpoint(
                 "is_public": is_public,
                 "owner_user_id": owner_user_id,
             })
-            
+
         except HTTPException:
             raise
         except Exception as e:
+            # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+            # `InFailedSqlTransaction` を誘発するため必ず rollback する
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Check access
     tileset_for_access = {
         "id": tileset_id,
         "is_public": is_public,
         "user_id": owner_user_id,
     }
-    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+    if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
         if auth is None:
             raise HTTPException(
                 status_code=401,
@@ -189,7 +206,7 @@ async def get_pmtiles_tile_endpoint(
 
 
 @router.get("/{tileset_id}/tilejson.json")
-async def get_pmtiles_tilejson_endpoint(
+def get_pmtiles_tilejson_endpoint(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
@@ -235,7 +252,7 @@ async def get_pmtiles_tilejson_endpoint(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -289,7 +306,9 @@ async def get_pmtiles_metadata_endpoint(
             detail="PMTiles service is not available."
         )
     
-    try:
+    # async handler 内なので sync DB I/O は asyncio.to_thread で
+    # threadpool にオフロード（issue #66 / Option A）
+    def _fetch_pmtiles_metadata_info():
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -301,21 +320,24 @@ async def get_pmtiles_metadata_endpoint(
                 """,
                 (tileset_id,),
             )
-            row = cur.fetchone()
-        
+            return cur.fetchone()
+
+    try:
+        row = await asyncio.to_thread(_fetch_pmtiles_metadata_info)
+
         if not row:
             raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
-        
+
         pmtiles_url, name, description, is_public, owner_user_id = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
-        
+
         # Check access
         tileset_for_access = {
             "id": tileset_id,
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -330,8 +352,14 @@ async def get_pmtiles_metadata_endpoint(
     except HTTPException:
         raise
     except Exception as e:
+        # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+        # `InFailedSqlTransaction` を誘発するため必ず rollback する
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Get metadata from PMTiles file
     try:
         metadata = await get_pmtiles_metadata(pmtiles_url)

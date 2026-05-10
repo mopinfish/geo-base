@@ -158,7 +158,7 @@ def list_tilesets(
 
 
 @router.get("/{tileset_id}")
-async def get_tileset(
+def get_tileset(
     tileset_id: str,
     conn=Depends(get_connection),
     auth: Optional[AuthContext] = Depends(get_auth_context_optional),
@@ -185,7 +185,7 @@ async def get_tileset(
         tileset = dict(zip(columns, row))
 
         # Check access (v2: supports JWT + API key + team-based sharing)
-        if not await check_tileset_access_v2(conn, tileset, auth):
+        if not check_tileset_access_v2(conn, tileset, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -224,7 +224,7 @@ async def get_tileset(
 
 
 @router.get("/{tileset_id}/tilejson.json")
-async def get_tileset_tilejson(
+def get_tileset_tilejson(
     tileset_id: str,
     request: Request,
     layer: Optional[str] = Query(None, description="Filter to specific layer name for QGIS compatibility"),
@@ -259,7 +259,7 @@ async def get_tileset_tilejson(
         }
 
         # Check access (v2: supports JWT + API key + team-based sharing)
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -595,7 +595,7 @@ def create_tileset(
 
 
 @router.post("/{tileset_id}/calculate-bounds")
-async def calculate_tileset_bounds(
+def calculate_tileset_bounds(
     tileset_id: str,
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
@@ -620,9 +620,6 @@ async def calculate_tileset_bounds(
     > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
-        # Step 1: 認可判定に必要なフィールドだけ読んで cursor を閉じる
-        # （await 越しに同一 conn が `asyncio.to_thread` から再利用されるため、
-        # cursor を開いたままにしないこと）
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, user_id, type FROM tilesets WHERE id = %s",
@@ -630,30 +627,27 @@ async def calculate_tileset_bounds(
             )
             row = cur.fetchone()
 
-        if not row:
-            raise HTTPException(status_code=404, detail="Tileset not found")
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
 
-        # Step 2: 認可判定（cursor 外で await）
-        tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-        ctx = AuthContext.from_jwt_user(user)
-        if not await check_tileset_write_access_v2(
-            conn, tileset_for_access, ctx, "update"
-        ):
-            raise HTTPException(
-                status_code=403, detail="Not authorized to update this tileset"
-            )
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            ctx = AuthContext.from_jwt_user(user)
+            if not check_tileset_write_access_v2(
+                conn, tileset_for_access, ctx, "update"
+            ):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to update this tileset"
+                )
 
-        tileset_type = row[2]
+            tileset_type = row[2]
 
-        # Only calculate bounds for vector tilesets (which have features)
-        if tileset_type != "vector":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Bounds calculation is only supported for vector tilesets, not {tileset_type}"
-            )
+            # Only calculate bounds for vector tilesets (which have features)
+            if tileset_type != "vector":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Bounds calculation is only supported for vector tilesets, not {tileset_type}"
+                )
 
-        # Step 3: bounds 計算 + UPDATE は新しい cursor で
-        with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT
@@ -718,7 +712,7 @@ async def calculate_tileset_bounds(
 
 
 @router.patch("/{tileset_id}")
-async def update_tileset(
+def update_tileset(
     tileset_id: str,
     tileset: TilesetUpdate,
     user: User = Depends(require_auth),
@@ -739,7 +733,6 @@ async def update_tileset(
     > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
-        # Step 1: 認可判定に必要な行を読み出して cursor を閉じる
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, user_id FROM tilesets WHERE id = %s",
@@ -747,21 +740,18 @@ async def update_tileset(
             )
             row = cur.fetchone()
 
-        if not row:
-            raise HTTPException(status_code=404, detail="Tileset not found")
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
 
-        # Step 2: 認可判定（cursor 外で await）
-        tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-        ctx = AuthContext.from_jwt_user(user)
-        if not await check_tileset_write_access_v2(
-            conn, tileset_for_access, ctx, "update"
-        ):
-            raise HTTPException(
-                status_code=403, detail="Not authorized to update this tileset"
-            )
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            ctx = AuthContext.from_jwt_user(user)
+            if not check_tileset_write_access_v2(
+                conn, tileset_for_access, ctx, "update"
+            ):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to update this tileset"
+                )
 
-        # Step 3: UPDATE 用に新しい cursor を開く
-        with conn.cursor() as cur:
             updates = []
             params = []
 
@@ -860,7 +850,7 @@ async def update_tileset(
 
 
 @router.delete("/{tileset_id}", status_code=204)
-async def delete_tileset(
+def delete_tileset(
     tileset_id: str,
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
@@ -881,7 +871,6 @@ async def delete_tileset(
     > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
-        # Step 1: 認可判定に必要な行を読み出して cursor を閉じる
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, user_id FROM tilesets WHERE id = %s",
@@ -889,21 +878,19 @@ async def delete_tileset(
             )
             row = cur.fetchone()
 
-        if not row:
-            raise HTTPException(status_code=404, detail="Tileset not found")
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
 
-        # Step 2: 認可判定（cursor 外で await）
-        tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-        ctx = AuthContext.from_jwt_user(user)
-        if not await check_tileset_write_access_v2(
-            conn, tileset_for_access, ctx, "delete"
-        ):
-            raise HTTPException(
-                status_code=403, detail="Not authorized to delete this tileset"
-            )
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            ctx = AuthContext.from_jwt_user(user)
+            if not check_tileset_write_access_v2(
+                conn, tileset_for_access, ctx, "delete"
+            ):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to delete this tileset"
+                )
 
-        # Step 3: DELETE 用に新しい cursor を開く（FK CASCADE で features も削除される）
-        with conn.cursor() as cur:
+            # FK CASCADE で features も削除される
             cur.execute("DELETE FROM tilesets WHERE id = %s", (tileset_id,))
             conn.commit()
 

@@ -2,6 +2,7 @@
 Raster tile serving endpoints (COG-backed).
 """
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -20,7 +21,12 @@ from lib.raster_tiles import (
     validate_tile_format,
 )
 from lib.cache import get_cached_tileset_info, cache_tileset_info
-from lib.auth import AuthContext, get_auth_context_optional, check_tileset_access_v2
+from lib.auth import (
+    AuthContext,
+    acheck_tileset_access_v2,
+    check_tileset_access_v2,
+    get_auth_context_optional,
+)
 
 
 router = APIRouter(prefix="/raster", tags=["tiles"])
@@ -121,7 +127,9 @@ async def get_raster_tile(
         owner_user_id = cached_info["owner_user_id"]
     else:
         # Get COG URL from database with access check
-        try:
+        # async handler 内なので sync DB I/O は asyncio.to_thread で
+        # threadpool にオフロード（issue #66 / Option A）
+        def _fetch_raster_info():
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -134,14 +142,17 @@ async def get_raster_tile(
                     """,
                     (tileset_id,),
                 )
-                row = cur.fetchone()
-            
+                return cur.fetchone()
+
+        try:
+            row = await asyncio.to_thread(_fetch_raster_info)
+
             if not row:
                 raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
-            
+
             cog_url, min_zoom, max_zoom, is_public, owner_user_id = row
             owner_user_id = str(owner_user_id) if owner_user_id else None
-            
+
             # Cache the tileset info
             cache_tileset_info(cache_key, {
                 "cog_url": cog_url,
@@ -150,19 +161,25 @@ async def get_raster_tile(
                 "is_public": is_public,
                 "owner_user_id": owner_user_id,
             })
-            
+
         except HTTPException:
             raise
         except Exception as e:
+            # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+            # `InFailedSqlTransaction` を誘発するため必ず rollback する
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Check access
     tileset_for_access = {
         "id": tileset_id,
         "is_public": is_public,
         "user_id": owner_user_id,
     }
-    if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+    if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
         if auth is None:
             raise HTTPException(
                 status_code=401,
@@ -214,7 +231,7 @@ async def get_raster_tile(
 
 
 @router.get("/{tileset_id}/tilejson.json")
-async def get_raster_tilejson_endpoint(
+def get_raster_tilejson_endpoint(
     tileset_id: str,
     request: Request,
     conn=Depends(get_connection),
@@ -260,7 +277,7 @@ async def get_raster_tilejson_endpoint(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -339,9 +356,10 @@ async def get_raster_preview(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    try:
+    # async handler 内なので sync DB I/O は asyncio.to_thread で
+    # threadpool にオフロード（issue #66 / Option A）
+    def _fetch_preview_info():
         with conn.cursor() as cur:
-            # Get tileset and COG URL
             cur.execute(
                 """
                 SELECT t.id, t.is_public, t.user_id,
@@ -352,35 +370,38 @@ async def get_raster_preview(
                 """,
                 (tileset_id,),
             )
-            row = cur.fetchone()
-            
-            if not row:
-                raise HTTPException(status_code=404, detail="Raster tileset not found")
-            
-            is_public = row[1]
-            owner_id = str(row[2]) if row[2] else None
-            cog_url = row[3]
-            
-            # Check access
-            tileset_for_access = {
-                "id": tileset_id,
-                "is_public": is_public,
-                "user_id": owner_id,
-            }
-            if not await check_tileset_access_v2(conn, tileset_for_access, auth):
-                if auth is None:
-                    raise HTTPException(
-                        status_code=401,
-                        detail="Authentication required",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-                raise HTTPException(status_code=403, detail="Access denied")
-            
-            if not cog_url:
+            return cur.fetchone()
+
+    try:
+        row = await asyncio.to_thread(_fetch_preview_info)
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Raster tileset not found")
+
+        is_public = row[1]
+        owner_id = str(row[2]) if row[2] else None
+        cog_url = row[3]
+
+        # Check access
+        tileset_for_access = {
+            "id": tileset_id,
+            "is_public": is_public,
+            "user_id": owner_id,
+        }
+        if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
+            if auth is None:
                 raise HTTPException(
-                    status_code=404,
-                    detail="No COG datasource configured for this tileset"
+                    status_code=401,
+                    detail="Authentication required",
+                    headers={"WWW-Authenticate": "Bearer"},
                 )
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if not cog_url:
+            raise HTTPException(
+                status_code=404,
+                detail="No COG datasource configured for this tileset"
+            )
         
         # Parse band indexes
         indexes = None
@@ -416,11 +437,17 @@ async def get_raster_preview(
     except HTTPException:
         raise
     except Exception as e:
+        # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+        # `InFailedSqlTransaction` を誘発するため必ず rollback する
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Error generating preview: {str(e)}")
 
 
 @router.get("/{tileset_id}/info")
-async def get_raster_info(
+def get_raster_info(
     tileset_id: str,
     conn=Depends(get_connection),
     auth: Optional[AuthContext] = Depends(get_auth_context_optional),
@@ -464,7 +491,7 @@ async def get_raster_info(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
@@ -496,7 +523,7 @@ async def get_raster_info(
 
 
 @router.get("/{tileset_id}/statistics")
-async def get_raster_statistics(
+def get_raster_statistics(
     tileset_id: str,
     indexes: str = Query(None, description="Comma-separated band indexes"),
     conn=Depends(get_connection),
@@ -542,7 +569,7 @@ async def get_raster_statistics(
             "is_public": is_public,
             "user_id": owner_user_id,
         }
-        if not await check_tileset_access_v2(conn, tileset_for_access, auth):
+        if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
                 raise HTTPException(
                     status_code=401,
