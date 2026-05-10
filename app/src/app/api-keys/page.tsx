@@ -274,6 +274,7 @@ export default function ApiKeysPage() {
               <Card
                 key={key.id}
                 className={key.revoked_at ? "opacity-60" : undefined}
+                data-testid="api-key-row"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -294,7 +295,10 @@ export default function ApiKeysPage() {
                           <Badge variant="outline">無効</Badge>
                         )}
                       </div>
-                      <CardDescription className="font-mono text-xs">
+                      <CardDescription
+                        className="font-mono text-xs"
+                        data-testid="api-key-masked"
+                      >
                         {key.masked_key || key.prefix + "**********"}
                       </CardDescription>
                     </div>

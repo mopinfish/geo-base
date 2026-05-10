@@ -184,3 +184,36 @@ export async function createFeature(input: {
     await ctx.dispose();
   }
 }
+
+/**
+ * 作成直後の API キー。`key` は POST /api/api-keys のレスポンスでのみ返り、
+ * 以降の GET では取得できない平文 key (ApiKeyCreatedResponse 参照)。
+ */
+export interface CreatedApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  // 作成直後だけ返ってくる平文 key
+  key?: string;
+}
+
+export async function createApiKey(input: {
+  name: string;
+  scopes?: string[];
+}): Promise<CreatedApiKey> {
+  const ctx = await createApiClient();
+  try {
+    const res = await ctx.post("/api/api-keys", {
+      data: {
+        name: input.name,
+        scopes: input.scopes ?? ["read"],
+      },
+    });
+    if (!res.ok()) {
+      throw new Error(`createApiKey failed: ${res.status()} ${await res.text()}`);
+    }
+    return (await res.json()) as CreatedApiKey;
+  } finally {
+    await ctx.dispose();
+  }
+}
