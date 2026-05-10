@@ -714,10 +714,13 @@ def accept_team_invitation(
     """Accept a team invitation."""
     try:
         with conn.cursor() as cur:
-            # Find invitation
+            # Find invitation. FOR UPDATE で同一 token に対する並行受諾レースを直列化する
+            # （auth.py の accept-invitation と同じパターン）。これにより 2 つ目の
+            # リクエストは 1 つ目の commit 後に status='accepted' を見て下の
+            # `if status != 'pending'` 分岐で 400 を返す。
             cur.execute(
                 """SELECT id, team_id, email, role, status, expires_at
-                   FROM team_invitations WHERE token = %s""",
+                   FROM team_invitations WHERE token = %s FOR UPDATE""",
                 (accept_data.token,)
             )
             row = cur.fetchone()

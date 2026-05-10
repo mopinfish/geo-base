@@ -110,12 +110,22 @@ def make_invitation(db_conn):
 
 
 def _set_token_null(db_conn, inv_id, new_status):
-    """受諾/失効/キャンセル後の DB 状態を再現するヘルパ。"""
+    """受諾/失効/キャンセル後の DB 状態を再現するヘルパ。
+
+    accepted_at は本番ロジックでも `status='accepted'` の場合にしか
+    NOW() を入れないため、ここでも条件付きにする（実態と乖離させない）。
+    """
     with db_conn.cursor() as cur:
-        cur.execute(
-            "UPDATE team_invitations SET status = %s, token = NULL, accepted_at = NOW() WHERE id = %s",
-            (new_status, inv_id),
-        )
+        if new_status == "accepted":
+            cur.execute(
+                "UPDATE team_invitations SET status = %s, token = NULL, accepted_at = NOW() WHERE id = %s",
+                (new_status, inv_id),
+            )
+        else:
+            cur.execute(
+                "UPDATE team_invitations SET status = %s, token = NULL WHERE id = %s",
+                (new_status, inv_id),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -124,14 +134,36 @@ def _set_token_null(db_conn, inv_id, new_status):
 
 
 class TestGetInvitationAfterRevoke:
-    def test_pending_invitation_is_visible(self, client, make_invitation):
-        """sanity: pending 状態の招待は GET で取得できる。"""
+    def test_pending_invitation_is_visible(
+        self, client, make_invitation, monkeypatch
+    ):
+        """sanity: pending 状態の招待は GET 200 で取得できる（旧 token が隠れていない）。
+
+        `has_existing_account` 判定で auth provider にアクセスするため、
+        `get_user_by_email` を「未登録」固定でスタブして、auth provider 設定の
+        差し戻りに左右されない決定論的な検証にする。
+        """
+
+        async def _no_existing(email):
+            return None
+
+        from lib.auth import get_auth_provider
+
+        class _StubProvider:
+            async def get_user_by_email(self, email):
+                return await _no_existing(email)
+
+        monkeypatch.setattr(
+            "lib.routers.auth.get_auth_provider", lambda: _StubProvider()
+        )
+        get_auth_provider.cache_clear()
+
         inv = make_invitation()
         res = client.get(f"/api/auth/invitations/{inv['token']}")
-        # has_existing_account 判定で auth provider にアクセスするため、
-        # 200 (取得成功) または 500（provider 未設定など）になり得る。
-        # ここでは「少なくとも 404 ではない」ことを確認する（pending は隠れていない）。
-        assert res.status_code != 404, res.text
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["email"] == inv["email"]
+        assert body["has_existing_account"] is False
 
     def test_accepted_invitation_token_returns_404(
         self, client, make_invitation, db_conn
