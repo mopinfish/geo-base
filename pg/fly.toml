@@ -1,0 +1,40 @@
+# =============================================================================
+# geo-base-pg - Fly.io self-hosted PostGIS
+# =============================================================================
+# Single-node Postgres 16 + PostGIS 3.4. No public network exposure: other
+# Fly apps in the same org reach this DB via 6PN (`geo-base-pg.internal:5432`).
+# 開発端末からは `flyctl proxy 5433:5432 -a geo-base-pg` でローカル転送。
+#
+# Deploy:
+#   flyctl deploy --config pg/fly.toml --dockerfile pg/Dockerfile
+#   ※ build context が repo root になるよう、必ず repo root から実行する
+#
+# 詳細手順は docs/POSTGRES_SETUP.md を参照。
+# =============================================================================
+
+app = "geo-base-pg"
+primary_region = "nrt"
+
+[build]
+  # fly.toml と同じディレクトリを基準にしたパス。build context は
+  # `flyctl deploy <workdir>` で repo root を渡して上書きする
+  # （Dockerfile 内 COPY が docker/postgis-init/* を参照する都合）。
+  dockerfile = "Dockerfile"
+
+[env]
+  POSTGRES_DB = "geo_base"
+  POSTGRES_USER = "postgres"
+  # PGDATA をボリュームのサブディレクトリに置く。マウント先が空でない
+  # （lost+found 等が初期からある）と postgres init が refuse するため。
+  PGDATA = "/var/lib/postgresql/data/pgdata"
+
+# Persistent volume (作成は flyctl volumes create で先に行う前提)
+[mounts]
+  source = "pg_data"
+  destination = "/var/lib/postgresql/data"
+
+# 単一マシン構成: HA は無し、復旧は volume snapshot + pg_dump バックアップに依存
+# `[[services]]` も `[http_service]` も置かないので auto-stop は発動せず常時稼働。
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

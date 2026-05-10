@@ -9,7 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`api/`** — FastAPI タイルサーバー（Python, `uv` 管理）。**Fly.io** に `geo-base-api.fly.dev` としてデプロイ（旧 Vercel デプロイは廃止済み）。PostGIS から `ST_AsMVT` でベクタータイルを動的生成、`rio-tiler` で COG ラスタータイルを配信、PMTiles にも対応。エントリポイントは `api/lib/main.py` で、`lib/routers/` 配下のルーターを統合。Pydantic モデルは `lib/models/` に配置。
 - **`app/`** — Next.js 16（App Router）+ React 19 + Tailwind v4 + shadcn/ui の管理画面。**Vercel** に `geo-base-admin.vercel.app` としてデプロイ。認証はプラガブル（local / supabase）で、`app/src/lib/auth/` の AuthClient が `/api/auth/*` をラップ。API クライアントは `app/src/lib/api.ts`。
 - **`mcp/`** — geo-base のツールを Claude Desktop 向けに公開する FastMCP サーバー。**Fly.io** に `geo-base-mcp.fly.dev` としてデプロイ。ツールは `mcp/tools/` 配下（tilesets, features, geocoding, stats, analysis, crud）。`stdio`（ローカル）と `sse`（リモート）の両トランスポートをサポート。
-- **`docker/`** — `docker compose` でローカルの PostGIS + Redis を起動。スキーマシード SQL は `docker/postgis-init/` に番号順で配置（`04_auth_schema.sql`: 自前 users / refresh_tokens、`05_teams_schema.sql`: チーム関連、`06_api_keys_schema.sql`: API キー、`09_rls_policies.sql` がローカル用、`09_rls_policies.sql.supabase` が Supabase 用）。
+- **`docker/`** — `docker compose` でローカルの PostGIS + Redis を起動。スキーマシード SQL は `docker/postgis-init/` に番号順で配置（`04_auth_schema.sql`: 自前 users / refresh_tokens、`05_teams_schema.sql`: チーム関連、`06_api_keys_schema.sql`: API キー、`09_rls_policies.sql` がローカル用、`09_rls_policies.sql.supabase` が Supabase 用 — 旧構成の名残）。
+- **`pg/`** — 本番 DB を Fly Machine 上の `postgis/postgis:16-3.4` 単一ノードで運用するための Fly app 設定（`geo-base-pg`）。`Dockerfile` で `docker/postgis-init/0[1-9]_*.sql` を `/docker-entrypoint-initdb.d/` に焼き込んでいる。詳細は `docs/POSTGRES_SETUP.md`。
 - **`packages/shared/`** — 共有パッケージのスケルトン。
 - **`scripts/`** — `setup.sh`, `seed_sample_data.{py,fish}`, `fix_bounds.py` 等。
 
@@ -113,7 +114,8 @@ API キーは別系統の認証パス（Phase 3 / Step 3.3-A）：`lib/routers/a
 
 ## アーキテクチャ判断記録
 
-- **`docs/INFRA_MIGRATION_INVESTIGATION.md`**: 2026-05-08 に Cloudflare 一本化移行を検討した結果。**当面は現状の Vercel/Fly.io/Supabase 構成を維持**することを決定。Phase 3（team/role）の実装は Supabase 依存を極力薄くして、将来の移行可能性を残す方針。
+- **`docs/INFRA_MIGRATION_INVESTIGATION.md`**: 2026-05-08 に Cloudflare 一本化移行を検討した結果。**当面は現状の Vercel/Fly.io 構成を維持**することを決定。Phase 3（team/role）の実装は Supabase 依存を極力薄くして、将来の移行可能性を残す方針。
+- **`docs/POSTGRES_SETUP.md`**: 2026-05-10 に Supabase Free Plan の長期 paused 復旧不能を機に、本番 DB を **Fly Machine 上の自前 PostGIS（`geo-base-pg` app）** に移行した記録と運用手順。Supabase の DB / Auth 双方への依存をこのタイミングで完全に廃止。
 
 ## 知っておくべき規約
 
