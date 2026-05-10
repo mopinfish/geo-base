@@ -164,9 +164,16 @@ export interface ApiError {
 
 export type DatasourceType = 'pmtiles' | 'cog';
 // `s3` は S3 API 互換 storage の総称（Fly Tigris / AWS S3 / Cloudflare R2 等）。
-// 旧 `supabase` は Issue #72 (PR #88) で廃止済み。既存 DB レコードの表示 fallback
-// は `app/src/app/datasources/{page,[id]/page}.tsx` の getStorageProviderLabel で行う。
+// 旧 `supabase` は Issue #72 (PR #88) で廃止済み（**新規作成では受け付けない**）。
+//
+// リクエスト用 (`StorageProvider`) は `'s3' | 'http'` に narrow し、レスポンス用
+// (`DatasourceStorageProvider`) は legacy `'supabase'` を含めた union として別
+// alias を用意する。既存 DB に残った旧レコードから API が `'supabase'` を返し得る
+// ため、`Datasource.storage_provider` の型と実データを乖離させないための分離。
+// 表示時の fallback は `app/src/app/datasources/{page,[id]/page}.tsx` の
+// getStorageProviderLabel で行う（実装側は `string` 受けなので legacy 値も安全）。
 export type StorageProvider = 's3' | 'http';
+export type DatasourceStorageProvider = StorageProvider | 'supabase';
 
 export interface Datasource {
   id: string;
@@ -174,7 +181,8 @@ export interface Datasource {
   tileset_name: string;
   type: DatasourceType;
   url: string;
-  storage_provider: StorageProvider;
+  // 受信用なので legacy 'supabase' を含む型を使う（DB に残った旧レコード対応）。
+  storage_provider: DatasourceStorageProvider;
   tile_type?: string;
   compression?: string;
   layers?: unknown[];
