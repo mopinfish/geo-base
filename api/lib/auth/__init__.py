@@ -386,6 +386,28 @@ def _team_permission_allows(
         return False
 
 
+async def acheck_tileset_write_access_v2(
+    conn,
+    tileset: dict,
+    ctx: Optional["AuthContext"],
+    required_action: str,
+) -> bool:
+    """`async def` ハンドラから呼ぶための async wrapper（write 用）。
+
+    sync 版 `check_tileset_write_access_v2` は内部で SQL クエリ
+    (`can_user_perform_action()` SQL 関数 / `team_tilesets` SELECT) を
+    実行するため、async handler から直接呼ぶとイベントループをブロックする。
+    本 wrapper は `asyncio.to_thread` でオフロードする（acheck_tileset_access_v2
+    と同パターン、issue #50 round 4）。
+
+    `def` handler からは sync 版を直接呼ぶこと。
+    """
+    import asyncio
+    return await asyncio.to_thread(
+        check_tileset_write_access_v2, conn, tileset, ctx, required_action
+    )
+
+
 __all__ = [
     # Models
     "User", "AuthResult", "TokenPair",
@@ -407,4 +429,5 @@ __all__ = [
     "acheck_tileset_access_v2",  # async wrapper for use in async def handlers (#66)
     # NEW (issue #49 / C-1): team-based tileset write authorization
     "check_tileset_write_access_v2",
+    "acheck_tileset_write_access_v2",  # async wrapper (#50 round 4)
 ]

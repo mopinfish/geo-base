@@ -13,6 +13,8 @@ from lib.models.datasource import DatasourceType, StorageProvider, DatasourceCre
 from lib.auth import (
     AuthContext,
     User,
+    acheck_tileset_access_v2,
+    acheck_tileset_write_access_v2,
     check_tileset_access_v2,
     check_tileset_write_access_v2,
     get_auth_context_optional,
@@ -361,7 +363,7 @@ async def create_datasource(
                 raise HTTPException(status_code=404, detail="Tileset not found")
 
             tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
-            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+            if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
                 raise HTTPException(
                     status_code=403,
                     detail="Not authorized to add datasource to this tileset"
@@ -661,7 +663,7 @@ async def upload_cog(
                 raise HTTPException(status_code=404, detail="Tileset not found")
 
             tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
-            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+            if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
                 raise HTTPException(
                     status_code=403,
                     detail="Not authorized to add datasource to this tileset"
@@ -929,7 +931,7 @@ async def test_datasource_connection(
                     "is_public": row[3],
                     "user_id": row[4],
                 }
-                if not check_tileset_access_v2(conn, tileset_for_access, ctx):
+                if not await acheck_tileset_access_v2(conn, tileset_for_access, ctx):
                     raise HTTPException(
                         status_code=403, detail="Not authorized to test this datasource"
                     )
@@ -976,7 +978,7 @@ async def test_datasource_connection(
                     "is_public": row[3],
                     "user_id": row[4],
                 }
-                if not check_tileset_access_v2(conn, tileset_for_access, ctx):
+                if not await acheck_tileset_access_v2(conn, tileset_for_access, ctx):
                     raise HTTPException(
                         status_code=403, detail="Not authorized to test this datasource"
                     )
