@@ -12,13 +12,13 @@ from lib.database import get_connection
 from lib.models.tileset import TilesetCreate, TilesetUpdate
 from lib.cache import invalidate_tileset_cache
 from lib.auth import (
-    User,
-    get_current_user,
-    require_auth,
     AuthContext,
-    get_auth_context_optional,
+    User,
     check_tileset_access_v2,
     check_tileset_write_access_v2,
+    get_auth_context_optional,
+    get_current_user,
+    require_auth_context,
 )
 from lib.tiles import generate_tilejson
 from lib.pmtiles import generate_pmtiles_tilejson
@@ -511,30 +511,40 @@ def _get_raster_tilejson(tileset_id: str, conn, base_url: str):
 @router.post("", status_code=201)
 def create_tileset(
     tileset: TilesetCreate,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Create a new tileset.
-    
-    Requires authentication.
+
+    JWT または `write` scope を持つ API キーで認証が必要（issue #50）。
+    タイルセットは ctx.user_id の所有として作成される。
     """
+    if not ctx.has_scope("write"):
+        raise HTTPException(
+            status_code=403,
+            detail="write scope required to create tileset"
+        )
     try:
         with conn.cursor() as cur:
-            # Build geometry SQL
-            bounds_sql = "NULL"
-            center_sql = "NULL"
-            
+            # Build geometry SQL — プレースホルダで bind する（NaN/Inf / 将来の
+            # 型変更時の SQL インジェクション経路を排除、issue #62 round 2 と同パターン）
+            bounds_clause = "NULL"
+            center_clause = "NULL"
+            geom_params: list = []
+
             if tileset.bounds and len(tileset.bounds) == 4:
                 west, south, east, north = tileset.bounds
-                bounds_sql = f"ST_MakeEnvelope({west}, {south}, {east}, {north}, 4326)"
-            
+                bounds_clause = "ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
+                geom_params.extend([west, south, east, north])
+
             if tileset.center and len(tileset.center) >= 2:
                 lon, lat = tileset.center[0], tileset.center[1]
-                center_sql = f"ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)"
-            
+                center_clause = "ST_SetSRID(ST_MakePoint(%s, %s), 4326)"
+                geom_params.extend([lon, lat])
+
             metadata_json = json.dumps(tileset.metadata) if tileset.metadata else None
-            
+
             cur.execute(
                 f"""
                 INSERT INTO tilesets (
@@ -544,7 +554,7 @@ def create_tileset(
                 )
                 VALUES (
                     %s, %s, %s, %s,
-                    %s, %s, {bounds_sql}, {center_sql},
+                    %s, %s, {bounds_clause}, {center_clause},
                     %s, %s, %s, %s
                 )
                 RETURNING id, name, description, type, format,
@@ -558,9 +568,10 @@ def create_tileset(
                     tileset.format,
                     tileset.min_zoom,
                     tileset.max_zoom,
+                    *geom_params,
                     tileset.attribution,
                     tileset.is_public,
-                    user.id,
+                    ctx.user_id,
                     metadata_json,
                 ),
             )
@@ -597,7 +608,7 @@ def create_tileset(
 @router.post("/{tileset_id}/calculate-bounds")
 def calculate_tileset_bounds(
     tileset_id: str,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
@@ -608,16 +619,14 @@ def calculate_tileset_bounds(
 
     Useful after bulk importing GeoJSON features.
 
-    実行可能な条件（issue #49、`update` action 相当）— **JWT 必須**:
+    実行可能な条件（issue #49 / #50、`update` action 相当）— **JWT または `write` scope の API キー**:
     - 個人タイルセットの所有者
     - team 経由で `can_user_perform_action(user_id, tileset_id, 'update')`
       が True を返すユーザー（team_role=owner/administrator の role 継承、
       または team_tilesets.permission_level が write 以上の明示）
 
-    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
-    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
-    > のため API キーでは呼べません。`require_auth_context` への移行は
-    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
+    `check_tileset_write_access_v2` が JWT / API キー両方の認可判定を行う
+    （issue #50 で `require_auth_context` 移行済み）。
     """
     try:
         with conn.cursor() as cur:
@@ -631,7 +640,6 @@ def calculate_tileset_bounds(
                 raise HTTPException(status_code=404, detail="Tileset not found")
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-            ctx = AuthContext.from_jwt_user(user)
             if not check_tileset_write_access_v2(
                 conn, tileset_for_access, ctx, "update"
             ):
@@ -715,22 +723,20 @@ def calculate_tileset_bounds(
 def update_tileset(
     tileset_id: str,
     tileset: TilesetUpdate,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Update an existing tileset.
 
-    実行可能な条件（issue #49、`update` action）— **JWT 必須**:
+    実行可能な条件（issue #49 / #50、`update` action）— **JWT または `write` scope の API キー**:
     - 個人タイルセットの所有者
     - team 経由で `can_user_perform_action(user_id, tileset_id, 'update')`
       が True を返すユーザー（team_role=owner/administrator の role 継承、
       または team_tilesets.permission_level が write 以上の明示）
 
-    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
-    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
-    > のため API キーでは呼べません。`require_auth_context` への移行は
-    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
+    `check_tileset_write_access_v2` が JWT / API キー両方の認可判定を行う
+    （issue #50 で `require_auth_context` 移行済み）。
     """
     try:
         with conn.cursor() as cur:
@@ -744,7 +750,6 @@ def update_tileset(
                 raise HTTPException(status_code=404, detail="Tileset not found")
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-            ctx = AuthContext.from_jwt_user(user)
             if not check_tileset_write_access_v2(
                 conn, tileset_for_access, ctx, "update"
             ):
@@ -852,23 +857,21 @@ def update_tileset(
 @router.delete("/{tileset_id}", status_code=204)
 def delete_tileset(
     tileset_id: str,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Delete a tileset and all associated features.
 
-    実行可能な条件（issue #49、`delete` action）— **JWT 必須**:
+    実行可能な条件（issue #49 / #50、`delete` action）— **JWT または `delete` scope の API キー**:
     - 個人タイルセットの所有者
     - team 経由で `can_user_perform_action(user_id, tileset_id, 'delete')`
       が True を返すユーザー
       - team_role=owner/administrator の場合は role 継承で admin 相当となり可
       - もしくは team_tilesets.permission_level='admin' の明示
 
-    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
-    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
-    > のため API キーでは呼べません。`require_auth_context` への移行は
-    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
+    `check_tileset_write_access_v2` が JWT / API キー両方の認可判定を行う
+    （issue #50 で `require_auth_context` 移行済み）。
     """
     try:
         with conn.cursor() as cur:
@@ -882,7 +885,6 @@ def delete_tileset(
                 raise HTTPException(status_code=404, detail="Tileset not found")
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-            ctx = AuthContext.from_jwt_user(user)
             if not check_tileset_write_access_v2(
                 conn, tileset_for_access, ctx, "delete"
             ):

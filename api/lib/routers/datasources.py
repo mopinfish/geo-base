@@ -13,10 +13,13 @@ from lib.models.datasource import DatasourceType, StorageProvider, DatasourceCre
 from lib.auth import (
     AuthContext,
     User,
+    acheck_tileset_access_v2,
+    acheck_tileset_write_access_v2,
     check_tileset_access_v2,
+    check_tileset_write_access_v2,
     get_auth_context_optional,
     get_current_user,
-    require_auth,
+    require_auth_context,
 )
 from lib.pmtiles import is_pmtiles_available, get_pmtiles_metadata
 from lib.raster_tiles import is_rasterio_available, get_cog_info
@@ -336,30 +339,35 @@ def get_datasource(
 @router.post("", status_code=201)
 async def create_datasource(
     datasource: DatasourceCreate,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Create a new datasource.
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `write` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
+
     Automatically fetches metadata (bounds, center, zoom levels) from the data source
     and updates both the datasource record and the parent tileset.
     """
     try:
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id, type FROM tilesets WHERE id = %s",
                 (datasource.tileset_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to add datasource to this tileset")
+
+            tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
+            if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to add datasource to this tileset"
+                )
             
             tileset_type = row[2]
             
@@ -630,32 +638,36 @@ def _update_tileset_from_metadata(cur, tileset_id, source_bounds, source_center,
 async def upload_cog(
     tileset_id: str = Query(..., description="Parent tileset ID"),
     file: UploadFile = File(..., description="COG file to upload"),
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Upload a COG file to Supabase Storage and create a datasource.
-    
+
     The file will be validated as a valid Cloud Optimized GeoTIFF,
     uploaded to Supabase Storage, and a new datasource record will be created
     linked to the specified tileset.
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `write` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
     """
     try:
-        # Check if tileset exists and user owns it
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, user_id, type FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to add datasource to this tileset")
+
+            tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
+            if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to add datasource to this tileset"
+                )
             
             if row[2] != "raster":
                 raise HTTPException(
@@ -811,20 +823,22 @@ async def upload_cog(
 @router.delete("/{datasource_id}", status_code=204)
 def delete_datasource(
     datasource_id: str,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Delete a datasource.
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `delete` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの delete 権限は `check_tileset_write_access_v2` で判定
+    （個人所有 / team 共有の permission_level='admin'）。
     """
     try:
         with conn.cursor() as cur:
             # Try PMTiles first
             cur.execute(
                 """
-                SELECT ps.id, t.user_id
+                SELECT ps.id, t.id as tileset_id, t.user_id
                 FROM pmtiles_sources ps
                 JOIN tilesets t ON ps.tileset_id = t.id
                 WHERE ps.id = %s
@@ -832,19 +846,22 @@ def delete_datasource(
                 (datasource_id,),
             )
             row = cur.fetchone()
-            
+
             if row:
-                if str(row[1]) != user.id:
-                    raise HTTPException(status_code=403, detail="Not authorized to delete this datasource")
-                
+                tileset_for_access = {"id": str(row[1]), "user_id": row[2]}
+                if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
+                    raise HTTPException(
+                        status_code=403, detail="Not authorized to delete this datasource"
+                    )
+
                 cur.execute("DELETE FROM pmtiles_sources WHERE id = %s", (datasource_id,))
                 conn.commit()
                 return Response(status_code=204)
-            
+
             # Try COG
             cur.execute(
                 """
-                SELECT rs.id, t.user_id
+                SELECT rs.id, t.id as tileset_id, t.user_id
                 FROM raster_sources rs
                 JOIN tilesets t ON rs.tileset_id = t.id
                 WHERE rs.id = %s
@@ -852,15 +869,18 @@ def delete_datasource(
                 (datasource_id,),
             )
             row = cur.fetchone()
-            
+
             if row:
-                if str(row[1]) != user.id:
-                    raise HTTPException(status_code=403, detail="Not authorized to delete this datasource")
-                
+                tileset_for_access = {"id": str(row[1]), "user_id": row[2]}
+                if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
+                    raise HTTPException(
+                        status_code=403, detail="Not authorized to delete this datasource"
+                    )
+
                 cur.execute("DELETE FROM raster_sources WHERE id = %s", (datasource_id,))
                 conn.commit()
                 return Response(status_code=204)
-            
+
             raise HTTPException(status_code=404, detail="Datasource not found")
             
     except HTTPException:
@@ -879,22 +899,24 @@ def delete_datasource(
 async def test_datasource_connection(
     datasource_id: str,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
 ):
     """
     Test connection to a datasource.
-    
+
     For PMTiles: Attempts to read metadata from the file.
     For COG: Attempts to read info from the file.
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `read` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの read 権限は `check_tileset_access_v2` で判定
+    （test 操作は read 相当 — 副作用は無く接続を試すのみ）。
     """
     try:
         with conn.cursor() as cur:
             # Try PMTiles first
             cur.execute(
                 """
-                SELECT ps.id, ps.pmtiles_url, t.user_id
+                SELECT ps.id, ps.pmtiles_url, t.id as tileset_id, t.is_public, t.user_id
                 FROM pmtiles_sources ps
                 JOIN tilesets t ON ps.tileset_id = t.id
                 WHERE ps.id = %s
@@ -902,11 +924,18 @@ async def test_datasource_connection(
                 (datasource_id,),
             )
             row = cur.fetchone()
-            
+
             if row:
-                if str(row[2]) != user.id:
-                    raise HTTPException(status_code=403, detail="Not authorized to test this datasource")
-                
+                tileset_for_access = {
+                    "id": str(row[2]),
+                    "is_public": row[3],
+                    "user_id": row[4],
+                }
+                if not await acheck_tileset_access_v2(conn, tileset_for_access, ctx):
+                    raise HTTPException(
+                        status_code=403, detail="Not authorized to test this datasource"
+                    )
+
                 pmtiles_url = row[1]
                 
                 if not is_pmtiles_available():
@@ -934,7 +963,7 @@ async def test_datasource_connection(
             # Try COG
             cur.execute(
                 """
-                SELECT rs.id, rs.cog_url, t.user_id
+                SELECT rs.id, rs.cog_url, t.id as tileset_id, t.is_public, t.user_id
                 FROM raster_sources rs
                 JOIN tilesets t ON rs.tileset_id = t.id
                 WHERE rs.id = %s
@@ -942,11 +971,18 @@ async def test_datasource_connection(
                 (datasource_id,),
             )
             row = cur.fetchone()
-            
+
             if row:
-                if str(row[2]) != user.id:
-                    raise HTTPException(status_code=403, detail="Not authorized to test this datasource")
-                
+                tileset_for_access = {
+                    "id": str(row[2]),
+                    "is_public": row[3],
+                    "user_id": row[4],
+                }
+                if not await acheck_tileset_access_v2(conn, tileset_for_access, ctx):
+                    raise HTTPException(
+                        status_code=403, detail="Not authorized to test this datasource"
+                    )
+
                 cog_url = row[1]
                 
                 if not is_rasterio_available():

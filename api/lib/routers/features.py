@@ -26,10 +26,10 @@ from lib.models.feature import (
 )
 from lib.auth import (
     AuthContext,
-    User,
     check_tileset_access_v2,
+    check_tileset_write_access_v2,
     get_auth_context_optional,
-    require_auth,
+    require_auth_context,
 )
 from lib.validators import (
     validate_feature,
@@ -187,29 +187,35 @@ def _validate_features_for_import(
 @router.post("", status_code=201)
 def create_feature(
     feature: FeatureCreate,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Create a new feature in a tileset.
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `write` scope を持つ API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で
+    判定される（個人所有 / team 共有の permission_level 'write' 以上）。
     """
     try:
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id FROM tilesets WHERE id = %s",
                 (feature.tileset_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to add features to this tileset")
-            
+
+            tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to add features to this tileset"
+                )
+
+
             # Validate geometry
             geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
             if not geom_result.valid:
@@ -267,39 +273,40 @@ def create_feature(
 @router.post("/bulk", status_code=201, response_model=BulkFeatureResponse)
 def create_features_bulk(
     data: BulkFeatureCreate,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Create multiple features in a tileset at once.
-    
+
     This endpoint is optimized for bulk imports and uses batch INSERT
     for significantly better performance compared to individual inserts.
-    
+
     Features:
     - Maximum 10,000 features per request
     - Optional geometry validation before import
     - Automatic bounds/center calculation after successful import
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `write` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
     """
     from psycopg2.extras import execute_values
-    
+
     try:
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id, type FROM tilesets WHERE id = %s",
                 (data.tileset_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
+
+            tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
                 raise HTTPException(
-                    status_code=403, 
+                    status_code=403,
                     detail="Not authorized to add features to this tileset"
                 )
             
@@ -664,17 +671,17 @@ def get_feature(
 def update_feature(
     feature_id: str,
     feature: FeatureUpdate,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Update an existing feature.
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `write` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
     """
     try:
         with conn.cursor() as cur:
-            # Check if feature exists and user owns the parent tileset
             cur.execute(
                 """
                 SELECT f.id, t.user_id, f.tileset_id
@@ -685,14 +692,16 @@ def update_feature(
                 (feature_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Feature not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this feature")
-            
+
             tileset_id = str(row[2])
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "update"):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to update this feature"
+                )
             
             # Build update query dynamically
             updates = []
@@ -766,17 +775,18 @@ def update_feature(
 @router.delete("/{feature_id}", status_code=204)
 def delete_feature(
     feature_id: str,
-    user: User = Depends(require_auth),
+    ctx: AuthContext = Depends(require_auth_context),
     conn=Depends(get_connection),
 ):
     """
     Delete a feature.
-    
-    Requires authentication and ownership of the parent tileset.
+
+    JWT または `delete` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの delete 権限は `check_tileset_write_access_v2` で判定
+    （個人所有 / team 共有の permission_level='admin'）。
     """
     try:
         with conn.cursor() as cur:
-            # Check if feature exists and user owns the parent tileset
             cur.execute(
                 """
                 SELECT f.id, t.user_id, f.tileset_id
@@ -787,14 +797,16 @@ def delete_feature(
                 (feature_id,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise HTTPException(status_code=404, detail="Feature not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to delete this feature")
-            
+
             tileset_id = str(row[2])
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
+                raise HTTPException(
+                    status_code=403, detail="Not authorized to delete this feature"
+                )
             
             # Delete feature
             cur.execute("DELETE FROM features WHERE id = %s", (feature_id,))

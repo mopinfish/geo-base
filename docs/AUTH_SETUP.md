@@ -121,6 +121,93 @@ npm run dev
 
 ---
 
+## API キーで書き込み操作を行う（issue #50）
+
+外部システム連携（CI からのタイルアップロード、自動データ同期、エージェント経由の更新等）には JWT ではなく **API キー** を使うことを推奨します。
+
+### スコープと操作の対応
+
+| 必要 scope | 対象操作 |
+|---|---|
+| `read` | GET 系（feature 取得、tileset 詳細、datasource 取得 等） |
+| `write` | POST/PATCH 系（tileset / feature / datasource の作成・更新） |
+| `delete` | DELETE 系（tileset / feature / datasource の削除） |
+
+`write` は `read` を、`delete` は `write` を、`admin` はすべてを包含します（[AuthContext.has_scope()](../api/lib/auth/context.py) の階層）。
+
+### API キーの作成
+
+**Admin UI**: ログイン後 `/api-keys` ページから作成（推奨、ブラウザのみで完結）。
+
+**API エンドポイント直叩き**: 既存の JWT で `POST /api/api-keys` を呼び出す:
+
+```bash
+curl -X POST https://geo-base-api.fly.dev/api/api-keys \
+  -H "Authorization: Bearer $JWT_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ci-uploader",
+    "scopes": ["read", "write"],
+    "team_id": null
+  }'
+```
+
+返却された `gb_live_xxx...` 形式のトークンを **発行時にしか取得できない**（DB には hash のみ保管）ので保管してください。
+
+実装は `api/lib/routers/api_keys.py:create_api_key` 参照。
+
+### 書き込みリクエスト例
+
+#### 個人タイルセットを更新する（`scope=write`）
+
+```bash
+curl -X PATCH https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "更新後の名前"}'
+```
+
+#### チーム共有タイルセットを更新する（`scope=write` + team API キー）
+
+API キー作成時に `team_id` を指定（Admin UI のチーム選択 / API リクエスト body の `"team_id"`）し、対象タイルセットがそのチームに `team_tilesets.permission_level >= write` で共有されている必要があります。
+
+```bash
+curl -X PATCH https://geo-base-api.fly.dev/api/tilesets/$SHARED_TILESET_ID \
+  -H "Authorization: Bearer $TEAM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "team-update"}'
+```
+
+#### 削除する（`scope=delete`）
+
+```bash
+curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
+  -H "Authorization: Bearer $DELETE_API_KEY"
+```
+
+チーム共有タイルセットを削除するには `team_tilesets.permission_level='admin'` が必要です（`write` では 403）。
+
+### 認可のレイヤー
+
+書き込みは 2 段階で判定されます:
+
+1. **Scope ガード**: API キーが必要な scope を持つか（`write` / `delete`）
+2. **リソース認可**: 対象タイルセットへの書き込み権限があるか
+   - 個人タイルセット所有者 → 常に可
+   - team API キー（`team_id` セット）→ `team_tilesets.permission_level` を判定（API キーは team_role の継承を行わない）
+
+詳細は [`docs/ACCESS_CONTROL_REVIEW.md`](./ACCESS_CONTROL_REVIEW.md) §C-2 と [issue #50](https://github.com/mopinfish/geo-base/issues/50) を参照。
+
+### よくあるエラー
+
+| HTTP | 典型的な detail | 原因 / 対処 |
+|---|---|---|
+| 401 | `Authentication required` 等 | `Authorization: Bearer <api_key>` 形式を確認 |
+| 403 | `write scope required to create tileset`（POST /api/tilesets のみ専用メッセージ）/ `Not authorized to ...`（その他の write 系。scope 不足とリソース認可不足を区別せず単一メッセージで返す） | scope 不足: 必要な `scopes`（`write` / `delete`）を含めて API キーを再発行。リソース認可: team API キーの場合は `team_id` と `team_tilesets.permission_level` を確認 |
+| 429 | `API key rate limit exceeded` | rate limit 超過。後述の rate limit セクションを参照 |
+
+---
+
 ## 環境変数リファレンス
 
 詳細仕様（バリデーションルール含む）は設計書 §9.1 を参照。ここでは主要変数のみ列挙します。
