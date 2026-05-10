@@ -8,7 +8,7 @@
 
 ```
 geo-base/
-├── api/                    # FastAPI タイルサーバー (Vercel)
+├── api/                    # FastAPI タイルサーバー (Fly.io)
 │   └── lib/main.py         # メインアプリケーション
 ├── mcp/                    # MCP サーバー (Fly.io)
 │   ├── server.py           # MCPサーバー本体
@@ -125,23 +125,20 @@ cd /path/to/geo-base/api
 # 依存関係をインストール
 uv sync
 
-# 開発サーバーを起動
-uv run uvicorn lib.main:app --reload --port 3000
-
-# または Vercel CLI を使用
-vercel dev
+# 開発サーバーを起動（API は port 8000 が現行規約。CLAUDE.md 参照）
+uv run uvicorn lib.main:app --reload --port 8000
 ```
 
 **動作確認:**
 ```fish
 # ヘルスチェック
-curl http://localhost:3000/api/health
+curl http://localhost:8000/api/health
 
 # タイルセット一覧
-curl http://localhost:3000/api/tilesets
+curl http://localhost:8000/api/tilesets
 
 # フィーチャー検索
-curl "http://localhost:3000/api/features?bbox=139.5,35.5,140.0,36.0&limit=5"
+curl "http://localhost:8000/api/features?bbox=139.5,35.5,140.0,36.0&limit=5"
 ```
 
 ### 2.4 MCPサーバーのライブテスト
@@ -212,8 +209,9 @@ Claude Desktopを再起動後、以下のようなプロンプトでテスト：
 
 | サービス | URL |
 |---------|-----|
-| API (Vercel) | https://geo-base-api.fly.dev |
+| API (Fly.io) | https://geo-base-api.fly.dev |
 | MCP (Fly.io) | https://geo-base-mcp.fly.dev |
+| Admin UI (Vercel) | https://geo-base-admin.vercel.app |
 
 ### 3.2 APIサーバーの確認
 
@@ -390,8 +388,9 @@ curl -X DELETE https://geo-base-api.fly.dev/api/features/{feature_id} \
 cd /path/to/geo-base/mcp
 fly logs
 
-# Vercel (API サーバー)
-vercel logs https://geo-base-api.fly.dev
+# Fly.io (API サーバー)
+cd /path/to/geo-base/api
+fly logs
 ```
 
 ### 5.3 デバッグモード
@@ -406,12 +405,14 @@ DEBUG=true TILE_SERVER_URL=http://localhost:3000 uv run python server.py
 
 ## 6. デプロイ手順
 
-### 6.1 APIサーバー（Vercel）
+### 6.1 APIサーバー（Fly.io）
 
 ```fish
 cd /path/to/geo-base/api
-vercel --prod
+fly deploy
 ```
+
+詳細は `api/FLY_DEPLOY.md` 参照。
 
 ### 6.2 MCPサーバー（Fly.io）
 

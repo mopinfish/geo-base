@@ -167,22 +167,22 @@ cd docker && docker compose up -d postgis
 
 ---
 
-# Vercel デプロイ構成
+# Vercel デプロイ構成（Admin UI のみ）
 
-同一リポジトリから2つのVercelプロジェクトをデプロイします。
+> Vercel にデプロイするのは **Admin UI (Next.js) の `geo-base-admin` プロジェクトのみ**です。
+> FastAPI タイルサーバーは現在 Fly.io (`geo-base-api`) でホストしており、
+> 旧 Vercel API デプロイ (`geo-base` project) は廃止済み（詳細は `api/FLY_DEPLOY.md`）。
 
-## プロジェクト構成
+## プロジェクト構成（参考: 全コンポーネント）
 
-| Vercelプロジェクト | Root Directory | URL | 説明 |
-|------------------|----------------|-----|------|
-| `geo-base` | `.`（ルート） | geo-base-api.fly.dev | FastAPI タイルサーバー |
-| `geo-base-admin` | `app` | geo-base-admin.vercel.app | Next.js 管理画面 |
+| プロジェクト | プラットフォーム | Root Directory | URL | デプロイ手順 |
+|---|---|---|---|---|
+| `geo-base-admin` | **Vercel** | `app` | https://geo-base-admin.vercel.app | 本セクション |
+| `geo-base-api` | Fly.io | `api` | https://geo-base-api.fly.dev | `api/FLY_DEPLOY.md` |
+| `geo-base-mcp` | Fly.io | `mcp` | https://geo-base-mcp.fly.dev | `cd mcp && fly deploy` |
+| `geo-base-pg` | Fly.io | `pg` | `geo-base-pg.internal` (internal) | `docs/POSTGRES_SETUP.md` |
 
-## 既存APIプロジェクト（変更不要）
-
-現在の `geo-base` プロジェクトは変更不要です。
-
-## Admin UIプロジェクトの作成手順
+## Admin UI (Vercel) プロジェクトの作成手順
 
 ### 1. Vercel Dashboardで新規プロジェクト作成
 
