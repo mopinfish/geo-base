@@ -159,9 +159,9 @@ class TestS3StorageClient:
     def test_upload_file_returns_url(self, storage_client, s3_bucket):
         url = storage_client.upload_file("foo/bar.tif", _TIFF_MAGIC_LE, "image/tiff")
         assert url is not None
-        # default get_public_url: <endpoint>/<bucket>/<key>
-        # endpoint_url=None なので Tigris ではなく moto の AWS デフォルト endpoint
-        # が使われる。少なくとも path 部分は含まれる。
+        # `storage_client` fixture が `endpoint_url="https://s3.amazonaws.com"` を
+        # 明示しているため、`get_public_url` の戻りは `<endpoint>/<bucket>/<key>` 形式。
+        # endpoint 部分は moto が intercept するので外部通信は発生しない。
         assert "foo/bar.tif" in url
         assert s3_bucket in url
 

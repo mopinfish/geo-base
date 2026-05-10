@@ -711,11 +711,13 @@ async def upload_cog(
         
         # Generate storage path. file.filename はクライアントが任意の文字列を投入できる
         # ため、S3 key として使う前にサニタイズする:
-        #   - 拡張子は .tif/.tiff/.geotiff に正規化
-        #   - basename のみ使う（path traversal 防止）
-        #   - 安全文字 [A-Za-z0-9._-] のみ残す
-        #   - 空文字 fallback で `cog.tif` に
-        # その上で衝突回避のために uuid4 + ISO 日付プレフィックスを付与する。
+        #   - basename のみ使う（path traversal 防止、`/` と `\\` の両方に対応）
+        #   - 安全文字 [A-Za-z0-9._-] 以外を `_` に置換
+        #   - 空文字 / dot-only fallback で `cog.tif` に
+        # ファイル種別 (TIFF) の検証は本処理の上流の `validate_cog_file(file_content)`
+        # で magic bytes チェック済みなので、ここでは拡張子の正規化はしない（拡張子は
+        # ユーザー由来の表示用情報として元の値を保持）。衝突回避のために uuid4 + ISO
+        # 日付プレフィックスを付与する。
         original_filename = (file.filename or "upload.tif").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
         safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", original_filename)
         if not safe_filename or safe_filename.startswith("."):
