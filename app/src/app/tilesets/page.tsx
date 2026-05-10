@@ -230,7 +230,7 @@ export default function TilesetsPage() {
               />
               更新
             </Button>
-            <Link href="/tilesets/new">
+            <Link href="/tilesets/new" data-testid="tileset-create-link">
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
                 新規作成
@@ -364,6 +364,7 @@ export default function TilesetsPage() {
                   {filteredTilesets.map((tileset) => (
                     <TableRow
                       key={tileset.id}
+                      data-testid="tileset-list-row"
                       className={
                         selectedIds.has(tileset.id) ? "bg-muted/50" : ""
                       }
