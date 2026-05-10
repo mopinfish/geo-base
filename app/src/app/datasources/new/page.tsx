@@ -362,7 +362,7 @@ export default function NewDatasourcePage() {
                       <SelectItem value="url">
                         <div className="flex items-center gap-2">
                           <ExternalLink className="h-4 w-4" />
-                          URL を指定（外部 HTTP サーバー / 既存の S3 バケット）
+                          URL を指定（外部 HTTP(S) サーバー）
                         </div>
                       </SelectItem>
                       <SelectItem value="upload">
@@ -375,7 +375,7 @@ export default function NewDatasourcePage() {
                   </Select>
                   <p className="text-sm text-muted-foreground">
                     {inputMode === "url"
-                      ? "公開された URL を指定する場合に選択します"
+                      ? "外部の HTTP(S) URL を指定します（s3:// 等の内部 URL は対象外）"
                       : "ローカルのファイルを直接 Fly Tigris (S3 互換 storage) にアップロードします"}
                   </p>
                 </div>

@@ -56,13 +56,17 @@ def _setup_gdal_s3_env() -> None:
 
     Tigris や R2 のような S3 互換 storage に対して rasterio/GDAL の `/vsis3/` を
     使うために必要な env を設定。すでに `AWS_S3_ENDPOINT` が立っていれば触らない。
+
+    本関数は import 時に呼ばれる（`raster_tiles` が rasterio を import するより前に
+    GDAL env を立てる必要があるため）。`get_settings()` を使うと `JWT_SECRET` 必須
+    バリデーションに引っかかってストレージを使わない script/test/型チェックでも
+    例外になり得るため、env-only で解決する。endpoint env が無ければ何もしない
+    （ストレージ未使用環境では GDAL 設定自体が不要）。
     """
     if os.environ.get("AWS_S3_ENDPOINT"):
         return
-    boto3_endpoint = (
-        os.environ.get("AWS_ENDPOINT_URL_S3")
-        or os.environ.get("S3_ENDPOINT_URL")
-        or get_settings().s3_endpoint_url
+    boto3_endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get(
+        "S3_ENDPOINT_URL"
     )
     if not boto3_endpoint:
         return
