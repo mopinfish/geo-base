@@ -1,4 +1,4 @@
-"""Tests for check_tileset_access_v2 / get_tileset_with_access_check_v2."""
+"""Tests for check_tileset_access_v2 (sync) and acheck_tileset_access_v2 (async wrapper)."""
 import pytest
 import uuid
 from lib.auth import (
