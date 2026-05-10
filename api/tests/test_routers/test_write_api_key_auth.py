@@ -13,10 +13,11 @@ API キーから書き込みできなかった。本 PR で `require_auth_contex
 - JWT 既存フロー → 引き続き動作（後方互換）
 
 テスト分離: write 系 endpoint は handler 内で `conn.commit()` を呼ぶため、
-そのままだとテスト DB にデータが残留する。`db_conn.commit` を no-op に
-monkeypatch して、テスト終了時の `db_conn.rollback()` で全データを
-clean up する形にしている（test 内で commit してもアプリ層では成功扱い、
-DB 状態はテスト境界で巻き戻る）。
+そのままだとテスト DB にデータが残留する。本ファイルでは `_CommitNoOpConn`
+薄い proxy クラス（commit() を no-op に置換、他属性は委譲）で `db_conn`
+を包んで dependency_overrides に渡し、テスト終了時の `db_conn.rollback()`
+で全変更を巻き戻している（psycopg2 の Connection は `commit` 属性が
+read-only で `monkeypatch.setattr` が効かないため proxy 経由）。
 """
 import uuid
 
@@ -124,7 +125,11 @@ def make_tileset(db_conn):
 
 @pytest.fixture
 def make_team_tileset(db_conn):
-    """team + member + 共有 tileset を作って permission_level を返す。"""
+    """team + owner + member + team 共有 tileset を作る。
+
+    Returns: dict with `tileset_id`, `team_id`, `owner_id`, `member_id`
+    （permission_level は引数で指定したものが team_tilesets 行に保存される）
+    """
 
     def _make(permission_level="write"):
         owner_id = str(uuid.uuid4())
