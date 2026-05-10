@@ -79,3 +79,25 @@ def test_reset_handler_accepts_worker_database_prefix(monkeypatch):
     assert res.status_code != 400, (
         f"Expected non-400 (prefix check passed), got {res.status_code}: {res.text}"
     )
+
+
+def test_tokens_endpoint_requires_email(monkeypatch):
+    """email 未指定なら 400。"""
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/geo_base_e2e",
+    )
+    app = _make_app(monkeypatch, "1")
+    client = TestClient(app)
+    res = client.get("/api/test/tokens?type=team_invitation")
+    assert res.status_code == 400
+
+
+def test_tokens_endpoint_404_when_e2e_mode_unset(monkeypatch):
+    """E2E_MODE 未設定なら 404。"""
+    app = _make_app(monkeypatch, None)
+    client = TestClient(app)
+    res = client.get(
+        "/api/test/tokens?type=team_invitation&email=x@example.com",
+    )
+    assert res.status_code == 404

@@ -16,7 +16,7 @@ export default function PasswordResetRequestPage() {
 
   if (submitted) {
     return (
-      <div className="container max-w-md mx-auto py-12">
+      <div className="container max-w-md mx-auto py-12" data-testid="password-reset-success">
         <h1 className="text-2xl font-bold mb-4">確認</h1>
         <p>該当する email が登録されている場合、リセット手順を記載したメールを送信しました。</p>
       </div>
@@ -30,8 +30,14 @@ export default function PasswordResetRequestPage() {
         <input
           type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder="メールアドレス" className="w-full p-2 border rounded"
+          data-testid="password-reset-email"
         />
-        <button type="submit" className="w-full p-2 bg-blue-600 text-white rounded">送信</button>
+        <button
+          type="submit" className="w-full p-2 bg-blue-600 text-white rounded"
+          data-testid="password-reset-submit"
+        >
+          送信
+        </button>
       </form>
     </div>
   );
