@@ -6,12 +6,26 @@ const nextConfig: NextConfig = {
     // 同一オリジン化により HttpOnly refresh cookie がブラウザに保存・送信される
     // （vercel.app と fly.dev は別 eTLD+1 のため直接 fetch では cookie が共有不可）。
     //
-    // - 本番 (Vercel): API_BACKEND_URL を server-side env として設定
+    // - 本番 (Vercel): API_BACKEND_URL を server-side env として **必須**
     // - dev: NEXT_PUBLIC_API_URL を流用、未設定なら localhost:8000
-    const apiUrl =
+
+    // Vercel build で API_BACKEND_URL が未設定だと localhost に rewrite されて
+    // 静かに壊れる。fail-fast でビルド時点で気付けるようにする。
+    if (process.env.VERCEL === "1" && !process.env.API_BACKEND_URL) {
+      throw new Error(
+        "API_BACKEND_URL must be set when building on Vercel. " +
+          "Configure it in the project's Environment Variables " +
+          "(e.g. https://geo-base-api.fly.dev).",
+      );
+    }
+
+    // 末尾スラッシュは正規化（`https://example.com/` + `/api/...` で `//` に
+    // ならないように）。
+    const apiUrl = (
       process.env.API_BACKEND_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
-      "http://localhost:8000";
+      "http://localhost:8000"
+    ).replace(/\/+$/, "");
     return [
       { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },
     ];
