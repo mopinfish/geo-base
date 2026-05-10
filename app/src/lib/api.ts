@@ -221,12 +221,16 @@ export interface DatasourceTestResult {
 // Issue #101: Direct upload エンドポイント (`POST /api/datasources/{cog,pmtiles}/upload`)
 // のレスポンス。`url` フィールドは S3 互換 storage の場合 `s3://bucket/path` 形式で返る
 // ため、ブラウザに開かせるリンク先には使えない（表示のみ）。
+//
+// upload 実装は常に `'s3'` を返す（lib/routers/datasources.py 内で hardcode）が、
+// 既存 `Datasource.storage_provider` (リクエスト用 `StorageProvider`) と同じ union に
+// 寄せて呼び出し側の分岐を安全にする。
 export interface CogUploadResponse {
   id: string;
   tileset_id: string;
   type: 'cog';
   url: string;
-  storage_provider: string;
+  storage_provider: StorageProvider;
   band_count?: number | null;
   band_descriptions?: string[] | null;
   native_crs?: string | null;
@@ -243,7 +247,7 @@ export interface PmtilesUploadResponse {
   tileset_id: string;
   type: 'pmtiles';
   url: string;
-  storage_provider: string;
+  storage_provider: StorageProvider;
   tile_type?: string | null;
   compression?: string | null;
   min_zoom?: number | null;
@@ -902,9 +906,11 @@ class ApiClient {
     formData.append('file', file);
     const headers: HeadersInit = {};
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    // 認証は Authorization header で完結する。`request()` も `credentials` を
+    // 付けていないため揃える（Cookie 認証は AuthClient (`/lib/auth/client.ts`) 側）。
     const response = await fetch(
       `${this.baseUrl}/api/datasources/cog/upload?tileset_id=${encodeURIComponent(tilesetId)}`,
-      { method: 'POST', body: formData, headers, credentials: 'include' },
+      { method: 'POST', body: formData, headers },
     );
     if (!response.ok) {
       let detail = `HTTP ${response.status}: ${response.statusText}`;
@@ -927,9 +933,10 @@ class ApiClient {
     formData.append('file', file);
     const headers: HeadersInit = {};
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    // `uploadCog` と同様に `credentials` は付けない（Authorization header で認証）。
     const response = await fetch(
       `${this.baseUrl}/api/datasources/pmtiles/upload?tileset_id=${encodeURIComponent(tilesetId)}`,
-      { method: 'POST', body: formData, headers, credentials: 'include' },
+      { method: 'POST', body: formData, headers },
     );
     if (!response.ok) {
       let detail = `HTTP ${response.status}: ${response.statusText}`;

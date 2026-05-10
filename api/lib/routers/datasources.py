@@ -3,6 +3,7 @@ Datasources CRUD endpoints.
 """
 
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -28,6 +29,8 @@ from lib.auth import (
 from lib.pmtiles import is_pmtiles_available, get_pmtiles_metadata
 from lib.raster_tiles import is_rasterio_available, get_cog_info
 from lib.storage import get_storage_client, validate_cog_file, validate_pmtiles_file
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/datasources", tags=["datasources"])
@@ -455,7 +458,7 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
                 if layers:
                     layers_json = json.dumps(layers)
         except Exception as meta_error:
-            print(f"Warning: Could not fetch PMTiles metadata: {meta_error}")
+            logger.warning("Could not fetch PMTiles metadata: %s", meta_error)
     
     # Insert with metadata
     cur.execute(
@@ -556,7 +559,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
                     band_descriptions_json = json.dumps(band_descriptions)
                 native_crs = cog_info.get("crs")
         except Exception as meta_error:
-            print(f"Warning: Could not fetch COG info: {meta_error}")
+            logger.warning("Could not fetch COG info: %s", meta_error)
     
     # Insert with metadata
     cur.execute(
@@ -785,7 +788,7 @@ async def upload_cog(
                         band_descriptions_json = json.dumps(band_descriptions)
                     native_crs = cog_info.get("crs")
             except Exception as meta_error:
-                print(f"Warning: Could not fetch COG info: {meta_error}")
+                logger.warning("Could not fetch COG info: %s", meta_error)
         
         # Insert datasource record
         with conn.cursor() as cur:
@@ -978,7 +981,7 @@ async def upload_pmtiles(
                     if layers:
                         layers_json = json.dumps(layers)
             except Exception as meta_error:
-                print(f"Warning: Could not fetch PMTiles metadata: {meta_error}")
+                logger.warning("Could not fetch PMTiles metadata: %s", meta_error)
 
         with conn.cursor() as cur:
             cur.execute(
