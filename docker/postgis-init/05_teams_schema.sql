@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS teams (
 
 COMMENT ON TABLE teams IS 'チーム/組織の管理テーブル';
 COMMENT ON COLUMN teams.slug IS 'URLフレンドリーな一意識別子';
-COMMENT ON COLUMN teams.owner_id IS 'チームのオーナー（Supabase auth.usersのID）';
+COMMENT ON COLUMN teams.owner_id IS 'チームのオーナー（users.id を参照、AUTH_PROVIDER=local）';
 
 -- Team members table
 CREATE TABLE IF NOT EXISTS team_members (
