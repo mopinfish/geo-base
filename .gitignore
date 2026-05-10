@@ -110,3 +110,6 @@ geo-base.txt
 
 # data
 api/data/*.png
+
+# Playwright MCP (browser session artifacts / screenshots)
+.playwright-mcp/
