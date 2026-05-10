@@ -19,6 +19,7 @@ from lib.auth import (
     AuthContext,
     get_auth_context_optional,
     check_tileset_access_v2,
+    check_tileset_write_access_v2,
 )
 from lib.tiles import generate_tilejson
 from lib.pmtiles import generate_pmtiles_tilejson
@@ -595,49 +596,68 @@ def create_tileset(
 
 
 @router.post("/{tileset_id}/calculate-bounds")
-def calculate_tileset_bounds(
+async def calculate_tileset_bounds(
     tileset_id: str,
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
 ):
     """
     Calculate and update tileset bounds from its features.
-    
+
     This endpoint calculates the bounding box from all features in the tileset
     and updates the tileset's bounds and center fields.
-    
+
     Useful after bulk importing GeoJSON features.
-    
-    Requires authentication and ownership of the tileset.
+
+    実行可能な条件（issue #49、`update` action 相当）— **JWT 必須**:
+    - 個人タイルセットの所有者
+    - team 経由で `can_user_perform_action(user_id, tileset_id, 'update')`
+      が True を返すユーザー（team_role=owner/administrator の role 継承、
+      または team_tilesets.permission_level が write 以上の明示）
+
+    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
+    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
+    > のため API キーでは呼べません。`require_auth_context` への移行は
+    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
+        # Step 1: 認可判定に必要なフィールドだけ読んで cursor を閉じる
+        # （await 越しに同一 conn が `asyncio.to_thread` から再利用されるため、
+        # cursor を開いたままにしないこと）
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id, type FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-            
-            if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this tileset")
-            
-            tileset_type = row[2]
-            
-            # Only calculate bounds for vector tilesets (which have features)
-            if tileset_type != "vector":
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Bounds calculation is only supported for vector tilesets, not {tileset_type}"
-                )
-            
-            # Calculate bounding box from all features in this tileset
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Tileset not found")
+
+        # Step 2: 認可判定（cursor 外で await）
+        tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+        ctx = AuthContext.from_jwt_user(user)
+        if not await check_tileset_write_access_v2(
+            conn, tileset_for_access, ctx, "update"
+        ):
+            raise HTTPException(
+                status_code=403, detail="Not authorized to update this tileset"
+            )
+
+        tileset_type = row[2]
+
+        # Only calculate bounds for vector tilesets (which have features)
+        if tileset_type != "vector":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bounds calculation is only supported for vector tilesets, not {tileset_type}"
+            )
+
+        # Step 3: bounds 計算 + UPDATE は新しい cursor で
+        with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT 
+                SELECT
                     ST_XMin(ST_Extent(geom)) as xmin,
                     ST_YMin(ST_Extent(geom)) as ymin,
                     ST_XMax(ST_Extent(geom)) as xmax,
@@ -651,7 +671,7 @@ def calculate_tileset_bounds(
                 (tileset_id,),
             )
             result = cur.fetchone()
-            
+
             if not result or result[0] is None:
                 return {
                     "message": "No features found in tileset",
@@ -660,10 +680,9 @@ def calculate_tileset_bounds(
                     "bounds": None,
                     "center": None,
                 }
-            
+
             xmin, ymin, xmax, ymax, center_x, center_y, feature_count = result
-            
-            # Update tileset with calculated bounds and center
+
             cur.execute(
                 """
                 UPDATE tilesets
@@ -676,18 +695,17 @@ def calculate_tileset_bounds(
                 (xmin, ymin, xmax, ymax, center_x, center_y, tileset_id),
             )
             conn.commit()
-            
-            # Invalidate cache for this tileset
-            invalidate_tileset_cache(f"vector:{tileset_id}")
-            
-            return {
-                "message": "Bounds calculated and updated successfully",
-                "tileset_id": tileset_id,
-                "feature_count": feature_count,
-                "bounds": [xmin, ymin, xmax, ymax],
-                "center": [center_x, center_y],
-            }
-            
+
+        invalidate_tileset_cache(f"vector:{tileset_id}")
+
+        return {
+            "message": "Bounds calculated and updated successfully",
+            "tileset_id": tileset_id,
+            "feature_count": feature_count,
+            "bounds": [xmin, ymin, xmax, ymax],
+            "center": [center_x, center_y],
+        }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -701,7 +719,7 @@ def calculate_tileset_bounds(
 
 
 @router.patch("/{tileset_id}")
-def update_tileset(
+async def update_tileset(
     tileset_id: str,
     tileset: TilesetUpdate,
     user: User = Depends(require_auth),
@@ -709,70 +727,93 @@ def update_tileset(
 ):
     """
     Update an existing tileset.
-    
-    Requires authentication and ownership of the tileset.
+
+    実行可能な条件（issue #49、`update` action）— **JWT 必須**:
+    - 個人タイルセットの所有者
+    - team 経由で `can_user_perform_action(user_id, tileset_id, 'update')`
+      が True を返すユーザー（team_role=owner/administrator の role 継承、
+      または team_tilesets.permission_level が write 以上の明示）
+
+    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
+    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
+    > のため API キーでは呼べません。`require_auth_context` への移行は
+    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
+        # Step 1: 認可判定に必要な行を読み出して cursor を閉じる
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-            
-            if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to update this tileset")
-            
-            # Build update query dynamically
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Tileset not found")
+
+        # Step 2: 認可判定（cursor 外で await）
+        tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+        ctx = AuthContext.from_jwt_user(user)
+        if not await check_tileset_write_access_v2(
+            conn, tileset_for_access, ctx, "update"
+        ):
+            raise HTTPException(
+                status_code=403, detail="Not authorized to update this tileset"
+            )
+
+        # Step 3: UPDATE 用に新しい cursor を開く
+        with conn.cursor() as cur:
             updates = []
             params = []
-            
+
             if tileset.name is not None:
                 updates.append("name = %s")
                 params.append(tileset.name)
-            
+
             if tileset.description is not None:
                 updates.append("description = %s")
                 params.append(tileset.description)
-            
+
             if tileset.min_zoom is not None:
                 updates.append("min_zoom = %s")
                 params.append(tileset.min_zoom)
-            
+
             if tileset.max_zoom is not None:
                 updates.append("max_zoom = %s")
                 params.append(tileset.max_zoom)
-            
+
             if tileset.bounds is not None and len(tileset.bounds) == 4:
+                # f-string 連結だと NaN/Infinity で SQL 構文エラー / 将来の型変更時に
+                # インジェクション経路となるため、プレースホルダで bind する
                 west, south, east, north = tileset.bounds
-                updates.append(f"bounds = ST_MakeEnvelope({west}, {south}, {east}, {north}, 4326)")
-            
+                updates.append(
+                    "bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
+                )
+                params.extend([west, south, east, north])
+
             if tileset.center is not None and len(tileset.center) >= 2:
                 lon, lat = tileset.center[0], tileset.center[1]
-                updates.append(f"center = ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)")
-            
+                updates.append("center = ST_SetSRID(ST_MakePoint(%s, %s), 4326)")
+                params.extend([lon, lat])
+
             if tileset.attribution is not None:
                 updates.append("attribution = %s")
                 params.append(tileset.attribution)
-            
+
             if tileset.is_public is not None:
                 updates.append("is_public = %s")
                 params.append(tileset.is_public)
-            
+
             if tileset.metadata is not None:
                 updates.append("metadata = %s")
                 params.append(json.dumps(tileset.metadata))
-            
+
             if not updates:
                 raise HTTPException(status_code=400, detail="No fields to update")
-            
+
             updates.append("updated_at = NOW()")
             params.append(tileset_id)
-            
+
             cur.execute(
                 f"""
                 UPDATE tilesets
@@ -784,29 +825,29 @@ def update_tileset(
                 """,
                 params,
             )
-            
+
             row = cur.fetchone()
             conn.commit()
-            
-            # Invalidate cache for this tileset
-            invalidate_tileset_cache(f"raster:{tileset_id}")
-            invalidate_tileset_cache(f"pmtiles:{tileset_id}")
-            invalidate_tileset_cache(f"vector:{tileset_id}")
-            
-            return {
-                "id": str(row[0]),
-                "name": row[1],
-                "description": row[2],
-                "type": row[3],
-                "format": row[4],
-                "min_zoom": row[5],
-                "max_zoom": row[6],
-                "attribution": row[7],
-                "is_public": row[8],
-                "created_at": row[9].isoformat() if row[9] else None,
-                "updated_at": row[10].isoformat() if row[10] else None,
-            }
-            
+
+        # Invalidate cache for this tileset
+        invalidate_tileset_cache(f"raster:{tileset_id}")
+        invalidate_tileset_cache(f"pmtiles:{tileset_id}")
+        invalidate_tileset_cache(f"vector:{tileset_id}")
+
+        return {
+            "id": str(row[0]),
+            "name": row[1],
+            "description": row[2],
+            "type": row[3],
+            "format": row[4],
+            "min_zoom": row[5],
+            "max_zoom": row[6],
+            "attribution": row[7],
+            "is_public": row[8],
+            "created_at": row[9].isoformat() if row[9] else None,
+            "updated_at": row[10].isoformat() if row[10] else None,
+        }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -820,42 +861,59 @@ def update_tileset(
 
 
 @router.delete("/{tileset_id}", status_code=204)
-def delete_tileset(
+async def delete_tileset(
     tileset_id: str,
     user: User = Depends(require_auth),
     conn=Depends(get_connection),
 ):
     """
     Delete a tileset and all associated features.
-    
-    Requires authentication and ownership of the tileset.
+
+    実行可能な条件（issue #49、`delete` action）— **JWT 必須**:
+    - 個人タイルセットの所有者
+    - team 経由で `can_user_perform_action(user_id, tileset_id, 'delete')`
+      が True を返すユーザー
+      - team_role=owner/administrator の場合は role 継承で admin 相当となり可
+      - もしくは team_tilesets.permission_level='admin' の明示
+
+    > 認可ヘルパ `check_tileset_write_access_v2` は API キー経路もサポート
+    > しますが、本エンドポイントは現状 `Depends(require_auth)`（JWT 必須）
+    > のため API キーでは呼べません。`require_auth_context` への移行は
+    > [issue #50](https://github.com/mopinfish/geo-base/issues/50) で予定。
     """
     try:
+        # Step 1: 認可判定に必要な行を読み出して cursor を閉じる
         with conn.cursor() as cur:
-            # Check if tileset exists and user owns it
             cur.execute(
                 "SELECT id, user_id FROM tilesets WHERE id = %s",
                 (tileset_id,),
             )
             row = cur.fetchone()
-            
-            if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
-            
-            if str(row[1]) != user.id:
-                raise HTTPException(status_code=403, detail="Not authorized to delete this tileset")
-            
-            # Delete tileset (cascades to features due to FK constraint)
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Tileset not found")
+
+        # Step 2: 認可判定（cursor 外で await）
+        tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+        ctx = AuthContext.from_jwt_user(user)
+        if not await check_tileset_write_access_v2(
+            conn, tileset_for_access, ctx, "delete"
+        ):
+            raise HTTPException(
+                status_code=403, detail="Not authorized to delete this tileset"
+            )
+
+        # Step 3: DELETE 用に新しい cursor を開く（FK CASCADE で features も削除される）
+        with conn.cursor() as cur:
             cur.execute("DELETE FROM tilesets WHERE id = %s", (tileset_id,))
             conn.commit()
-            
-            # Invalidate cache for this tileset
-            invalidate_tileset_cache(f"raster:{tileset_id}")
-            invalidate_tileset_cache(f"pmtiles:{tileset_id}")
-            invalidate_tileset_cache(f"vector:{tileset_id}")
-            
-            return Response(status_code=204)
-            
+
+        invalidate_tileset_cache(f"raster:{tileset_id}")
+        invalidate_tileset_cache(f"pmtiles:{tileset_id}")
+        invalidate_tileset_cache(f"vector:{tileset_id}")
+
+        return Response(status_code=204)
+
     except HTTPException:
         raise
     except Exception as e:

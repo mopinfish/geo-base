@@ -45,9 +45,15 @@ class AuthContext(BaseModel):
         )
 
     def has_scope(self, required: str) -> bool:
-        """admin > delete > write > read の階層で判定。"""
+        """admin > delete > write > read の階層で判定。
+
+        未知の `required` が渡された場合は False（安全側）。タイポや
+        新規 scope を導入し忘れた場合に意図せず許可されないようにする。
+        """
         if not self.scopes:
             return False
-        required_level = _SCOPE_HIERARCHY.get(required, 0)
+        if required not in _SCOPE_HIERARCHY:
+            return False
+        required_level = _SCOPE_HIERARCHY[required]
         max_level = max(_SCOPE_HIERARCHY.get(s, 0) for s in self.scopes)
         return max_level >= required_level
