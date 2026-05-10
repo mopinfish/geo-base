@@ -97,6 +97,11 @@ fly deploy
 | `COOKIE_SAMESITE` / `COOKIE_SECURE` | refresh Cookie のポリシー | ❌ |
 | `LOCAL_AUTH_ALLOW_SIGNUP` | local モードで signup を許可するか | ❌ |
 | `ENVIRONMENT` | 環境名（production/development） | ❌ |
+| `S3_BUCKET` | COG/PMTiles アップロード先 bucket 名（Fly Tigris） | ⚠️ upload 機能を使う場合 |
+| `S3_ENDPOINT_URL` | S3 互換 storage の endpoint。既定 `https://fly.storage.tigris.dev` | ❌ |
+| `S3_REGION` | S3 互換 storage の region。既定 `auto` | ❌ |
+| `S3_PUBLIC_BASE_URL` | 公開配信用 base URL（CDN 経由など）。未設定なら endpoint+bucket | ❌ |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 互換 storage の credential（boto3 標準） | ⚠️ upload 機能を使う場合 |
 
 ## 開発
 
@@ -159,8 +164,13 @@ open http://localhost:8000/docs
 
 ### Datasources
 - `GET /api/datasources` - データソース一覧
-- `POST /api/datasources` - データソース作成
-- `POST /api/datasources/cog/upload` - COGアップロード
+- `POST /api/datasources` - URL 指定でデータソース作成
+- `POST /api/datasources/cog/upload?tileset_id={id}` - COG ファイル直接アップロード (multipart/form-data)
+- `POST /api/datasources/pmtiles/upload?tileset_id={id}` - PMTiles ファイル直接アップロード (multipart/form-data, Issue #101)
+
+upload エンドポイントは Fly Tigris (S3 互換 storage) の private bucket に保存し、
+内部 URL として `s3://bucket/path` を datasource に記録する。タイル配信は API 経由
+（`/api/tiles/...`）でのみ可能で、bucket 自体は外部から直接アクセスできない。
 
 ### Stats & Colormaps
 - `GET /api/stats` - 統計情報

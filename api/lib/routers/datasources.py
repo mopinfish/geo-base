@@ -3,6 +3,7 @@ Datasources CRUD endpoints.
 """
 
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -27,7 +28,9 @@ from lib.auth import (
 )
 from lib.pmtiles import is_pmtiles_available, get_pmtiles_metadata
 from lib.raster_tiles import is_rasterio_available, get_cog_info
-from lib.storage import get_storage_client, validate_cog_file
+from lib.storage import get_storage_client, validate_cog_file, validate_pmtiles_file
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/datasources", tags=["datasources"])
@@ -84,6 +87,24 @@ class COGUploadResponse(BaseModel):
     max_zoom: Optional[int] = None
     bounds: Optional[List[float]] = None
     center: Optional[List[float]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+
+
+class PMTilesUploadResponse(BaseModel):
+    """Response model for PMTiles upload (Issue #101)."""
+    id: str
+    tileset_id: str
+    type: str = "pmtiles"
+    url: str
+    storage_provider: str
+    tile_type: Optional[str] = None
+    compression: Optional[str] = None
+    min_zoom: Optional[int] = None
+    max_zoom: Optional[int] = None
+    bounds: Optional[List[float]] = None
+    center: Optional[List[float]] = None
+    layers: Optional[List[Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
 
@@ -437,7 +458,7 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
                 if layers:
                     layers_json = json.dumps(layers)
         except Exception as meta_error:
-            print(f"Warning: Could not fetch PMTiles metadata: {meta_error}")
+            logger.warning("Could not fetch PMTiles metadata: %s", meta_error)
     
     # Insert with metadata
     cur.execute(
@@ -538,7 +559,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
                     band_descriptions_json = json.dumps(band_descriptions)
                 native_crs = cog_info.get("crs")
         except Exception as meta_error:
-            print(f"Warning: Could not fetch COG info: {meta_error}")
+            logger.warning("Could not fetch COG info: %s", meta_error)
     
     # Insert with metadata
     cur.execute(
@@ -633,6 +654,27 @@ def _update_tileset_from_metadata(cur, tileset_id, source_bounds, source_center,
             )
 
 
+async def _cleanup_orphan_storage_object(storage_path: Optional[str]) -> None:
+    """アップロード成功後の DB INSERT/COMMIT 失敗で孤児化した S3 オブジェクトを
+    best-effort で削除する。
+
+    `conn.rollback()` だけでは S3 側のオブジェクトは消えないため、明示的に
+    `delete_file` を試みる。cleanup 自体が失敗しても元の例外を伝播させたいので
+    例外は握り潰して warning ログにのみ残す。
+    """
+    if not storage_path:
+        return
+    try:
+        storage = get_storage_client()
+        await run_in_threadpool(storage.delete_file, storage_path)
+    except Exception as cleanup_error:
+        logger.warning(
+            "Failed to cleanup orphan storage object %s: %s",
+            storage_path,
+            cleanup_error,
+        )
+
+
 # ============================================================================
 # COG Upload
 # ============================================================================
@@ -655,6 +697,7 @@ async def upload_cog(
     JWT または `write` scope の API キーで認証が必要（issue #50）。
     親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
     """
+    uploaded_storage_path: Optional[str] = None
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -702,13 +745,9 @@ async def upload_cog(
             )
         
         # Upload to S3 互換 storage (Fly Tigris by default)
+        # `get_storage_client()` は singleton で必ず S3StorageClient を返す。
         storage = get_storage_client()
-        if not storage:
-            raise HTTPException(
-                status_code=500,
-                detail="Storage service is not available"
-            )
-        
+
         # Generate storage path. file.filename はクライアントが任意の文字列を投入できる
         # ため、S3 key として使う前にサニタイズする:
         #   - basename のみ使う（path traversal 防止、`/` と `\\` の両方に対応）
@@ -737,6 +776,9 @@ async def upload_cog(
                 status_code=500,
                 detail="Failed to upload file to storage"
             )
+        # Mark storage object as uploaded so we can clean it up if a subsequent
+        # DB INSERT/COMMIT fails (orphan prevention).
+        uploaded_storage_path = storage_path
         
         # Get COG metadata
         source_bounds = None
@@ -767,7 +809,7 @@ async def upload_cog(
                         band_descriptions_json = json.dumps(band_descriptions)
                     native_crs = cog_info.get("crs")
             except Exception as meta_error:
-                print(f"Warning: Could not fetch COG info: {meta_error}")
+                logger.warning("Could not fetch COG info: %s", meta_error)
         
         # Insert datasource record
         with conn.cursor() as cur:
@@ -807,9 +849,13 @@ async def upload_cog(
                 cur, tileset_id,
                 source_bounds, source_center, source_min_zoom, source_max_zoom
             )
-            
+
             conn.commit()
-            
+            # Commit 済みなので、以降の例外（レスポンス組み立て等）では S3 を
+            # 削除しないように cleanup マーカーをクリアする。これを忘れると
+            # DB に残った datasource が参照する S3 オブジェクトを削除してしまう。
+            uploaded_storage_path = None
+
             # Parse band descriptions from JSON - use safe_json_parse
             band_desc_list = safe_json_parse(row[7])
             
@@ -833,7 +879,202 @@ async def upload_cog(
         raise
     except Exception as e:
         conn.rollback()
+        # DB INSERT/COMMIT 失敗時は upload 済み S3 オブジェクトが孤児化するため掃除
+        await _cleanup_orphan_storage_object(uploaded_storage_path)
         raise HTTPException(status_code=500, detail=f"Error uploading COG: {str(e)}")
+
+
+# ============================================================================
+# PMTiles Upload (Issue #101)
+# ============================================================================
+
+
+@router.post("/pmtiles/upload", status_code=201, response_model=PMTilesUploadResponse)
+async def upload_pmtiles(
+    tileset_id: str = Query(..., description="Parent tileset ID"),
+    file: UploadFile = File(..., description="PMTiles file to upload"),
+    ctx: AuthContext = Depends(require_auth_context),
+    conn=Depends(get_connection),
+):
+    """
+    Upload a PMTiles file to S3 互換 storage (Fly Tigris by default) and create a datasource.
+
+    The file is validated as a PMTiles archive (magic bytes), uploaded to the
+    configured S3 bucket, metadata is extracted via aiopmtiles, and a new
+    `pmtiles_sources` record is inserted linked to the specified tileset.
+
+    JWT または `write` scope の API キーで認証が必要。親タイルセットへの
+    書き込み権限は `check_tileset_write_access_v2` で判定。
+
+    Issue #101 Phase 2 で追加。
+    """
+    uploaded_storage_path: Optional[str] = None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, user_id, type FROM tilesets WHERE id = %s",
+                (tileset_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                raise HTTPException(status_code=404, detail="Tileset not found")
+
+            tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
+            if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to add datasource to this tileset"
+                )
+
+            if row[2] != "pmtiles":
+                raise HTTPException(
+                    status_code=400,
+                    detail="PMTiles datasource can only be added to pmtiles type tileset"
+                )
+
+            cur.execute(
+                "SELECT id FROM pmtiles_sources WHERE tileset_id = %s",
+                (tileset_id,),
+            )
+            if cur.fetchone():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Datasource already exists for this tileset"
+                )
+
+        # Read file content
+        file_content = await file.read()
+
+        # Validate as PMTiles
+        is_valid, validation_message = validate_pmtiles_file(file_content)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid PMTiles file: {validation_message}"
+            )
+
+        # Upload to S3 互換 storage (Fly Tigris by default)
+        # `get_storage_client()` は singleton で必ず S3StorageClient を返す。
+        storage = get_storage_client()
+
+        # Generate storage path (COG upload と同じサニタイズ流儀):
+        #   - basename のみ使う（path traversal 防止、`/` `\\` 両対応）
+        #   - 安全文字 [A-Za-z0-9._-] 以外は `_` に置換
+        #   - 空 / dot-only fallback で `data.pmtiles` に
+        # ファイル種別 (PMTiles magic) は上流の validate_pmtiles_file で確認済み。
+        # `pmtiles/<tileset_id>/<YYYYMMDD>_<uuid8>_<filename>` で衝突回避。
+        original_filename = (file.filename or "upload.pmtiles").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", original_filename)
+        if not safe_filename or safe_filename.startswith("."):
+            safe_filename = "data.pmtiles"
+        date_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
+        unique_token = uuid.uuid4().hex[:8]
+        storage_path = f"pmtiles/{tileset_id}/{date_prefix}_{unique_token}_{safe_filename}"
+
+        # boto3 は同期 I/O なので run_in_threadpool でオフロード（COG upload と同じ）
+        pmtiles_url = await run_in_threadpool(
+            storage.upload_file, storage_path, file_content, "application/vnd.pmtiles"
+        )
+        if not pmtiles_url:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to upload PMTiles to storage"
+            )
+        # 後段の DB INSERT/COMMIT 失敗時に S3 を掃除するためのマーカー。
+        uploaded_storage_path = storage_path
+
+        # Extract metadata via aiopmtiles (s3:// URL でも `aioboto3` 経由で読める)
+        source_bounds = None
+        source_center = None
+        source_min_zoom = None
+        source_max_zoom = None
+        tile_type = None
+        tile_compression = None
+        layers_json = None
+
+        if is_pmtiles_available():
+            try:
+                pmtiles_meta = await get_pmtiles_metadata(pmtiles_url)
+                if pmtiles_meta:
+                    source_bounds = pmtiles_meta.get("bounds")
+                    source_center = pmtiles_meta.get("center")
+                    source_min_zoom = pmtiles_meta.get("min_zoom")
+                    source_max_zoom = pmtiles_meta.get("max_zoom")
+                    tile_type = pmtiles_meta.get("tile_type")
+                    tile_compression = pmtiles_meta.get("tile_compression")
+                    layers = pmtiles_meta.get("layers", [])
+                    if layers:
+                        layers_json = json.dumps(layers)
+            except Exception as meta_error:
+                logger.warning("Could not fetch PMTiles metadata: %s", meta_error)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO pmtiles_sources (
+                    tileset_id, pmtiles_url, storage_provider, metadata,
+                    tile_type, tile_compression, min_zoom, max_zoom,
+                    bounds, center, layers
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, tileset_id, pmtiles_url, storage_provider, metadata,
+                          created_at, updated_at, tile_type, tile_compression,
+                          min_zoom, max_zoom, bounds, center, layers
+                """,
+                (
+                    tileset_id,
+                    pmtiles_url,
+                    "s3",
+                    None,
+                    tile_type,
+                    tile_compression,
+                    source_min_zoom,
+                    source_max_zoom,
+                    json.dumps(source_bounds) if source_bounds else None,
+                    json.dumps(source_center) if source_center else None,
+                    layers_json,
+                ),
+            )
+
+            row = cur.fetchone()
+
+            _update_tileset_from_metadata(
+                cur, tileset_id,
+                source_bounds, source_center, source_min_zoom, source_max_zoom
+            )
+
+            conn.commit()
+            # COG upload と同じく、commit 後の例外では S3 を削除しないように
+            # cleanup マーカーをクリアする。
+            uploaded_storage_path = None
+
+            layers_list = safe_json_parse(row[13])
+
+            return PMTilesUploadResponse(
+                id=str(row[0]),
+                tileset_id=str(row[1]),
+                type="pmtiles",
+                url=row[2],
+                storage_provider=row[3],
+                metadata=safe_json_parse(row[4]),
+                created_at=row[5].isoformat() if row[5] else None,
+                tile_type=row[7],
+                compression=row[8],
+                min_zoom=row[9],
+                max_zoom=row[10],
+                bounds=safe_json_parse(row[11]),
+                center=safe_json_parse(row[12]),
+                layers=layers_list if isinstance(layers_list, list) else None,
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        # DB INSERT/COMMIT 失敗時は upload 済み S3 オブジェクトが孤児化するため掃除
+        await _cleanup_orphan_storage_object(uploaded_storage_path)
+        raise HTTPException(status_code=500, detail=f"Error uploading PMTiles: {str(e)}")
 
 
 # ============================================================================

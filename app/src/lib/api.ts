@@ -218,6 +218,67 @@ export interface DatasourceTestResult {
   info?: Record<string, unknown>;
 }
 
+// Issue #101: Direct upload エンドポイント (`POST /api/datasources/{cog,pmtiles}/upload`)
+// のレスポンス。`url` フィールドは S3 互換 storage の場合 `s3://bucket/path` 形式で返る
+// ため、ブラウザに開かせるリンク先には使えない（表示のみ）。
+//
+// upload 実装は常に `'s3'` を返す（lib/routers/datasources.py 内で hardcode）が、
+// 既存 `Datasource.storage_provider` (リクエスト用 `StorageProvider`) と同じ union に
+// 寄せて呼び出し側の分岐を安全にする。
+export interface CogUploadResponse {
+  id: string;
+  tileset_id: string;
+  type: 'cog';
+  url: string;
+  storage_provider: StorageProvider;
+  band_count?: number | null;
+  band_descriptions?: string[] | null;
+  native_crs?: string | null;
+  min_zoom?: number | null;
+  max_zoom?: number | null;
+  bounds?: number[] | null;
+  center?: number[] | null;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+}
+
+export interface PmtilesUploadResponse {
+  id: string;
+  tileset_id: string;
+  type: 'pmtiles';
+  url: string;
+  storage_provider: StorageProvider;
+  tile_type?: string | null;
+  compression?: string | null;
+  min_zoom?: number | null;
+  max_zoom?: number | null;
+  bounds?: number[] | null;
+  center?: number[] | null;
+  layers?: unknown[] | null;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+}
+
+/**
+ * Issue #101: 表示用 URL ヘルパー。
+ *
+ * バックエンドは S3 互換 storage に upload した datasource を `s3://bucket/path` で
+ * 保持する（private bucket のため `https://` は不可）。UI ではそのまま表示する一方、
+ * ブラウザで開けないため `<a href>` のターゲットには使わない（`isOpenableUrl` を使う）。
+ */
+export function isOpenableUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
+/**
+ * Issue #101: 表示用 URL を返す。現状は内部 URL もそのまま返すが、将来 presigned URL
+ * に差し替える等の余地を残すため helper として切り出している。
+ */
+export function displayUrl(url: string | null | undefined): string {
+  return url ?? '';
+}
+
 export interface CalculateBoundsResult {
   message: string;
   tileset_id: string;
@@ -832,6 +893,60 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  /**
+   * Issue #101: COG ファイルを Tigris に直接アップロードして datasource を作成する。
+   *
+   * `Content-Type: application/json` を **付けない**ことで FormData の boundary 付き
+   * `multipart/form-data` をブラウザに自動セットさせる。
+   */
+  async uploadCog(file: File, tilesetId: string): Promise<CogUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const headers: HeadersInit = {};
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    // 認証は Authorization header で完結する。`request()` も `credentials` を
+    // 付けていないため揃える（Cookie 認証は AuthClient (`/lib/auth/client.ts`) 側）。
+    const response = await fetch(
+      `${this.baseUrl}/api/datasources/cog/upload?tileset_id=${encodeURIComponent(tilesetId)}`,
+      { method: 'POST', body: formData, headers },
+    );
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const err = await response.json();
+        detail = err?.detail || detail;
+      } catch { /* keep default */ }
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
+  /**
+   * Issue #101 Phase 2: PMTiles ファイルを Tigris に直接アップロードして
+   * datasource を作成する（PMTiles upload endpoint が PR #88 では存在せず本 PR で
+   * 追加された）。
+   */
+  async uploadPmtiles(file: File, tilesetId: string): Promise<PmtilesUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const headers: HeadersInit = {};
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    // `uploadCog` と同様に `credentials` は付けない（Authorization header で認証）。
+    const response = await fetch(
+      `${this.baseUrl}/api/datasources/pmtiles/upload?tileset_id=${encodeURIComponent(tilesetId)}`,
+      { method: 'POST', body: formData, headers },
+    );
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const err = await response.json();
+        detail = err?.detail || detail;
+      } catch { /* keep default */ }
+      throw new Error(detail);
+    }
+    return response.json();
   }
 
   async deleteDatasource(id: string): Promise<void> {

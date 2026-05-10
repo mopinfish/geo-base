@@ -16,6 +16,12 @@ from io import BytesIO
 from typing import Any, Optional
 import math
 
+# `s3://` URL を `/vsis3/` に正規化するヘルパ。`lib.storage` の import が走る
+# 副作用で GDAL 用 env (`AWS_S3_ENDPOINT` / `AWS_HTTPS` / `AWS_VIRTUAL_HOSTING`)
+# が boto3 標準の `AWS_ENDPOINT_URL_S3` から自動セットされる。
+# 必ず rio-tiler / rasterio の import より前に実行する必要がある。
+from lib.storage import s3_uri_to_gdal_path  # noqa: E402  (intentional load order)
+
 # Note: rio-tiler may not work in Vercel serverless due to GDAL dependencies
 # If deployment fails, consider using AWS Lambda with Docker image
 try:
@@ -314,7 +320,7 @@ def get_raster_tile(
         raise RuntimeError("rio-tiler is not available. Install with: pip install rio-tiler")
     
     try:
-        with COGReader(cog_url) as cog:
+        with COGReader(s3_uri_to_gdal_path(cog_url)) as cog:
             # Check if tile exists within COG bounds
             if not cog.tile_exists(x, y, z):
                 return None
@@ -429,7 +435,7 @@ def get_raster_preview(
         raise RuntimeError("rio-tiler is not available")
     
     try:
-        with COGReader(cog_url) as cog:
+        with COGReader(s3_uri_to_gdal_path(cog_url)) as cog:
             imgdata = cog.preview(
                 indexes=indexes,
                 max_size=max_size,
@@ -526,7 +532,7 @@ def get_raster_part(
         raise RuntimeError("rio-tiler is not available")
     
     try:
-        with COGReader(cog_url) as cog:
+        with COGReader(s3_uri_to_gdal_path(cog_url)) as cog:
             kwargs = {
                 "bbox": bbox,
                 "indexes": indexes,
@@ -583,7 +589,7 @@ def get_cog_info(cog_url: str) -> dict[str, Any]:
     try:
         from rasterio.crs import CRS as RasterioCRS
         
-        with COGReader(cog_url) as cog:
+        with COGReader(s3_uri_to_gdal_path(cog_url)) as cog:
             info = cog.info()
             
             # Get WGS84 bounds using get_geographic_bounds method
@@ -652,7 +658,7 @@ def get_cog_statistics(
         raise RuntimeError("rio-tiler is not available")
     
     try:
-        with COGReader(cog_url) as cog:
+        with COGReader(s3_uri_to_gdal_path(cog_url)) as cog:
             stats = cog.statistics(indexes=indexes)
             
             return {

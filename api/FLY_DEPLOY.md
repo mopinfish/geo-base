@@ -37,11 +37,21 @@ fly secrets set DATABASE_URL="postgresql://postgres:<PASSWORD>@geo-base-pg.inter
 set jwt_secret (openssl rand -base64 64)
 fly secrets set AUTH_PROVIDER=local JWT_SECRET="$jwt_secret"
 
-# ストレージ設定（COG/PMTiles アップロード backend、Fly Tigris を想定。Issue #72 Phase 1.2 で詳細を確定予定）
-# flyctl storage create -a geo-base-api  # bucket 作成（access key/secret が出力される）
-# fly secrets set S3_BUCKET="geo-base-tiles"
-# fly secrets set AWS_ACCESS_KEY_ID="..."
-# fly secrets set AWS_SECRET_ACCESS_KEY="..."
+# ストレージ設定（COG/PMTiles アップロード backend、Fly Tigris）
+# Issue #72 で 2026-05-10 に Supabase Storage から移行済み。private bucket 運用。
+# flyctl storage create -a geo-base-api で bucket 作成すると以下の env が
+# 自動セットされる: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_ENDPOINT_URL_S3 /
+# AWS_REGION / BUCKET_NAME。これらは flyctl が直接 secrets として登録する。
+flyctl storage create -a geo-base-api
+# 上記が登録する env のうち、本 API が読むのは AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY (boto3 標準) と S3_ENDPOINT_URL (≒ AWS_ENDPOINT_URL_S3) /
+# S3_REGION / S3_BUCKET (lib/config.py の Settings)。flyctl が登録する名前と
+# 揃わない場合は明示的に上書きする:
+fly secrets set S3_BUCKET="geo-base-tiles"
+fly secrets set S3_ENDPOINT_URL="https://fly.storage.tigris.dev"
+fly secrets set S3_REGION="auto"
+# 任意: 公開 CDN 経由配信で URL prefix を変えたい場合のみ
+# fly secrets set S3_PUBLIC_BASE_URL="https://cdn.example.com"
 ```
 
 ### 4. デプロイ

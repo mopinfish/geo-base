@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useApi } from "@/hooks/use-api";
-import type { Datasource, DatasourceTestResult } from "@/lib/api";
+import { isOpenableUrl, type Datasource, type DatasourceTestResult } from "@/lib/api";
 import {
   ArrowLeft,
   Loader2,
@@ -348,17 +348,25 @@ export default function DatasourceDetailPage() {
             <CardContent>
               <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                 <code className="flex-1 text-sm break-all">{datasource.url}</code>
-                <a
-                  href={datasource.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0"
-                >
-                  <Button variant="ghost" size="sm">
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </a>
+                {isOpenableUrl(datasource.url) && (
+                  <a
+                    href={datasource.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0"
+                  >
+                    <Button variant="ghost" size="sm">
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </a>
+                )}
               </div>
+              {!isOpenableUrl(datasource.url) && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  内部 URL（{datasource.url.startsWith("s3://") ? "S3 互換 storage" : "non-HTTP"}）
+                  のため直接ブラウザで開けません。タイル配信は API 経由で行われます。
+                </p>
+              )}
             </CardContent>
           </Card>
 
