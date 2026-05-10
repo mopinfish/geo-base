@@ -29,7 +29,6 @@ from lib.auth import (
     User,
     check_tileset_access_v2,
     get_auth_context_optional,
-    get_current_user,
     require_auth,
 )
 from lib.validators import (
