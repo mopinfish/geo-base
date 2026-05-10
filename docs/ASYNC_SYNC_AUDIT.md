@@ -11,20 +11,22 @@
 
 ## 影響範囲（audit 結果, 2026-05-10）
 
+リポジトリルートから:
+
 ```bash
-$ grep -rln "^async def" lib/routers/ --include="*.py"
+$ grep -rln --include="*.py" "^async def" api/lib/routers/
 ```
 
 | ファイル | sync DB 呼び出し数（`cur.execute/fetchone/fetchall`）|
 |---|---|
-| `lib/routers/teams.py` | 66 |
-| `lib/routers/datasources.py` | 35 |
-| `lib/routers/tilesets.py` | 32 |
-| `lib/routers/features.py` | 26 |
-| `lib/routers/tiles/raster.py` | 10 |
-| `lib/routers/tiles/pmtiles.py` | 6 |
-| `lib/routers/auth.py` | 6 |
-| `lib/routers/tiles/dynamic.py` | 2 |
+| `api/lib/routers/teams.py` | 66 |
+| `api/lib/routers/datasources.py` | 35 |
+| `api/lib/routers/tilesets.py` | 32 |
+| `api/lib/routers/features.py` | 26 |
+| `api/lib/routers/tiles/raster.py` | 10 |
+| `api/lib/routers/tiles/pmtiles.py` | 6 |
+| `api/lib/routers/auth.py` | 6 |
+| `api/lib/routers/tiles/dynamic.py` | 2 |
 | **合計** | **183** |
 
 `await` の用途内訳:
@@ -32,8 +34,8 @@ $ grep -rln "^async def" lib/routers/ --include="*.py"
 | 用途 | 件数 | コメント |
 |---|---|---|
 | `await check_tileset_(write_)access_v2(...)` | 18 | **v2 認可ヘルパが内部で `asyncio.to_thread` を使うために handler を async 化させているもの**。これが **直接の元凶** |
-| `await get_auth_provider().*` | 13+ | 真に async な認証 provider メソッド（`auth.py`） |
-| `await get_email_backend().send(...)` | 1 | `teams.py` の招待メール送信 |
+| `await get_auth_provider().*` | 13+ | 真に async な認証 provider メソッド（`api/lib/routers/auth.py`） |
+| `await get_email_backend().send(...)` | 1 | `api/lib/routers/teams.py` の招待メール送信 |
 | `await get_pmtiles_tile(...)` 等 | 数件 | HTTP fetch（PMTiles リモート読み）|
 
 → **18/43 = 41% の `await` が v2 認可ヘルパ起因**。残りは genuinely async な処理。
@@ -74,7 +76,7 @@ $ grep -rln "^async def" lib/routers/ --include="*.py"
 
 - psycopg2 → asyncpg または psycopg3 (async) に置換
 - `cur.execute(...)` → `await cur.execute(...)`
-- `lib/database.py` の connection pool も async pool に置換
+- `api/lib/database.py` の connection pool も async pool に置換
 
 **Pros:**
 - 真に async な DB 層になり、handler の async/sync 混在が消える
@@ -82,7 +84,7 @@ $ grep -rln "^async def" lib/routers/ --include="*.py"
 - 将来性が高い
 
 **Cons:**
-- **影響範囲が極大**（lib/database.py / 全 router / 全 test fixture / すべての SQL 実行箇所）
+- **影響範囲が極大**（`api/lib/database.py` / 全 router / 全 test fixture / すべての SQL 実行箇所）
 - 既存 PR [#62](https://github.com/mopinfish/geo-base/pull/62) / [#63](https://github.com/mopinfish/geo-base/pull/63) のテストインフラ（TestClient + dependency_overrides で sync `db_conn` を共有）も大改造
 - 移行コスト > 並行性向上のメリットの可能性が高い（geo-base の現状規模では）
 
@@ -111,20 +113,20 @@ $ grep -rln "^async def" lib/routers/ --include="*.py"
 
 ### 実装ステップ案（次の Issue で扱う）
 
-1. `lib/auth/__init__.py` の `check_tileset_access_v2` / `check_tileset_write_access_v2` を sync 化（`async def` → `def`、内部の `asyncio.to_thread` を直接呼び出しに置換）
+1. `api/lib/auth/__init__.py` の `check_tileset_access_v2` / `check_tileset_write_access_v2` を sync 化（`async def` → `def`、内部の `asyncio.to_thread` を直接呼び出しに置換）
 2. 関連 router の handler から `async`/`await` を外す（18 箇所）
-   - 例: `tilesets.py` の `update_tileset` / `delete_tileset` / `calculate_tileset_bounds`
-   - `features.py` の `list_features` / `get_feature`
-   - `datasources.py` の `get_datasource`
-   - `tiles/*.py` の各 endpoint
-3. テストの `@pytest.mark.asyncio` も削除可（v2 ヘルパが sync になるため）。`test_tile_access_v2.py` / `test_tileset_write_access_v2.py` は影響大なので別 PR で
+   - 例: `api/lib/routers/tilesets.py` の `update_tileset` / `delete_tileset` / `calculate_tileset_bounds`
+   - `api/lib/routers/features.py` の `list_features` / `get_feature`
+   - `api/lib/routers/datasources.py` の `get_datasource`
+   - `api/lib/routers/tiles/*.py` の各 endpoint
+3. テストの `@pytest.mark.asyncio` も削除可（v2 ヘルパが sync になるため）。`api/tests/test_auth/test_tile_access_v2.py` / `api/tests/test_auth/test_tileset_write_access_v2.py` は影響大なので別 PR で
 4. 整合性確認: pytest 全パス + 手動 E2E
 
 ### 着手しない箇所（async のまま維持）
 
-- `lib/routers/auth.py` — `get_auth_provider().*` が真に async
-- `lib/routers/teams.py` の `create_team_invitation` — email 送信が async
-- `lib/routers/tiles/pmtiles.py` の tile fetch endpoint — HTTP fetch が async
+- `api/lib/routers/auth.py` — `get_auth_provider().*` が真に async
+- `api/lib/routers/teams.py` の `create_team_invitation` — email 送信が async
+- `api/lib/routers/tiles/pmtiles.py` の tile fetch endpoint — HTTP fetch が async
 
 ## 開けておく決定事項
 
