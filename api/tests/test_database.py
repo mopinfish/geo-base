@@ -37,6 +37,17 @@ def force_local(monkeypatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture
+def force_non_fly_production(monkeypatch):
+    """`is_production=True` だが Fly 上ではない (Vercel / 独自基盤) シナリオ。"""
+    monkeypatch.delenv("FLY_APP_NAME", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 class TestSSLAutoAppend:
     def test_production_supabase_gets_sslmode_require(self, force_production):
         url = "postgresql://user:pass@db.aws.supabase.co:6543/postgres"
@@ -74,3 +85,10 @@ class TestSSLAutoAppend:
             "?sslmode=disable"
         )
         assert _sslmode(_prepare_connection_string(url)) == "disable"
+
+    def test_non_fly_production_internal_host_still_gets_sslmode(
+        self, force_non_fly_production
+    ):
+        """非 Fly な本番環境では `.internal` ホストでも SSL 自動付与する (defense-in-depth)。"""
+        url = "postgresql://user:pass@some-other.internal:5432/db"
+        assert _sslmode(_prepare_connection_string(url)) == "require"

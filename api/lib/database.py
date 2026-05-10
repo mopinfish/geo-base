@@ -88,7 +88,12 @@ def _prepare_connection_string(database_url: str) -> str:
     is_production = settings.is_production
     is_supabase = "supabase" in database_url.lower()
     host = (parsed.hostname or "").lower()
-    is_fly_internal = host.endswith(".internal") or host.endswith(".flycast")
+    # `.internal` / `.flycast` の SSL 自動付与スキップは **Fly 上で動いている時だけ**
+    # 適用する。RFC 6762 上 `.internal` は予約 TLD だが、万一非 Fly な本番で
+    # 同サフィックスのホストが来た場合に SSL が外れる事態を防ぐ defense-in-depth。
+    is_fly_internal = settings.is_fly and (
+        host.endswith(".internal") or host.endswith(".flycast")
+    )
 
     if (
         (is_production or is_supabase)
