@@ -226,12 +226,20 @@ flyctl volumes create pg_data_new \
 ### 4.3. 論理破損 → pg_dump から復元
 
 ```fish
+# 0. flyctl proxy をバックグラウンドで起動（5433 → 5432 のローカル転送）
+flyctl proxy 5433:5432 -a geo-base-pg &
+set PG_PROXY_PID $last_pid
+sleep 2
+
 # 1. 新しい空の DB に restore
 set -lx PGPASSWORD (flyctl ssh console -a geo-base-pg -C 'printenv POSTGRES_PASSWORD' | tail -1)
 psql -h localhost -p 5433 -U postgres -c 'CREATE DATABASE geo_base_restore'
 pg_restore -h localhost -p 5433 -U postgres -d geo_base_restore geo_base_*.dump
 
 # 2. 動作確認後、API の DATABASE_URL を新 DB に切替か、本番 DB を rename して入れ替え
+
+# 3. proxy を終了
+kill $PG_PROXY_PID
 ```
 
 ## 5. スケールアップ・将来の検討事項
