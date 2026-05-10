@@ -17,6 +17,19 @@ def _sslmode(url: str):
     return parse_qs(urlparse(url).query).get("sslmode", [None])[0]
 
 
+@pytest.fixture(autouse=True)
+def _baseline_auth_env(monkeypatch):
+    """`Settings` 検証で必要な最小 env を全テストに保証する。
+
+    `auth_provider` のデフォルトは `local` (config.py)。`local` モードでは
+    `JWT_SECRET` が必須で、未設定だと `get_settings()` が `ValueError` を投げる。
+    本テストモジュールは認証ロジックを検証しないので、developer-local の
+    `.env` に依存しないよう dummy 値をテスト内で固定する。
+    """
+    monkeypatch.setenv("AUTH_PROVIDER", "local")
+    monkeypatch.setenv("JWT_SECRET", "ssl-test-only-not-a-real-secret")
+
+
 @pytest.fixture
 def force_production(monkeypatch):
     """Settings.is_production が True になる状態を作る (FLY_APP_NAME 経由)。"""
