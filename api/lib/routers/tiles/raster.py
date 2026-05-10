@@ -165,6 +165,12 @@ async def get_raster_tile(
         except HTTPException:
             raise
         except Exception as e:
+            # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+            # `InFailedSqlTransaction` を誘発するため必ず rollback する
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
 
     # Check access
@@ -431,6 +437,12 @@ async def get_raster_preview(
     except HTTPException:
         raise
     except Exception as e:
+        # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+        # `InFailedSqlTransaction` を誘発するため必ず rollback する
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Error generating preview: {str(e)}")
 
 

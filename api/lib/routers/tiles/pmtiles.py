@@ -150,6 +150,12 @@ async def get_pmtiles_tile_endpoint(
         except HTTPException:
             raise
         except Exception as e:
+            # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+            # `InFailedSqlTransaction` を誘発するため必ず rollback する
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
 
     # Check access
@@ -346,8 +352,14 @@ async def get_pmtiles_metadata_endpoint(
     except HTTPException:
         raise
     except Exception as e:
+        # psycopg2 例外時、aborted transaction が pool に戻ると次リクエストで
+        # `InFailedSqlTransaction` を誘発するため必ず rollback する
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
-    
+
     # Get metadata from PMTiles file
     try:
         metadata = await get_pmtiles_metadata(pmtiles_url)
