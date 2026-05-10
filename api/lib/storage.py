@@ -70,12 +70,24 @@ def _setup_gdal_s3_env() -> None:
     )
     if not boto3_endpoint:
         return
-    parsed = urlparse(boto3_endpoint)
-    host = parsed.netloc or parsed.path  # `host:port` 部分
+
+    # スキーム無し入力 (`localhost:9000` など、minio dev 環境で一般的) を堅牢に扱う。
+    # `urlparse("localhost:9000")` は scheme='localhost', path='9000' と誤解析するため、
+    # `://` が無い場合は `//` を補って netloc として再パースする。
+    parse_input = boto3_endpoint if "://" in boto3_endpoint else f"//{boto3_endpoint}"
+    parsed = urlparse(parse_input)
+    host = parsed.netloc
     if not host:
         return
     os.environ["AWS_S3_ENDPOINT"] = host
-    os.environ.setdefault("AWS_HTTPS", "YES" if parsed.scheme != "http" else "NO")
+    # スキームが不明な場合は HTTPS を推測しない（GDAL のデフォルトに委ねる /
+    # 必要なら明示 env で上書きしてもらう）。明示スキームが http なら HTTPS=NO に。
+    if parsed.scheme == "http":
+        os.environ.setdefault("AWS_HTTPS", "NO")
+    elif parsed.scheme in ("https", ""):
+        # 空文字 = `://` を補ったケース。production の大半が HTTPS のため YES を既定に。
+        # スキーム無しでローカル minio を狙う場合は AWS_HTTPS を明示で渡してもらう。
+        os.environ.setdefault("AWS_HTTPS", "YES")
     # virtual-hosted は Tigris / 多くの S3 互換で動くが、互換性最大化のため
     # 既に明示されていない場合のみ FALSE (path-style) を既定にする。
     os.environ.setdefault("AWS_VIRTUAL_HOSTING", "FALSE")
