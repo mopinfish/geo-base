@@ -13,21 +13,28 @@ import getpass
 import json
 import sys
 
+from . import get_auth_provider
 from .errors import UserAlreadyExists, WeakPassword
 
 
 async def cmd_create_admin(args):
-    from . import get_auth_provider
     provider = get_auth_provider()
 
     email = args.email
-    password = getpass.getpass("Password: ")
-    password_confirm = getpass.getpass("Confirm password: ")
-    if password != password_confirm:
-        print("Passwords do not match", file=sys.stderr)
-        sys.exit(1)
 
-    name = input("Name (optional): ").strip() or None
+    # `--password` フラグが渡されたら getpass をスキップする (issue #110)。
+    # globalSetup 等の非対話実行から create-admin を冪等に呼ぶための逃げ道。
+    # 通常の対話実行では従来どおり getpass で 2 回入力させて取り違いを防ぐ。
+    if getattr(args, "password", None):
+        password = args.password
+    else:
+        password = getpass.getpass("Password: ")
+        password_confirm = getpass.getpass("Confirm password: ")
+        if password != password_confirm:
+            print("Passwords do not match", file=sys.stderr)
+            sys.exit(1)
+
+    name = getattr(args, "name", None) or input("Name (optional): ").strip() or None
 
     try:
         user = await provider.create_user(
@@ -85,7 +92,6 @@ async def cmd_cleanup_expired(args):
 
 
 async def cmd_reset_password(args):
-    from . import get_auth_provider
     await get_auth_provider().request_password_reset(args.email)
     print(f"OK Password reset email triggered for {args.email}")
 
@@ -130,6 +136,14 @@ def main():
 
     p = sub.add_parser("create-admin", help="Create initial admin user")
     p.add_argument("--email", required=True)
+    p.add_argument(
+        "--password",
+        help="非対話モード用（CI/globalSetup）。指定すると getpass のプロンプトをスキップする。",
+    )
+    p.add_argument(
+        "--name",
+        help="非対話モード用。指定するとプロンプトをスキップする。",
+    )
     p.set_defaults(func=cmd_create_admin)
 
     p = sub.add_parser("revoke-user-tokens", help="Revoke all refresh tokens for a user")
