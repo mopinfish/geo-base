@@ -1,9 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures/authenticated-test";
 
 import { resetDatabase } from "../utils/reset-db";
 import { createApiKey } from "../fixtures/factories";
+import { loginAsAdmin } from "../utils/session";
 
 test.beforeAll(async () => {
+  await loginAsAdmin();
   await resetDatabase();
   await createApiKey({ name: "smoke-key-1" });
   await createApiKey({ name: "smoke-key-2" });

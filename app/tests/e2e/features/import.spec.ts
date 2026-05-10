@@ -1,10 +1,12 @@
 import path from "node:path";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures/authenticated-test";
 
 import { resetDatabase } from "../utils/reset-db";
 import { createTileset } from "../fixtures/factories";
+import { loginAsAdmin } from "../utils/session";
 
 test.beforeAll(async () => {
+  await loginAsAdmin();
   await resetDatabase();
 });
 

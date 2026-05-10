@@ -1,9 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures/authenticated-test";
 
 import { resetDatabase } from "../utils/reset-db";
 import { createTileset, createDatasource } from "../fixtures/factories";
+import { loginAsAdmin } from "../utils/session";
 
 test.beforeAll(async () => {
+  await loginAsAdmin();
   await resetDatabase();
   await createTileset({ name: "smoke-tileset-1", type: "vector" });
   await createTileset({ name: "smoke-tileset-2", type: "raster" });

@@ -4,8 +4,10 @@ import { defineConfig, devices } from "@playwright/test";
  * E2E test configuration (Issue #110, Phase 1).
  *
  * - 単一の baseURL に対して Playwright を実行する。
- * - 認証が必要なテストは `authenticated` project で `storageState` を使う。
- * - 認証フロー自体のテストは `unauthenticated` project で storageState なし。
+ * - 認証が必要なテストは `authenticated` project で動かす。各テストの
+ *   beforeEach で都度ログインして cookie を context に注入する設計
+ *   (refresh token rotation との衝突を避けるため、storageState を共有しない)。
+ * - 認証フロー自体のテストは `unauthenticated` project でログイン状態なし。
  *
  * 各種パスは `tests/e2e/` 配下に集約する。
  * Phase 2 でワーカー並列化 (workers: 4 + ワーカー別 DB) に拡張する。
@@ -35,10 +37,7 @@ export default defineConfig({
     {
       name: "authenticated",
       testIgnore: /tests\/e2e\/auth\/.*\.spec\.ts/,
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: "playwright/.auth/admin.json",
-      },
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
 

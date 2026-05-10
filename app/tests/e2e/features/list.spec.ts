@@ -1,9 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures/authenticated-test";
 
 import { resetDatabase } from "../utils/reset-db";
 import { createTileset, createFeature } from "../fixtures/factories";
+import { loginAsAdmin } from "../utils/session";
 
 test.beforeAll(async () => {
+  await loginAsAdmin();
   await resetDatabase();
   const tileset = await createTileset({ name: "ft-list-smoke", type: "vector" });
   await createFeature({

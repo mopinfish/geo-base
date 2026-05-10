@@ -1,9 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures/authenticated-test";
 
 import { resetDatabase } from "../utils/reset-db";
 import { createDatasource } from "../fixtures/factories";
+import { loginAsAdmin } from "../utils/session";
 
 test.beforeAll(async () => {
+  await loginAsAdmin();
   await resetDatabase();
   await createDatasource({
     name: "ds-pmtiles-smoke",
