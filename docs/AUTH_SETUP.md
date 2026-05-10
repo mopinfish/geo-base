@@ -1,24 +1,18 @@
 # 認証セットアップガイド
 
-> [!IMPORTANT]
-> **2026-05-10 更新: `AUTH_PROVIDER=supabase` モードは廃止されました (#72)**
->
-> 本番 DB を Fly Postgres に移行 (PR #73) し、Supabase Auth プロバイダの実装を
-> 削除 (PR #74) したため、現状サポートされる `AUTH_PROVIDER` は **`local` のみ**
-> です。本ドキュメント内の **Supabase モードの記述は legacy 資料**として残して
-> いますが、今後の運用は `local` 前提でお読みください。
-> 全面リライトは Issue #72 Phase 3 のドキュメント整備で行います。
+geo-base API は自前の **local provider** で認証する（`AUTH_PROVIDER=local`）。
+プラガブル化の枠組み (`api/lib/auth/provider.py`) 自体は将来別 IdP を追加できるように
+残してあるが、**現状サポートされるのは `local` のみ**。
 
-geo-base API は **プラガブル認証** の枠組みを残しており、`AUTH_PROVIDER` 環境変数で
-プロバイダを選択する設計です:
-
-- **`local`**: geo-base が `users` テーブルを所有し、自前で JWT を発行する（**現行サポート**）
-- ~~**`supabase`**: 従来通り Supabase Auth に委譲する~~（**廃止 / #72**）
+> 過去には `AUTH_PROVIDER=supabase` で Supabase Auth に委譲する構成も
+> サポートしていたが、本番 DB を Fly Postgres に移行 (PR #73) し Supabase Auth
+> プロバイダ実装も削除 (PR #74 / Issue #72) したため、2026-05-10 以降は廃止。
+> Supabase からの移行記録は `docs/AUTH_MIGRATION.md` を参照（履歴文書）。
 
 設計の背景・全体像は `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
 本ドキュメントは **ローカル / 本番の構築手順** に絞ったハンズオンです。
 
-関連: 移行手順は `docs/AUTH_MIGRATION.md`、リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`、認可仕様の網羅レビューは `docs/ACCESS_CONTROL_REVIEW.md`、本番 DB 構築は `docs/POSTGRES_SETUP.md`。
+関連: リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`、認可仕様の網羅レビューは `docs/ACCESS_CONTROL_REVIEW.md`、本番 DB 構築は `docs/POSTGRES_SETUP.md`。
 
 ---
 
@@ -225,8 +219,8 @@ curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
 
 | 変数 | デフォルト | 説明 |
 |---|---|---|
-| `AUTH_PROVIDER` | `supabase` | `local` または `supabase` |
-| `JWT_SECRET` | – | local モード必須。64 バイト以上推奨。`SUPABASE_JWT_SECRET` が設定されていればフォールバック可 |
+| `AUTH_PROVIDER` | `local` | `local` のみサポート（Supabase 等に拡張する余地は残してある） |
+| `JWT_SECRET` | – | 必須。64 バイト以上を `openssl rand -base64 64` 等で生成 |
 | `JWT_AUDIENCE` | `authenticated` | JWT `aud` クレーム |
 | `JWT_ISSUER` | `geo-base` | JWT `iss` クレーム |
 | `ACCESS_TOKEN_TTL_SECONDS` | `900` | access_token の有効期限（秒） |
@@ -258,14 +252,6 @@ curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
 | 変数 | デフォルト | 説明 |
 |---|---|---|
 | `LOCAL_AUTH_ALLOW_SIGNUP` | `false` | パブリック signup を許可するかどうか。招待フロー中心の運用なら `false` |
-
-### Supabase プロバイダ固有
-
-`AUTH_PROVIDER=supabase` の場合は以下が必須:
-
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SUPABASE_JWT_SECRET`
 
 ---
 
@@ -329,8 +315,7 @@ Slack / Sentry 連携は別途検討（将来的な改善余地）。
 ### `AUTH_PROVIDER=local requires JWT_SECRET ...` で起動失敗
 
 `JWT_SECRET` 未設定。`openssl rand -base64 64` で生成して `api/.env` に貼り付けてください。
-`SUPABASE_JWT_SECRET` を設定済みであればフォールバックされます（後方互換）が、新規環境では
-`JWT_SECRET` を明示するのが推奨。
+（以前は `SUPABASE_JWT_SECRET` フォールバックがあったが PR #74 で削除済み。）
 
 ### CORS エラー（ブラウザコンソールに `blocked by CORS policy`）
 
@@ -360,15 +345,11 @@ CORS_ORIGINS=http://localhost:3000,https://geo-base-admin.vercel.app
 レート制限が発動します（既定: 5 回失敗で 15 分ロック）。`uv run python -m lib.auth.cli cleanup-expired`
 または該当行を直接削除すれば解除できます。
 
-### Supabase から local に切り替えたい
-
-`docs/AUTH_MIGRATION.md` を参照。
-
 ---
 
 ## 関連ドキュメント
 
-- 移行手順: `docs/AUTH_MIGRATION.md`
-- 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
-- 実装計画: `docs/superpowers/plans/2026-05-08-pluggable-auth.md`
+- Supabase からの移行履歴: `docs/AUTH_MIGRATION.md`（完了済み）
+- 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`（履歴）
+- 実装計画: `docs/superpowers/plans/2026-05-08-pluggable-auth.md`（履歴）
 - ローカル開発全般: `LOCAL_DEVELOPMENT.md`

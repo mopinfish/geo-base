@@ -1,8 +1,28 @@
 # インフラ移行検討記録 — Cloudflare 一本化の実現可能性
 
 **作成日**: 2026-05-08
-**ステータス**: 検討完了 / **当面は現状インフラ維持の方針**
-**調査ブランチ**: `feat/s3_3-3_team_and_role`（チーム/ロール実装と並行検討）
+**ステータス**: 検討完了 / Cloudflare 集約は当面見送り。代わりに **Supabase 依存を 2026-05-10 に完全廃止** し、Fly Postgres + local Auth に切替済み。
+
+> [!IMPORTANT]
+> ## 2026-05-10 アップデート: Supabase 完全廃止
+>
+> 本ドキュメント本文は 2026-05-08 時点の調査記録だが、その後の状況変化により
+> インフラ構成の一部は前提が変わった。以下を踏まえて読むこと:
+>
+> - **DB**: Supabase Free Plan の長期 paused 復旧不能を機に、本番 DB を
+>   **Fly Machine 上の自前 PostGIS (`geo-base-pg` app, region nrt)** に移行
+>   (PR #73、`docs/POSTGRES_SETUP.md` 参照)
+> - **Auth**: `AUTH_PROVIDER=supabase` を完全廃止し、自前の **local provider**
+>   (`api/lib/auth/`) で JWT を発行する構成に切替 (PR #71 / #74、`docs/AUTH_SETUP.md` 参照)
+> - **Storage**: COG/PMTiles のアップロード backend は Issue #72 Phase 1.2 で
+>   **Fly Tigris (S3 互換)** に切替予定
+> - **MCP / Admin UI**: 配置先 (Fly.io / Vercel) は変更なし
+>
+> 結果として、Supabase ダッシュボード上の `geo-base` / `geo-mcp` プロジェクトと
+> Supabase アカウント自体も 2026-05-10 に削除済み (Issue #72 Phase 4)。
+> Cloudflare 集約は引き続き「将来検討」の状態 (本文の結論と同じ)。
+>
+> Issue #72 (Supabase 完全廃止トラッキング) も参照。
 
 ---
 

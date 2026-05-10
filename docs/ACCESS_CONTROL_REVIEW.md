@@ -272,7 +272,7 @@ if str(row[1]) != user.id:  # row[1] = tilesets.user_id
 
 #### I-5. RLS のアプリ層連携が未完（Issue #44）
 
-DB の RLS は permissive のまま、アプリ層認可で代替。Supabase 専用 `auth.uid()` 依存解消も含めポータブル化は [Issue #44](https://github.com/mopinfish/geo-base/issues/44) で追跡中。
+DB の RLS は permissive のまま、アプリ層認可で代替。`auth.uid()` 等の Supabase 固有関数への依存は Issue #72 Phase 1.5 (docker init / 本番 DB RLS 整理) でも併せて掃除する予定。元々のポータブル化トラッキングは [Issue #44](https://github.com/mopinfish/geo-base/issues/44)。
 
 ### 🟢 Minor（時間を見て対応）
 
