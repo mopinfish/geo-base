@@ -849,9 +849,13 @@ async def upload_cog(
                 cur, tileset_id,
                 source_bounds, source_center, source_min_zoom, source_max_zoom
             )
-            
+
             conn.commit()
-            
+            # Commit 済みなので、以降の例外（レスポンス組み立て等）では S3 を
+            # 削除しないように cleanup マーカーをクリアする。これを忘れると
+            # DB に残った datasource が参照する S3 オブジェクトを削除してしまう。
+            uploaded_storage_path = None
+
             # Parse band descriptions from JSON - use safe_json_parse
             band_desc_list = safe_json_parse(row[7])
             
@@ -1041,6 +1045,9 @@ async def upload_pmtiles(
             )
 
             conn.commit()
+            # COG upload と同じく、commit 後の例外では S3 を削除しないように
+            # cleanup マーカーをクリアする。
+            uploaded_storage_path = None
 
             layers_list = safe_json_parse(row[13])
 
