@@ -121,6 +121,87 @@ npm run dev
 
 ---
 
+## API キーで書き込み操作を行う（issue #50）
+
+外部システム連携（CI からのタイルアップロード、自動データ同期、エージェント経由の更新等）には JWT ではなく **API キー** を使うことを推奨します。
+
+### スコープと操作の対応
+
+| 必要 scope | 対象操作 |
+|---|---|
+| `read` | GET 系（feature 取得、tileset 詳細、datasource 取得 等） |
+| `write` | POST/PATCH 系（tileset / feature / datasource の作成・更新） |
+| `delete` | DELETE 系（tileset / feature / datasource の削除） |
+
+`write` は `read` を、`delete` は `write` を、`admin` はすべてを包含します（[AuthContext.has_scope()](../api/lib/auth/context.py) の階層）。
+
+### API キーの作成
+
+Admin UI の `/api-keys` から、または CLI で発行可能:
+
+```bash
+cd api
+uv run python -m lib.auth.cli create-api-key \
+    --user-id <uuid> \
+    --scopes read,write \
+    --team-id <team-uuid>   # 任意: team API キーの場合
+```
+
+返却された `gb_live_xxx...` 形式のトークンを **発行時にしか取得できない** ので保管してください。
+
+### 書き込みリクエスト例
+
+#### 個人タイルセットを更新する（`scope=write`）
+
+```bash
+curl -X PATCH https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "更新後の名前"}'
+```
+
+#### チーム共有タイルセットを更新する（`scope=write` + team API キー）
+
+API キー作成時に `--team-id` を指定し、対象タイルセットがそのチームに `team_tilesets.permission_level >= write` で共有されている必要があります。
+
+```bash
+curl -X PATCH https://geo-base-api.fly.dev/api/tilesets/$SHARED_TILESET_ID \
+  -H "Authorization: Bearer $TEAM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "team-update"}'
+```
+
+#### 削除する（`scope=delete`）
+
+```bash
+curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
+  -H "Authorization: Bearer $DELETE_API_KEY"
+```
+
+チーム共有タイルセットを削除するには `team_tilesets.permission_level='admin'` が必要です（`write` では 403）。
+
+### 認可のレイヤー
+
+書き込みは 2 段階で判定されます:
+
+1. **Scope ガード**: API キーが必要な scope を持つか（`write` / `delete`）
+2. **リソース認可**: 対象タイルセットへの書き込み権限があるか
+   - 個人タイルセット所有者 → 常に可
+   - team API キー（`team_id` セット）→ `team_tilesets.permission_level` を判定（API キーは team_role の継承を行わない）
+
+詳細は [`docs/ACCESS_CONTROL_REVIEW.md`](./ACCESS_CONTROL_REVIEW.md) §C-2 と [issue #50](https://github.com/mopinfish/geo-base/issues/50) を参照。
+
+### よくあるエラー
+
+| HTTP | 原因 | 対処 |
+|---|---|---|
+| 401 | `Authorization` ヘッダ欠落 / 不正 | `Bearer <api_key>` 形式を確認 |
+| 403 (write scope required ...) | API キーの scope 不足 | `--scopes read,write` を含めて再発行 |
+| 403 (Not authorized to ...) | リソース認可 NG（個人タイルセットの非所有者、team_tilesets が無い 等）| team API キーの場合は team_id と permission_level を確認 |
+| 429 | rate limit 超過 | 後述の rate limit セクションを参照 |
+
+---
+
 ## 環境変数リファレンス
 
 詳細仕様（バリデーションルール含む）は設計書 §9.1 を参照。ここでは主要変数のみ列挙します。
