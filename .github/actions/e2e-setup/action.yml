@@ -1,0 +1,109 @@
+name: "E2E setup"
+description: |
+  geo-base の E2E テスト用環境セットアップ。
+  Postgres / Redis services はワークフロー側で `services:` ブロックで指定する前提で、
+  本 action は uv / Node / Playwright のキャッシュ復元と依存解決、
+  geo_base_e2e DB スキーマの初期化、admin の create を担当する。
+
+inputs:
+  python-version:
+    description: "Python version"
+    required: false
+    default: "3.11"
+  node-version:
+    description: "Node version"
+    required: false
+    default: "20"
+  postgres-host:
+    description: "Postgres host (services 経由なら 'localhost' でよい)"
+    required: false
+    default: "localhost"
+  postgres-port:
+    description: "Postgres port"
+    required: false
+    default: "5432"
+  e2e-database-url:
+    description: "E2E DB の DATABASE_URL"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+        cache-dependency-glob: "api/uv.lock"
+
+    - name: Install API dependencies
+      shell: bash
+      working-directory: api
+      run: uv sync --extra dev
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: "npm"
+        cache-dependency-path: app/package-lock.json
+
+    - name: Install app dependencies
+      shell: bash
+      working-directory: app
+      run: npm ci
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('app/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-
+
+    - name: Install Playwright browsers
+      shell: bash
+      working-directory: app
+      run: npx playwright install --with-deps chromium
+
+    - name: Initialize geo_base_e2e schema
+      shell: bash
+      env:
+        PGHOST: ${{ inputs.postgres-host }}
+        PGPORT: ${{ inputs.postgres-port }}
+        PGUSER: postgres
+        PGPASSWORD: postgres
+      run: |
+        psql -d postgres -c "CREATE DATABASE geo_base_e2e;"
+        # docker/postgis-init/01..06 を順に流す
+        for f in docker/postgis-init/0[1-6]_*.sql; do
+          echo "Applying $f to geo_base_e2e"
+          psql -d geo_base_e2e -v ON_ERROR_STOP=1 -f "$f"
+        done
+
+    - name: Create E2E admin user
+      shell: bash
+      working-directory: api
+      env:
+        DATABASE_URL: ${{ inputs.e2e-database-url }}
+        JWT_SECRET: ci-test-secret-not-for-production
+      run: |
+        uv run python -m lib.auth.cli create-admin \
+          --email e2e-admin@example.com \
+          --password 'E2E-pass-1!' \
+          --name 'E2E Admin' || echo "Admin may already exist; continuing"
+
+    - name: Build Next.js (production)
+      shell: bash
+      working-directory: app
+      env:
+        # NEXT_PUBLIC_API_URL は空のまま:
+        # ブラウザは /api/* (相対) を叩き、Next.js の rewrites が
+        # API_BACKEND_URL に reverse proxy する。これにより
+        # HttpOnly refresh cookie がブラウザの localhost:3000 ドメインに保存される。
+        API_BACKEND_URL: http://localhost:8000
+      run: npm run build
