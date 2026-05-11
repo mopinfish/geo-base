@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response
 
+from lib.errors import ErrorCode, api_error
 from lib.tiles import (
     FORMAT_MEDIA_TYPES,
     get_tile_from_mbtiles,
@@ -44,19 +45,34 @@ def get_mbtiles_tile(
     # Validate format
     media_type = FORMAT_MEDIA_TYPES.get(tile_format.lower())
     if not media_type:
-        raise HTTPException(status_code=400, detail=f"Unsupported tile format: {tile_format}")
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_INVALID_VALUE,
+            f"Unsupported tile format: {tile_format}",
+            details={"tile_format": tile_format},
+        )
 
     # Build path to MBTiles file
     mbtiles_path = Path(f"data/{tileset_name}.mbtiles")
 
     if not mbtiles_path.exists():
-        raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_name}")
+        raise api_error(
+            404,
+            ErrorCode.TILESET_NOT_FOUND,
+            f"Tileset not found: {tileset_name}",
+            details={"tileset_name": tileset_name},
+        )
 
     # Get tile data
     tile_data = get_tile_from_mbtiles(mbtiles_path, z, x, y)
 
     if tile_data is None:
-        raise HTTPException(status_code=404, detail="Tile not found")
+        raise api_error(
+            404,
+            ErrorCode.TILE_NOT_FOUND,
+            "Tile not found",
+            details={"tileset_name": tileset_name, "z": z, "x": x, "y": y},
+        )
 
     # Get optimized cache headers (static tiles = longer cache)
     headers = get_cache_headers(z, is_static=True)
@@ -79,7 +95,12 @@ def get_mbtiles_tileset_metadata(tileset_name: str):
     mbtiles_path = Path(f"data/{tileset_name}.mbtiles")
 
     if not mbtiles_path.exists():
-        raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_name}")
+        raise api_error(
+            404,
+            ErrorCode.TILESET_NOT_FOUND,
+            f"Tileset not found: {tileset_name}",
+            details={"tileset_name": tileset_name},
+        )
 
     metadata = get_mbtiles_metadata(mbtiles_path)
     return metadata
