@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from lib.database import get_db_connection
+from lib.errors import ErrorCode, api_error
 
 router = APIRouter(prefix="/api/test", tags=["test-helpers"])
 
@@ -51,7 +52,15 @@ _RESETTABLE_TABLES = [
 
 
 def _assert_e2e_mode_or_die() -> None:
-    """ハンドラ突入時の二重防御。本番に出ても fail-closed にする。"""
+    """ハンドラ突入時の二重防御。本番に出ても fail-closed にする。
+
+    本来 main.py で E2E_MODE=1 のときだけ router を include するため到達不能
+    だが、router を import し忘れたケース等の最後の安全網。FastAPI 標準の
+    404 と区別がつかない (`{detail: "Not Found"}`) plain HTTPException を
+    使うことで、production に endpoint が露出している事実そのものを隠す。
+    envelope code は意図的に使わない (`INTERNAL_UNEXPECTED` 等で 'translated
+    error message in production' を出さないため)。
+    """
     if os.getenv("E2E_MODE") != "1":
         raise HTTPException(status_code=404, detail="Not Found")
 
@@ -65,12 +74,14 @@ def _assert_e2e_database_or_die() -> None:
     parsed = urlparse(db_url)
     db_name = (parsed.path or "").lstrip("/")
     if not db_name.startswith(_E2E_DB_PREFIX):
-        raise HTTPException(
-            status_code=400,
-            detail=(
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_INVALID_VALUE,
+            (
                 f"Refusing to reset: DATABASE_URL must point to a "
                 f"{_E2E_DB_PREFIX}* database (got '{db_name}')"
             ),
+            details={"db_name": db_name, "expected_prefix": _E2E_DB_PREFIX},
         )
 
 
@@ -109,7 +120,7 @@ def get_recent_token(
     _assert_e2e_mode_or_die()
     _assert_e2e_database_or_die()
     if not email:
-        raise HTTPException(status_code=400, detail="email is required")
+        raise api_error(400, ErrorCode.VALIDATION_FIELD_REQUIRED, "email is required")
 
     if type == "password_reset":
         # console backend のメモリ dict から取得する。
@@ -119,8 +130,11 @@ def get_recent_token(
 
         token = get_recent_password_reset_token(email)
         if not token:
-            raise HTTPException(
-                status_code=404, detail=f"No password_reset token for {email}"
+            raise api_error(
+                404,
+                ErrorCode.INTERNAL_UNEXPECTED,
+                f"No password_reset token for {email}",
+                details={"email": email, "type": "password_reset"},
             )
         return {"token": token}
 
@@ -143,8 +157,11 @@ def get_recent_token(
             )
             row = cur.fetchone()
     if not row or not row[0]:
-        raise HTTPException(
-            status_code=404, detail=f"No {type} token for {email}"
+        raise api_error(
+            404,
+            ErrorCode.INTERNAL_UNEXPECTED,
+            f"No {type} token for {email}",
+            details={"email": email, "type": type},
         )
     return {"token": row[0]}
 
@@ -180,9 +197,11 @@ def expire_api_key(payload: ExpireApiKeyRequest):
                 (expires_at, payload.key_id),
             )
             if cur.rowcount == 0:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"api_key not found: {payload.key_id}",
+                raise api_error(
+                    404,
+                    ErrorCode.API_KEY_NOT_FOUND,
+                    f"api_key not found: {payload.key_id}",
+                    details={"key_id": payload.key_id},
                 )
         conn.commit()
     return {"key_id": payload.key_id, "expires_at": expires_at.isoformat()}

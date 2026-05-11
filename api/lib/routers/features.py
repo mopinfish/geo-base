@@ -18,6 +18,7 @@ from typing import Optional, List, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.models.feature import (
     FeatureCreate,
     FeatureUpdate,
@@ -206,20 +207,31 @@ def create_feature(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": str(feature.tileset_id)},
+                )
 
             tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
             if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Not authorized to add features to this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to add features to this tileset",
+                    details={"tileset_id": str(row[0])},
                 )
 
 
             # Validate geometry
             geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
             if not geom_result.valid:
-                raise HTTPException(status_code=400, detail=f"Invalid geometry: {geom_result.error}")
+                raise api_error(
+                    400,
+                    ErrorCode.FEATURE_INVALID_GEOMETRY,
+                    f"Invalid geometry: {geom_result.error}",
+                )
             
             # Convert GeoJSON geometry to JSON string
             geometry_json = json.dumps(feature.geometry)
@@ -262,7 +274,11 @@ def create_feature(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error creating feature: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating feature: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -301,15 +317,22 @@ def create_features_bulk(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": str(data.tileset_id)},
+                )
 
             tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
             if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Not authorized to add features to this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to add features to this tileset",
+                    details={"tileset_id": str(row[0])},
                 )
-            
+
             tileset_type = row[2]
             
             # Warn if adding features to non-vector tileset
@@ -451,9 +474,10 @@ def create_features_bulk(
     except Exception as e:
         conn.rollback()
         logger.error(f"Error in bulk feature creation: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Error creating features: {str(e)}"
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating features: {str(e)}",
         )
 
 
@@ -503,14 +527,19 @@ def list_features(
 
                     if not check_tileset_access_v2(conn, tileset_for_access, auth):
                         if auth is None:
+                            # NOTE: Phase 2b では envelope 化を見送り。
+                            # api_error() は headers= を受けないため、
+                            # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                             raise HTTPException(
                                 status_code=401,
                                 detail="Authentication required to access this tileset",
                                 headers={"WWW-Authenticate": "Bearer"},
                             )
-                        raise HTTPException(
-                            status_code=403,
-                            detail="You do not have permission to access this tileset"
+                        raise api_error(
+                            403,
+                            ErrorCode.TILESET_FORBIDDEN,
+                            "You do not have permission to access this tileset",
+                            details={"tileset_id": tileset_id},
                         )
                 
                 conditions.append("f.tileset_id = %s")
@@ -531,7 +560,12 @@ def list_features(
                     )
                     params.extend([minx, miny, maxx, maxy])
                 except ValueError:
-                    raise HTTPException(status_code=400, detail="Invalid bbox format")
+                    raise api_error(
+                        400,
+                        ErrorCode.VALIDATION_INVALID_VALUE,
+                        "Invalid bbox format",
+                        details={"bbox": bbox},
+                    )
             
             where_clause = " AND ".join(conditions) if conditions else "1=1"
             
@@ -588,7 +622,11 @@ def list_features(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing features: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing features: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -623,7 +661,12 @@ def get_feature(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Feature not found")
+                raise api_error(
+                    404,
+                    ErrorCode.FEATURE_NOT_FOUND,
+                    "Feature not found",
+                    details={"feature_id": feature_id},
+                )
 
             tileset_for_access = {
                 "id": row[4],
@@ -633,14 +676,19 @@ def get_feature(
 
             if not check_tileset_access_v2(conn, tileset_for_access, auth):
                 if auth is None:
+                    # NOTE: Phase 2b では envelope 化を見送り。
+                    # api_error() は headers= を受けないため、
+                    # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                     raise HTTPException(
                         status_code=401,
                         detail="Authentication required to access this feature",
                         headers={"WWW-Authenticate": "Bearer"},
                     )
-                raise HTTPException(
-                    status_code=403,
-                    detail="You do not have permission to access this feature"
+                raise api_error(
+                    403,
+                    ErrorCode.FEATURE_FORBIDDEN,
+                    "You do not have permission to access this feature",
+                    details={"feature_id": feature_id},
                 )
             
             return {
@@ -659,7 +707,11 @@ def get_feature(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching feature: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching feature: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -694,38 +746,54 @@ def update_feature(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Feature not found")
+                raise api_error(
+                    404,
+                    ErrorCode.FEATURE_NOT_FOUND,
+                    "Feature not found",
+                    details={"feature_id": feature_id},
+                )
 
             tileset_id = str(row[2])
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
             if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "update"):
-                raise HTTPException(
-                    status_code=403, detail="Not authorized to update this feature"
+                raise api_error(
+                    403,
+                    ErrorCode.FEATURE_FORBIDDEN,
+                    "Not authorized to update this feature",
+                    details={"feature_id": feature_id, "tileset_id": tileset_id},
                 )
-            
+
             # Build update query dynamically
             updates = []
             params = []
-            
+
             if feature.layer_name is not None:
                 updates.append("layer_name = %s")
                 params.append(feature.layer_name)
-            
+
             if feature.geometry is not None:
                 # Validate geometry
                 geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
                 if not geom_result.valid:
-                    raise HTTPException(status_code=400, detail=f"Invalid geometry: {geom_result.error}")
-                
+                    raise api_error(
+                        400,
+                        ErrorCode.FEATURE_INVALID_GEOMETRY,
+                        f"Invalid geometry: {geom_result.error}",
+                    )
+
                 updates.append("geom = ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)")
                 params.append(json.dumps(feature.geometry))
-            
+
             if feature.properties is not None:
                 updates.append("properties = %s")
                 params.append(json.dumps(feature.properties))
-            
+
             if not updates:
-                raise HTTPException(status_code=400, detail="No fields to update")
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_FIELD_REQUIRED,
+                    "No fields to update",
+                )
             
             updates.append("updated_at = NOW()")
             params.append(feature_id)
@@ -764,7 +832,11 @@ def update_feature(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error updating feature: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error updating feature: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -799,13 +871,21 @@ def delete_feature(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Feature not found")
+                raise api_error(
+                    404,
+                    ErrorCode.FEATURE_NOT_FOUND,
+                    "Feature not found",
+                    details={"feature_id": feature_id},
+                )
 
             tileset_id = str(row[2])
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
             if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
-                raise HTTPException(
-                    status_code=403, detail="Not authorized to delete this feature"
+                raise api_error(
+                    403,
+                    ErrorCode.FEATURE_FORBIDDEN,
+                    "Not authorized to delete this feature",
+                    details={"feature_id": feature_id, "tileset_id": tileset_id},
                 )
             
             # Delete feature
@@ -821,4 +901,8 @@ def delete_feature(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error deleting feature: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error deleting feature: {str(e)}",
+        )

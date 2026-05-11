@@ -8,6 +8,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.tiles import (
     VECTOR_TILE_MEDIA_TYPE,
     generate_mvt_from_postgis,
@@ -95,7 +96,12 @@ def get_dynamic_vector_tile(
             simplify=simplify,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating tile: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.TILE_RENDER_FAILED,
+            f"Error generating tile: {str(e)}",
+            details={"layer": layer_name, "z": z, "x": x, "y": y},
+        )
 
     # Get optimized cache headers based on zoom level
     headers = get_cache_headers(z, is_static=False)
@@ -180,14 +186,19 @@ def get_features_vector_tile(
 
             if not check_tileset_access_v2(conn, tileset, auth):
                 if auth is None:
+                    # NOTE: Phase 2b では envelope 化を見送り。
+                    # api_error() は headers= を受けないため、
+                    # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                     raise HTTPException(
                         status_code=401,
                         detail="Authentication required to access this tileset",
                         headers={"WWW-Authenticate": "Bearer"},
                     )
-                raise HTTPException(
-                    status_code=403,
-                    detail="You do not have permission to access this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "You do not have permission to access this tileset",
+                    details={"tileset_id": tileset_id},
                 )
     
     try:
@@ -202,7 +213,12 @@ def get_features_vector_tile(
             simplify=simplify,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating tile: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.TILE_RENDER_FAILED,
+            f"Error generating tile: {str(e)}",
+            details={"z": z, "x": x, "y": y, "tileset_id": tileset_id},
+        )
 
     # Get optimized cache headers based on zoom level
     headers = get_cache_headers(z, is_static=False)

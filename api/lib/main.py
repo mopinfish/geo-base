@@ -9,11 +9,13 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from lib.config import get_settings
 from lib.cors_middleware import TwoTierCORSMiddleware
 from lib.database import close_pool
+from lib.errors import is_envelope_detail
 
 # Import all routers
 from lib.routers.auth import router as auth_router
@@ -69,6 +71,30 @@ app.include_router(api_keys_router)
 
 if os.getenv("E2E_MODE") == "1":
     app.include_router(test_helpers_router)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """`raise api_error(...)` (lib.errors) で envelope `detail` を持つ
+    HTTPException を発生させた場合、body をそのまま展開して
+    `{error: {code, message, details?}}` を返す。
+
+    旧来の `raise HTTPException(detail="...")` は default の `{detail: "..."}`
+    にフォールバックする (Phase 2b 期間中の混在を許す)。
+    """
+    if is_envelope_detail(exc.detail):
+        # exc.detail は {"error": {...}} 形式なのでそのまま body にする
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.detail,
+            headers=getattr(exc, "headers", None),
+        )
+    # Default behaviour (Starlette / FastAPI 互換): body = {"detail": exc.detail}
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None),
+    )
 
 
 def get_base_url(request: Request) -> str:

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from lib.config import get_settings
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.raster_tiles import (
     is_rasterio_available,
     get_raster_tile_async,
@@ -103,17 +104,23 @@ async def get_raster_tile(
     """
     # Check if rio-tiler is available
     if not is_rasterio_available():
-        raise HTTPException(
-            status_code=501,
-            detail="Raster tile service is not available. Install rasterio and rio-tiler."
+        raise api_error(
+            501,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "Raster tile service is not available. Install rasterio and rio-tiler.",
         )
-    
+
     # Validate format
     try:
         normalized_format = validate_tile_format(tile_format)
         media_type = get_raster_media_type(normalized_format)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_INVALID_VALUE,
+            str(e),
+            details={"tile_format": tile_format},
+        )
     
     # Try to get tileset info from cache first
     cache_key = f"raster:{tileset_id}"
@@ -148,7 +155,12 @@ async def get_raster_tile(
             row = await asyncio.to_thread(_fetch_raster_info)
 
             if not row:
-                raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    f"Raster tileset not found: {tileset_id}",
+                    details={"tileset_id": tileset_id},
+                )
 
             cog_url, min_zoom, max_zoom, is_public, owner_user_id = row
             owner_user_id = str(owner_user_id) if owner_user_id else None
@@ -171,7 +183,11 @@ async def get_raster_tile(
                 conn.rollback()
             except Exception:
                 pass
-            raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+            raise api_error(
+                500,
+                ErrorCode.INTERNAL_DB_ERROR,
+                f"Error fetching tileset: {str(e)}",
+            )
 
     # Check access
     tileset_for_access = {
@@ -181,14 +197,19 @@ async def get_raster_tile(
     }
     if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
         if auth is None:
+            # NOTE: Phase 2b では envelope 化を見送り。
+            # api_error() は headers= を受けないため、
+            # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
             raise HTTPException(
                 status_code=401,
                 detail="Authentication required to access this tileset",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to access this tileset"
+        raise api_error(
+            403,
+            ErrorCode.TILESET_FORBIDDEN,
+            "You do not have permission to access this tileset",
+            details={"tileset_id": tileset_id},
         )
 
     # Parse band indexes
@@ -197,7 +218,12 @@ async def get_raster_tile(
         try:
             band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid band indexes format")
+            raise api_error(
+                400,
+                ErrorCode.VALIDATION_INVALID_VALUE,
+                "Invalid band indexes format",
+                details={"indexes": indexes},
+            )
     
     # NOTE: scale_min/scale_max are passed as-is (None allowed)
     # get_raster_tile_async will auto-detect appropriate scaling:
@@ -219,10 +245,20 @@ async def get_raster_tile(
             colormap=colormap,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating tile: {str(e)}")
-    
+        raise api_error(
+            500,
+            ErrorCode.TILE_RENDER_FAILED,
+            f"Error generating tile: {str(e)}",
+            details={"tileset_id": tileset_id, "z": z, "x": x, "y": y},
+        )
+
     if tile_data is None:
-        raise HTTPException(status_code=404, detail="Tile not found or out of bounds")
+        raise api_error(
+            404,
+            ErrorCode.TILE_NOT_FOUND,
+            "Tile not found or out of bounds",
+            details={"tileset_id": tileset_id, "z": z, "x": x, "y": y},
+        )
     
     # Build response headers
     headers = get_raster_cache_headers(z, is_static=True)
@@ -244,11 +280,12 @@ def get_raster_tilejson_endpoint(
         tileset_id: Tileset ID
     """
     if not is_rasterio_available():
-        raise HTTPException(
-            status_code=501,
-            detail="Raster service is not available."
+        raise api_error(
+            501,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "Raster service is not available.",
         )
-    
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -263,14 +300,19 @@ def get_raster_tilejson_endpoint(
                 (tileset_id,),
             )
             row = cur.fetchone()
-        
+
         if not row:
-            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
-        
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"Raster tileset not found: {tileset_id}",
+                details={"tileset_id": tileset_id},
+            )
+
         (name, description, tile_format, attribution, is_public, owner_user_id,
          min_zoom, max_zoom, xmin, ymin, xmax, ymax, center_x, center_y) = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
-        
+
         # Check access
         tileset_for_access = {
             "id": tileset_id,
@@ -279,14 +321,19 @@ def get_raster_tilejson_endpoint(
         }
         if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "You do not have permission to access this tileset",
+                details={"tileset_id": tileset_id},
             )
 
         base_url = get_base_url(request)
@@ -316,7 +363,11 @@ def get_raster_tilejson_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error generating TileJSON: {str(e)}",
+        )
 
 
 @router.get("/{tileset_id}/preview")
@@ -344,17 +395,23 @@ async def get_raster_preview(
         colormap: Colormap name for single-band visualization
     """
     if not is_rasterio_available():
-        raise HTTPException(
-            status_code=503,
-            detail="Raster preview service is not available"
+        raise api_error(
+            503,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "Raster preview service is not available",
         )
-    
+
     try:
         # Validate format
         normalized_format = validate_tile_format(format)
         media_type = get_raster_media_type(normalized_format)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_INVALID_VALUE,
+            str(e),
+            details={"format": format},
+        )
     
     # async handler 内なので sync DB I/O は asyncio.to_thread で
     # threadpool にオフロード（issue #66 / Option A）
@@ -376,7 +433,12 @@ async def get_raster_preview(
         row = await asyncio.to_thread(_fetch_preview_info)
 
         if not row:
-            raise HTTPException(status_code=404, detail="Raster tileset not found")
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                "Raster tileset not found",
+                details={"tileset_id": tileset_id},
+            )
 
         is_public = row[1]
         owner_id = str(row[2]) if row[2] else None
@@ -390,26 +452,41 @@ async def get_raster_preview(
         }
         if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "Access denied",
+                details={"tileset_id": tileset_id},
+            )
 
         if not cog_url:
-            raise HTTPException(
-                status_code=404,
-                detail="No COG datasource configured for this tileset"
+            raise api_error(
+                404,
+                ErrorCode.DATASOURCE_NOT_FOUND,
+                "No COG datasource configured for this tileset",
+                details={"tileset_id": tileset_id},
             )
-        
+
         # Parse band indexes
         indexes = None
         if bands:
             try:
                 indexes = tuple(int(b.strip()) for b in bands.split(","))
             except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid band indexes")
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_INVALID_VALUE,
+                    "Invalid band indexes",
+                    details={"bands": bands},
+                )
         
         # NOTE: scale_min/scale_max are passed as-is (None allowed)
         # get_raster_preview_async will auto-detect appropriate scaling
@@ -443,7 +520,12 @@ async def get_raster_preview(
             conn.rollback()
         except Exception:
             pass
-        raise HTTPException(status_code=500, detail=f"Error generating preview: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.TILE_RENDER_FAILED,
+            f"Error generating preview: {str(e)}",
+            details={"tileset_id": tileset_id},
+        )
 
 
 @router.get("/{tileset_id}/info")
@@ -459,11 +541,12 @@ def get_raster_info(
         tileset_id: Tileset ID
     """
     if not is_rasterio_available():
-        raise HTTPException(
-            status_code=501,
-            detail="Raster info service is not available."
+        raise api_error(
+            501,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "Raster info service is not available.",
         )
-    
+
     # Get COG URL from database with access check
     try:
         with conn.cursor() as cur:
@@ -478,13 +561,18 @@ def get_raster_info(
                 (tileset_id,),
             )
             row = cur.fetchone()
-        
+
         if not row:
-            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
-        
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"Raster tileset not found: {tileset_id}",
+                details={"tileset_id": tileset_id},
+            )
+
         cog_url, name, description, is_public, owner_user_id = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
-        
+
         # Check access
         tileset_for_access = {
             "id": tileset_id,
@@ -493,20 +581,29 @@ def get_raster_info(
         }
         if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "You do not have permission to access this tileset",
+                details={"tileset_id": tileset_id},
             )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching tileset: {str(e)}",
+        )
 
     # Get COG info
     try:
@@ -519,7 +616,11 @@ def get_raster_info(
             **cog_info,
         }
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_STORAGE_ERROR,
+            str(e),
+        )
 
 
 @router.get("/{tileset_id}/statistics")
@@ -537,11 +638,12 @@ def get_raster_statistics(
         indexes: Comma-separated band indexes to analyze
     """
     if not is_rasterio_available():
-        raise HTTPException(
-            status_code=501,
-            detail="Raster statistics service is not available."
+        raise api_error(
+            501,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "Raster statistics service is not available.",
         )
-    
+
     # Get COG URL from database with access check
     try:
         with conn.cursor() as cur:
@@ -556,13 +658,18 @@ def get_raster_statistics(
                 (tileset_id,),
             )
             row = cur.fetchone()
-        
+
         if not row:
-            raise HTTPException(status_code=404, detail=f"Raster tileset not found: {tileset_id}")
-        
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"Raster tileset not found: {tileset_id}",
+                details={"tileset_id": tileset_id},
+            )
+
         cog_url, is_public, owner_user_id = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
-        
+
         # Check access
         tileset_for_access = {
             "id": tileset_id,
@@ -571,20 +678,29 @@ def get_raster_statistics(
         }
         if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "You do not have permission to access this tileset",
+                details={"tileset_id": tileset_id},
             )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching tileset: {str(e)}",
+        )
 
     # Parse band indexes
     band_indexes = None
@@ -592,8 +708,13 @@ def get_raster_statistics(
         try:
             band_indexes = tuple(int(i.strip()) for i in indexes.split(","))
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid band indexes format")
-    
+            raise api_error(
+                400,
+                ErrorCode.VALIDATION_INVALID_VALUE,
+                "Invalid band indexes format",
+                details={"indexes": indexes},
+            )
+
     # Get statistics
     try:
         stats = get_cog_statistics(cog_url, indexes=band_indexes)
@@ -602,4 +723,8 @@ def get_raster_statistics(
             "statistics": stats,
         }
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_STORAGE_ERROR,
+            str(e),
+        )

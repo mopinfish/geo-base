@@ -13,6 +13,7 @@ from lib.auth import (
 )
 from lib.config import get_settings
 from lib.database import get_connection, get_db_connection
+from lib.errors import ErrorCode, api_error
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -20,20 +21,22 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # === エラー翻訳 ===
 
-ERROR_MAP = {
-    InvalidCredentials: 401,
-    RateLimited: 429,
-    InvalidToken: 401,
-    UserAlreadyExists: 409,
-    UserNotFound: 404,
-    WeakPassword: 400,
-    ProviderError: 502,
+# AuthError サブクラス → (HTTP status, ErrorCode) の対応表。
+# Phase 2b で envelope レスポンスへ移行 (#106)。
+ERROR_MAP: dict[type, tuple[int, ErrorCode]] = {
+    InvalidCredentials: (401, ErrorCode.AUTH_INVALID_CREDENTIALS),
+    RateLimited: (429, ErrorCode.AUTH_RATE_LIMITED),
+    InvalidToken: (401, ErrorCode.AUTH_TOKEN_INVALID),
+    UserAlreadyExists: (409, ErrorCode.AUTH_USER_ALREADY_EXISTS),
+    UserNotFound: (404, ErrorCode.AUTH_USER_NOT_FOUND),
+    WeakPassword: (400, ErrorCode.AUTH_WEAK_PASSWORD),
+    ProviderError: (502, ErrorCode.AUTH_PROVIDER_ERROR),
 }
 
 
 def _translate(e: AuthError) -> HTTPException:
-    code = ERROR_MAP.get(type(e), 500)
-    return HTTPException(status_code=code, detail=str(e))
+    status_code, code = ERROR_MAP.get(type(e), (500, ErrorCode.INTERNAL_UNEXPECTED))
+    return api_error(status_code, code, str(e))
 
 
 # === Cookie ヘルパ ===
@@ -73,7 +76,7 @@ def _check_origin(request: Request) -> None:
     settings = get_settings()
     origin = request.headers.get("origin")
     if origin and origin not in settings.cors_origins:
-        raise HTTPException(403, "Origin not allowed")
+        raise api_error(403, ErrorCode.AUTH_ORIGIN_NOT_ALLOWED, "Origin not allowed")
 
 
 # ===========================================================================
@@ -134,7 +137,7 @@ async def refresh(request: Request, response: Response):
     _check_origin(request)
     refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
     if not refresh_token:
-        raise HTTPException(401, "No refresh token")
+        raise api_error(401, ErrorCode.AUTH_UNAUTHORIZED, "No refresh token")
     try:
         pair = await get_auth_provider().refresh_tokens(
             refresh_token,
@@ -227,7 +230,7 @@ async def change_password(
     try:
         await provider.authenticate(user.email, body.current_password)
     except AuthError:
-        raise HTTPException(401, "Invalid current password")
+        raise api_error(401, ErrorCode.AUTH_INVALID_CREDENTIALS, "Invalid current password")
     try:
         await provider.update_password(user.id, body.new_password)
     except AuthError as e:
@@ -304,11 +307,16 @@ async def get_invitation(token: str, conn=Depends(get_connection)):
         )
         row = cur.fetchone()
     if not row:
-        raise HTTPException(404, "Invitation not found")
+        raise api_error(404, ErrorCode.AUTH_INVITATION_NOT_FOUND, "Invitation not found")
 
     team_id, team_name, team_slug, role, email, expires_at, status_, inviter_name = row
     if status_ != "pending":
-        raise HTTPException(404, f"Invitation is {status_}")
+        raise api_error(
+            404,
+            ErrorCode.AUTH_INVITATION_INVALID,
+            f"Invitation is {status_}",
+            details={"status": status_},
+        )
 
     # Compare expires_at to current time, handling timezone
     from datetime import timezone as _tz
@@ -319,7 +327,7 @@ async def get_invitation(token: str, conn=Depends(get_connection)):
     else:
         expires_at_aware = expires_at
     if expires_at_aware < now:
-        raise HTTPException(404, "Invitation expired")
+        raise api_error(404, ErrorCode.AUTH_INVITATION_EXPIRED, "Invitation expired")
 
     existing = await get_auth_provider().get_user_by_email(email)
     return InvitationInfoResponse(
@@ -365,11 +373,16 @@ async def accept_invitation(
         row = cur.fetchone()
 
     if not row:
-        raise HTTPException(400, "Invalid invitation token")
+        raise api_error(400, ErrorCode.AUTH_INVITATION_NOT_FOUND, "Invalid invitation token")
     inv_id, team_id, email, role, expires_at, status_ = row
 
     if status_ != "pending":
-        raise HTTPException(400, f"Invitation is {status_}")
+        raise api_error(
+            400,
+            ErrorCode.AUTH_INVITATION_INVALID,
+            f"Invitation is {status_}",
+            details={"status": status_},
+        )
 
     from datetime import timezone as _tz
     now = datetime.now(_tz.utc)
@@ -378,14 +391,19 @@ async def accept_invitation(
     else:
         expires_at_aware = expires_at
     if expires_at_aware < now:
-        raise HTTPException(400, "Invitation has expired")
+        raise api_error(400, ErrorCode.AUTH_INVITATION_EXPIRED, "Invitation has expired")
 
     provider = get_auth_provider()
 
     # 既存ユーザーチェック
     existing = await provider.get_user_by_email(email)
     if existing is not None:
-        raise HTTPException(409, "An account with this email already exists. Please log in and accept via /api/teams/invitations/accept")
+        raise api_error(
+            409,
+            ErrorCode.AUTH_USER_ALREADY_EXISTS,
+            "An account with this email already exists. "
+            "Please log in and accept via /api/teams/invitations/accept",
+        )
 
     # ユーザー作成
     try:
