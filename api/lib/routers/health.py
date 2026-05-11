@@ -9,6 +9,7 @@ from lib.database import check_database_connection, check_postgis_extension
 from lib.raster_tiles import is_rasterio_available
 from lib.pmtiles import is_pmtiles_available
 from lib.cache import get_cache_stats, clear_all_caches
+from lib.redis_client import check_redis_health
 from lib.auth import User, require_auth, is_auth_configured
 
 
@@ -71,6 +72,23 @@ def health_check_cache():
         "status": "ok",
         "cache": get_cache_stats(),
     }
+
+
+@router.get("/api/health/redis")
+def health_check_redis():
+    """Redis connection health endpoint (Issue #119).
+
+    `redis_client.check_redis_health()` を expose して、本番 Redis の稼働状況を
+    外部から確認できるようにする。`/api/health/cache` は in-memory cache のみを
+    返すため、Redis 自体の到達性は本エンドポイントで確認する。
+
+    Returns one of:
+    - status=healthy: Redis 接続成功 + INFO 取得済み
+    - status=unavailable: REDIS_ENABLED=true だが接続失敗
+    - status=disabled: REDIS_ENABLED=false で意図的に無効化されている
+    - status=error: 接続後の INFO 取得で例外発生
+    """
+    return check_redis_health()
 
 
 @router.post("/api/admin/cache/clear")

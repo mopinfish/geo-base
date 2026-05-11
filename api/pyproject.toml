@@ -27,6 +27,8 @@ dependencies = [
     "boto3>=1.34.0",
     # aiopmtiles の S3 backend が `s3://` URL を扱う際に require される (issue #101)
     "aioboto3>=13.0.0",
+    # キャッシュ / レート制限の Redis backend。本番では Upstash を利用 (issue #119)
+    "redis>=5.0.0",
 ]
 
 [project.optional-dependencies]
