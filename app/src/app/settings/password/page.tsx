@@ -77,6 +77,7 @@ export default function PasswordSettingsPage() {
                   value={current}
                   onChange={(e) => setCurrent(e.target.value)}
                   disabled={loading}
+                  data-testid="password-current"
                 />
               </div>
               <div className="space-y-2">
@@ -89,6 +90,7 @@ export default function PasswordSettingsPage() {
                   value={next}
                   onChange={(e) => setNext(e.target.value)}
                   disabled={loading}
+                  data-testid="password-next"
                 />
               </div>
 
@@ -99,7 +101,7 @@ export default function PasswordSettingsPage() {
                 </div>
               )}
 
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading} data-testid="password-submit">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
