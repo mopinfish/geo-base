@@ -103,6 +103,9 @@ class ErrorCode(str, Enum):
     TEAM_INVITATION_NOT_FOUND = "team_invitation_not_found"
     TEAM_INVITATION_EXPIRED = "team_invitation_expired"
     TEAM_INVITATION_ALREADY_USED = "team_invitation_already_used"
+    TEAM_INVITATION_ALREADY_EXISTS = "team_invitation_already_exists"
+    TEAM_INVITATION_EMAIL_MISMATCH = "team_invitation_email_mismatch"
+    TEAM_INVITATION_INVALID_STATUS = "team_invitation_invalid_status"
     TEAM_INVALID = "team_invalid"
 
     # --- api_key ---
