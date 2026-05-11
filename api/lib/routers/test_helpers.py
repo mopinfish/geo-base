@@ -110,10 +110,16 @@ def get_recent_token(
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            # `status = 'pending'` + `token IS NOT NULL` で「実際に有効な
+            # token 行」だけに限定する。expired/cancelled で token を NULL に
+            # クリアした行が accepted_at IS NULL のままヒットしないように。
             cur.execute(
                 """
                 SELECT token FROM team_invitations
-                WHERE email = %s AND accepted_at IS NULL
+                WHERE email = %s
+                  AND status = 'pending'
+                  AND token IS NOT NULL
+                  AND accepted_at IS NULL
                 ORDER BY created_at DESC LIMIT 1
                 """,
                 (email,),

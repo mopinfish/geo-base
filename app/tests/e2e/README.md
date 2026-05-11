@@ -114,7 +114,8 @@ app/tests/e2e/
 
 - ファイル名: `issue-<番号>-<短い説明>.spec.ts`
 - spec 内冒頭に「どの issue / PR で発生したか」と「修正内容」を記述
-- 各テストには `@regression` タグを付ける（smoke / full run には自動的に含まれる）
+- 各テストには `@regression` タグを付ける
+- 実行範囲: `npm run test:e2e` (= `playwright test` full run) でのみ実行される。`npm run test:e2e:smoke` は `--grep @smoke` で smoke しか拾わないため **regression は smoke に含まれない**。重要 regression を smoke にも入れたい場合は `@smoke @regression` の両方を付与する
 
 ## セレクタ規約
 
