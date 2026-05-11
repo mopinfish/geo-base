@@ -1,7 +1,9 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+
 import { authClient } from "@/lib/auth/client";
 import { AuthApiError } from "@/lib/auth/errors";
 
@@ -15,6 +17,7 @@ function PasswordResetConfirmForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const t = useTranslations("auth.passwordReset.confirm");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +32,7 @@ function PasswordResetConfirmForm() {
       // E2E (AUTH-08) は `password-reset-confirm-success` testid を観測する。
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof AuthApiError ? err.detail : "Failed");
+      setError(err instanceof AuthApiError ? err.detail : t("error_generic"));
     } finally {
       setLoading(false);
     }
@@ -39,7 +42,7 @@ function PasswordResetConfirmForm() {
     return (
       <div className="container py-12">
         <p className="text-red-600" data-testid="password-reset-error">
-          無効なリンクです。
+          {t("invalid_link")}
         </p>
       </div>
     );
@@ -52,7 +55,7 @@ function PasswordResetConfirmForm() {
           className="text-green-700"
           data-testid="password-reset-confirm-success"
         >
-          パスワードを更新しました。
+          {t("success_message")}
         </p>
         <button
           type="button"
@@ -60,7 +63,7 @@ function PasswordResetConfirmForm() {
           className="mt-4 w-full p-2 bg-blue-600 text-white rounded"
           data-testid="password-reset-confirm-success-login"
         >
-          ログインへ
+          {t("back_to_login")}
         </button>
       </div>
     );
@@ -68,12 +71,12 @@ function PasswordResetConfirmForm() {
 
   return (
     <div className="container max-w-md mx-auto py-12">
-      <h1 className="text-2xl font-bold mb-6">新しいパスワードを設定</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("title")}</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
           type="password" required minLength={8}
           value={password} onChange={(e) => setPassword(e.target.value)}
-          placeholder="新しいパスワード（8文字以上）" className="w-full p-2 border rounded"
+          placeholder={t("password_placeholder")} className="w-full p-2 border rounded"
           data-testid="password-reset-confirm-password"
         />
         {error && (
@@ -87,7 +90,7 @@ function PasswordResetConfirmForm() {
           className="w-full p-2 bg-blue-600 text-white rounded"
           data-testid="password-reset-confirm-submit"
         >
-          {loading ? "..." : "更新"}
+          {loading ? t("submitting") : t("submit")}
         </button>
       </form>
     </div>
