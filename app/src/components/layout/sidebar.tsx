@@ -15,57 +15,35 @@ import {
   Users,
   KeyRound,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/auth/client";
 
+/**
+ * `key` は `common.nav.<key>` (Phase 3b / Issue #107)。文字列は catalog 側で
+ * 一元管理し、本配列ではアイコンと href だけを定義する。
+ */
 interface NavItem {
-  title: string;
+  key: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
 const navItems: NavItem[] = [
-  {
-    title: "ダッシュボード",
-    href: "/",
-    icon: Home,
-  },
-  {
-    title: "タイルセット",
-    href: "/tilesets",
-    icon: Layers,
-  },
-  {
-    title: "フィーチャー",
-    href: "/features",
-    icon: Map,
-  },
-  {
-    title: "データソース",
-    href: "/datasources",
-    icon: Database,
-  },
-  {
-    title: "チーム",
-    href: "/teams",
-    icon: Users,
-  },
-  {
-    title: "API キー",
-    href: "/api-keys",
-    icon: KeyRound,
-  },
+  { key: "dashboard", href: "/", icon: Home },
+  { key: "tilesets", href: "/tilesets", icon: Layers },
+  { key: "features", href: "/features", icon: Map },
+  { key: "datasources", href: "/datasources", icon: Database },
+  { key: "teams", href: "/teams", icon: Users },
+  { key: "apiKeys", href: "/api-keys", icon: KeyRound },
 ];
 
 const bottomNavItems: NavItem[] = [
-  {
-    title: "設定",
-    href: "/settings",
-    icon: Settings,
-  },
+  { key: "settings", href: "/settings", icon: Settings },
 ];
 
 export function Sidebar() {
@@ -73,6 +51,7 @@ export function Sidebar() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const t = useTranslations("common");
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -95,6 +74,7 @@ export function Sidebar() {
         size="icon"
         className="fixed left-4 top-4 z-50 md:hidden"
         onClick={() => setIsOpen(!isOpen)}
+        aria-label={isOpen ? t("nav_mobile.close") : t("nav_mobile.open")}
       >
         {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>
@@ -118,7 +98,7 @@ export function Sidebar() {
           {/* ロゴ・ブランド */}
           <div className="flex h-16 items-center gap-2 border-b px-6">
             <Map className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">geo-base</span>
+            <span className="text-lg font-bold">{t("app.brand")}</span>
           </div>
 
           {/* メインナビゲーション */}
@@ -138,7 +118,7 @@ export function Sidebar() {
                   )}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.title}
+                  {t(`nav.${item.key}`)}
                 </Link>
               );
             })}
@@ -163,7 +143,7 @@ export function Sidebar() {
                   )}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.title}
+                  {t(`nav.${item.key}`)}
                 </Link>
               );
             })}
@@ -178,15 +158,13 @@ export function Sidebar() {
               ) : (
                 <LogOut className="h-4 w-4" />
               )}
-              {isLoggingOut ? "ログアウト中..." : "ログアウト"}
+              {isLoggingOut ? t("user.loggingOut") : t("user.logout")}
             </button>
           </div>
 
           {/* バージョン情報 */}
           <div className="border-t p-4">
-            <p className="text-xs text-muted-foreground">
-              geo-base Admin v0.2.0
-            </p>
+            <p className="text-xs text-muted-foreground">{t("app.version")}</p>
           </div>
         </div>
       </aside>
