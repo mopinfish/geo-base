@@ -356,6 +356,46 @@ class LocalAuthProvider(AuthProvider):
             email_verified=row[6] is not None,
         )
 
+    async def update_preferred_locale(
+        self,
+        user_id: str,
+        preferred_locale: Optional[str],
+    ) -> User:
+        """i18n Phase 3 (#107): `users.preferred_locale` のみを更新する
+        専用パス。`update_user()` を拡張すると他 caller (PATCH /me) も
+        触る必要があるため、locale 切替は独立メソッドに分離した。
+
+        `preferred_locale=None` を渡すと NULL に戻す (= cookie /
+        Accept-Language フォールバック)。許容 locale の検証は呼び出し側
+        (lib/routers/auth.py:update_my_locale) で行う。
+        """
+        return await asyncio.to_thread(
+            self._update_preferred_locale_sync, user_id, preferred_locale,
+        )
+
+    def _update_preferred_locale_sync(self, user_id, preferred_locale) -> User:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE users SET preferred_locale = %s, updated_at = NOW()
+                       WHERE id = %s
+                       RETURNING id, email, name, role, app_metadata,
+                                 user_metadata, email_verified_at,
+                                 preferred_locale""",
+                    (preferred_locale, user_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise UserNotFound(user_id)
+            conn.commit()
+
+        return User(
+            id=str(row[0]), email=row[1], name=row[2], role=row[3],
+            app_metadata=row[4] or {}, user_metadata=row[5] or {},
+            email_verified=row[6] is not None,
+            preferred_locale=row[7],
+        )
+
     async def update_password(self, user_id: str, new_password: str) -> None:
         check_password_policy(new_password)
         await asyncio.to_thread(self._update_password_sync, user_id, new_password)

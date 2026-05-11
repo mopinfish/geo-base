@@ -13,6 +13,9 @@ class User(BaseModel):
     user_metadata: Optional[dict[str, Any]] = None
     name: Optional[str] = None
     email_verified: bool = False
+    # i18n Phase 3 (#107): Admin UI が言語切替時に PATCH /api/auth/me/locale
+    # で更新する。null = 未設定 (cookie / Accept-Language フォールバック)。
+    preferred_locale: Optional[str] = None
 
 
 class AuthResult(BaseModel):

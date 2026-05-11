@@ -107,6 +107,32 @@ class AuthClient {
     if (!res.ok) throw await parseAuthError(res);
   }
 
+  /**
+   * i18n Phase 3 (#107): ログイン中ユーザーの UI locale を永続化する。
+   *
+   * - `locale` に `"en"` / `"ja"` を渡すと `users.preferred_locale` を更新
+   * - `null` を渡すと NULL に戻し、cookie / Accept-Language フォールバックへ
+   *
+   * cookie の `NEXT_LOCALE` 側は Server Component の再 evaluate 時に
+   * `proxy.ts` 経由で再書き込みされるため、ここでは API のみ叩く。
+   * 言語切替 UI (PR-B) では本メソッド呼び出し + `document.cookie` への
+   * 即時書き込み + `router.refresh()` を組み合わせる。
+   */
+  async setPreferredLocale(locale: "en" | "ja" | null): Promise<User> {
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    const token = this.accessToken;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_URL}/api/auth/me/locale`, {
+      method: "PATCH",
+      headers,
+      credentials: "include",
+      body: JSON.stringify({ preferred_locale: locale }),
+    });
+    if (!res.ok) throw await parseAuthError(res);
+    return res.json();
+  }
+
   getAccessToken(): string | null {
     return this.accessToken;
   }
