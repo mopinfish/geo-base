@@ -326,6 +326,9 @@ def test_api_keys_expire_returns_404_for_unknown_key(monkeypatch):
         )
 
     assert res.status_code == 404, res.text
-    assert "not found" in res.json()["detail"].lower()
+    # Phase 2b: envelope レスポンス `{error: {code, message, ...}}` に移行 (#106)
+    body = res.json()
+    assert "not found" in body["error"]["message"].lower()
+    assert body["error"]["code"] == "api_key_not_found"
     # 失敗時に commit() を呼ばないこと。
     assert not mock_conn.commit.called
