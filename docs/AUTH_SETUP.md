@@ -209,6 +209,52 @@ curl -X DELETE https://geo-base-api.fly.dev/api/tilesets/$TILESET_ID \
 | 403 | `write scope required to create tileset`（POST /api/tilesets のみ専用メッセージ）/ `Not authorized to ...`（その他の write 系。scope 不足とリソース認可不足を区別せず単一メッセージで返す） | scope 不足: 必要な `scopes`（`write` / `delete`）を含めて API キーを再発行。リソース認可: team API キーの場合は `team_id` と `team_tilesets.permission_level` を確認 |
 | 429 | `API key rate limit exceeded` | rate limit 超過。後述の rate limit セクションを参照 |
 
+### API キー rate limit (Issue #56)
+
+API キーごとに `rate_limit_per_minute` / `rate_limit_per_day` が設定でき、超過すると 429 を返します。集計 backend は `RATE_LIMIT_BACKEND` 環境変数で切替可能:
+
+| 値 | 説明 |
+|---|---|
+| `db` (既定) | `api_key_rate_limits` テーブルに INSERT/UPDATE で集計。実装が枯れていて安全だが、高頻度アクセスで lock contention によりレイテンシが悪化する |
+| `redis` | Redis INCR + EXPIRE で集計。**fail-open**（Redis 障害時は warn ログを出してリクエストを通す）。100 並行リクエストでも accurate にカウントされ、`api_key_rate_limits` 表への書き込みが発生しない |
+
+#### Redis backend のキー設計
+
+実キーは `REDIS_KEY_PREFIX` (`lib.redis_client.RedisConfig.key_prefix`、既定 `geo-base:`) が先頭に付与されます。既定設定での例:
+
+- per-minute: `geo-base:rate:apikey:{key_id}:m:{epoch_minute}` (TTL 120s — 窓 60s + clock skew 吸収)
+- per-day: `geo-base:rate:apikey:{key_id}:d:{YYYYMMDD}` (TTL 90000s = 25h)
+
+Redis CLI で確認する場合は **`KEYS` は本番で server をブロックする**ため避けて、非ブロッキングな `SCAN` を使う:
+
+```fish
+redis-cli --scan --pattern "geo-base:rate:apikey:*"
+```
+
+アルゴリズム: `INCR` (atomic) → `EXPIRE key ttl NX` で TTL 未設定キーにのみ TTL 付与（`nx=True` で何度呼んでも自己回復、過去の EXPIRE 失敗を救済）→ 戻り値が limit 超過なら `RateLimited`。
+
+`DbRateLimiter` は per-minute のみチェックする旧 inline 実装を踏襲するのに対し、`RedisRateLimiter` は per-minute / per-day **両方をチェック**します（Issue #56 仕様準拠）。
+
+#### Fail-open ポリシー
+
+Redis 障害時 (`get_redis()` が None / コマンド例外) は warn ログを出してリクエストを通します。rate limit は **quota 制御であって認可ではない** ため、Redis ダウンで 503 を連発するより一時的な過剰トラフィック受容のほうが UX 上望ましいという判断。代わりに `/api/health/redis` で稼働監視 + Fly Logs / Sentry でアラートを上げる運用を推奨。
+
+#### 切替手順
+
+```fish
+# 本番 (Fly.io)
+fly secrets set RATE_LIMIT_BACKEND=redis -a geo-base-api
+
+# 動作確認
+curl https://geo-base-api.fly.dev/api/health/redis  # status: healthy であること
+```
+
+ロールバックは `fly secrets set RATE_LIMIT_BACKEND=db` で即時。`api_key_rate_limits` テーブルはそのまま残してあるので Redis backend へ切り替えても DB バックエンドへ即時戻せます。
+
+#### Redis 接続プールサイズ
+
+並行リクエスト数 ≧ プールサイズだと `Too many connections` で fail-open が誤発火します。`REDIS_MAX_CONNECTIONS` を実トラフィックの並行度に合わせて調整してください（既定 10）。
+
 ---
 
 ## 環境変数リファレンス

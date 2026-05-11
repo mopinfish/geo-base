@@ -1,11 +1,17 @@
-"""API キー検証 + AuthContext 化 + レート制限統合。"""
+"""API キー検証 + AuthContext 化 + レート制限統合。
+
+Rate limit ロジックは `api_key_rate_limit.py` の `RateLimiter` 抽象に切り出され
+ており、`settings.rate_limit_backend` (env: `RATE_LIMIT_BACKEND`) で DB / Redis
+の実装を切替可能（Issue #56）。
+"""
 import asyncio
 import hashlib
 import logging
 from typing import Optional
 
+from .api_key_rate_limit import make_rate_limiter
 from .context import AuthContext
-from .errors import RateLimited
+from .errors import RateLimited  # noqa: F401  # 公開 API として再 export
 
 logger = logging.getLogger(__name__)
 
@@ -65,27 +71,11 @@ def _validate_sync(key: str, ip: Optional[str], user_agent: Optional[str]) -> Op
             if expires_at < datetime.now(timezone.utc):
                 return None
 
-        # レート制限カウンタ更新（既存 SQL 関数を使用）
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT * FROM get_api_key_rate_limit_status(%s, 'minute')",
-                (key_id,),
-            )
-            count, limit, _, remaining = cur.fetchone()
-
-        if remaining <= 0:
-            raise RateLimited("API key rate limit exceeded (per minute)")
-
-        # カウント増加
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT increment_api_key_rate_limit(%s, 'minute')",
-                (key_id,),
-            )
-            cur.execute(
-                "SELECT increment_api_key_rate_limit(%s, 'day')",
-                (key_id,),
-            )
+        # レート制限カウンタ更新（Issue #56: backend 抽象化）
+        # backend は `settings.rate_limit_backend` で決まる（db / redis）。
+        # 超過時は RateLimited を raise（caller の `validate_api_key` が伝播）。
+        rate_limiter = make_rate_limiter(conn)
+        rate_limiter.check_and_increment(str(key_id), rl_min, rl_day)
         conn.commit()
 
         # last_used_at 更新（既存 SQL 関数）
