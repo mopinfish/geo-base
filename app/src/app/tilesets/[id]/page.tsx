@@ -22,7 +22,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useState, useEffect } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 
 import { ExportFeaturesButton } from "@/components/features";
 import { AdminLayout } from "@/components/layout";
@@ -77,57 +77,59 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const [mapRefreshKey, setMapRefreshKey] = useState<number>(Date.now());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchTileset = async (refreshMap = false) => {
-    if (!isReady) return;
+  const fetchTileset = useCallback(
+    async (refreshMap = false) => {
+      if (!isReady) return;
 
-    setIsLoading(true);
-    setError(null);
-    if (refreshMap) {
-      setIsRefreshing(true);
-    }
-
-    try {
-      const data = await api.getTileset(id);
-      console.log("Tileset data:", data);
-      setTileset(data);
-
-      // TileJSONも取得
-      try {
-        const tjData = await api.getTilesetTileJSON(id);
-        setTileJSON(tjData as TileJSONWithLayers);
-      } catch {
-        // TileJSONの取得に失敗しても詳細は表示
-        console.warn("TileJSON fetch failed, but continuing without it");
-      }
-
-      // フィーチャー統計を取得（vectorタイプの場合）
-      if (data.type === "vector") {
-        try {
-          const statsData = await api.getTilesetStats(id);
-          setTilesetStats(statsData);
-        } catch {
-          console.warn("Tileset stats fetch failed");
-        }
-      }
-
-      // マップをリフレッシュ（キャッシュバスティング）
+      setIsLoading(true);
+      setError(null);
       if (refreshMap) {
-        setMapRefreshKey(Date.now());
+        setIsRefreshing(true);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
+
+      try {
+        const data = await api.getTileset(id);
+        console.log("Tileset data:", data);
+        setTileset(data);
+
+        // TileJSONも取得
+        try {
+          const tjData = await api.getTilesetTileJSON(id);
+          setTileJSON(tjData as TileJSONWithLayers);
+        } catch {
+          // TileJSONの取得に失敗しても詳細は表示
+          console.warn("TileJSON fetch failed, but continuing without it");
+        }
+
+        // フィーチャー統計を取得（vectorタイプの場合）
+        if (data.type === "vector") {
+          try {
+            const statsData = await api.getTilesetStats(id);
+            setTilesetStats(statsData);
+          } catch {
+            console.warn("Tileset stats fetch failed");
+          }
+        }
+
+        // マップをリフレッシュ（キャッシュバスティング）
+        if (refreshMap) {
+          setMapRefreshKey(Date.now());
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t("error_fetch"));
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [api, id, isReady, t],
+  );
 
   useEffect(() => {
     if (isReady) {
       fetchTileset(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isReady]);
+  }, [isReady, fetchTileset]);
 
   const handleRefresh = () => {
     fetchTileset(true);

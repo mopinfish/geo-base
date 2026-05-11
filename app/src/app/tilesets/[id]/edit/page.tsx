@@ -4,7 +4,7 @@ import { ArrowLeft, Pencil, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 
 import { AdminLayout } from "@/components/layout";
 import { TilesetForm } from "@/components/tilesets/tileset-form";
@@ -29,7 +29,7 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const fetchTileset = async () => {
+  const fetchTileset = useCallback(async () => {
     if (!isReady) return;
 
     setIsLoading(true);
@@ -42,14 +42,13 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, id, isReady, t]);
 
   useEffect(() => {
     if (isReady) {
       fetchTileset();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isReady]);
+  }, [isReady, fetchTileset]);
 
   const handleSubmit = async (data: TilesetCreate | TilesetUpdate) => {
     if (!isReady) {
