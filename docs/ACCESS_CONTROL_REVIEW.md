@@ -97,8 +97,8 @@ class AuthContext:
 | 招待受諾 | – | – | – | – (email 一致した user 全員) |
 | **チームタイルセット (`team_tilesets`)** |  |  |  |  |
 | 一覧表示 | ✅ | ✅ | ✅ | ✅ |
-| 追加 (`POST /teams/{id}/tilesets`) | ✅ | ✅ | ❌ | ❌ |
-| 削除 (`DELETE /teams/{id}/tilesets/{tid}`) | ✅ | ✅ | ❌ | ❌ |
+| 追加 (`POST /api/teams/{team_id}/tilesets`) | ✅ | ✅ | ❌ | ❌ |
+| 削除 (`DELETE /api/teams/{team_id}/tilesets/{tileset_id}`) | ✅ | ✅ | ❌ | ❌ |
 
 > 追加と削除の権限は Issue #54 (案 B) で `[OWNER, ADMINISTRATOR]` に統一済み（2026-05-11）。member 以下は team-shared なタイルセットの「利用（読み取り / 配信）」のみ可能。
 

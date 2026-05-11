@@ -165,7 +165,7 @@ def _user(user_id: str) -> User:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/teams/{id}/tilesets — Issue #54 案 B: owner / admin のみ
+# POST /api/teams/{team_id}/tilesets — Issue #54 案 B: owner / admin のみ
 # ---------------------------------------------------------------------------
 
 
@@ -206,7 +206,7 @@ class TestAddTeamTilesetPermission:
 
 
 # ---------------------------------------------------------------------------
-# DELETE /api/teams/{id}/tilesets/{tid} — owner / admin のみ（変更なし、対称確認）
+# DELETE /api/teams/{team_id}/tilesets/{tileset_id} — owner / admin のみ（変更なし、対称確認）
 # ---------------------------------------------------------------------------
 
 
