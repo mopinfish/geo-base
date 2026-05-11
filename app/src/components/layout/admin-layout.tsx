@@ -1,10 +1,11 @@
 "use client";
 
+import { User } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { LanguageSwitcher } from "./language-switcher";
 import { Sidebar } from "./sidebar";
 import { useAuth } from "@/lib/auth/context";
-import { User } from "lucide-react";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -12,10 +13,6 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { user, isLoading } = useAuth();
-  // i18n Phase 3 (#107) smoke: 翻訳経路を全画面で必ず通すため Header に
-  // 1 文字列だけ next-intl 経由で出す。文字列実体は
-  // `app/src/locales/<locale>/common.json:app.title`。
-  // PR-B で言語切替 UI / Sidebar の他文字列を catalog 化する。
   const t = useTranslations("common");
 
   return (
@@ -28,12 +25,15 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             <div className="text-sm font-medium text-muted-foreground">
               {t("app.title")}
             </div>
-            {!isLoading && user && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="h-4 w-4" />
-                <span className="hidden sm:inline">{user.email}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <LanguageSwitcher />
+              {!isLoading && user && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <User className="h-4 w-4" />
+                  <span className="hidden sm:inline">{user.email}</span>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
