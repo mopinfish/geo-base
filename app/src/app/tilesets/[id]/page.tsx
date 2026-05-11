@@ -89,7 +89,6 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
 
       try {
         const data = await api.getTileset(id);
-        console.log("Tileset data:", data);
         setTileset(data);
 
         // TileJSONも取得
@@ -212,7 +211,10 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const formatCenter = (center: unknown) => {
     const nums = parseCoordinates(center);
     if (!nums || nums.length < 2) return "-";
-    const zoomPart = nums[2] !== undefined ? ` (zoom: ${nums[2]})` : "";
+    // zoom 部分の "(zoom: N)" / "(ズーム: N)" を catalog から取る
+    // (Copilot PR #132 round 4 指摘: 旧実装は英語 hardcoded)。
+    const zoomPart =
+      nums[2] !== undefined ? t("center_zoom_suffix", { z: nums[2] }) : "";
     return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}${zoomPart}`;
   };
 

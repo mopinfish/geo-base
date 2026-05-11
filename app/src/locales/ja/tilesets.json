@@ -130,6 +130,7 @@
     "field_max_zoom": "最大ズーム",
     "field_bounds": "バウンディングボックス",
     "field_center": "中心座標",
+    "center_zoom_suffix": " (ズーム: {z})",
     "section_api_endpoints": "APIエンドポイント",
     "endpoint_tile_pmtiles": "タイルURL(PMTiles)",
     "endpoint_tile_raster": "タイルURL(ラスター)",

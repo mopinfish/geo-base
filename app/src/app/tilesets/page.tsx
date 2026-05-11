@@ -71,21 +71,16 @@ export default function TilesetsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTilesets = useCallback(async () => {
-    if (!isReady) {
-      console.log("API not ready yet, skipping fetch");
-      return;
-    }
+    if (!isReady) return;
 
     setIsLoading(true);
     setError(null);
     try {
-      console.log("Fetching tilesets...");
       // ログイン済みユーザーが所有する非公開タイルセットも一覧に出すため
       // include_private=true を明示する（issue #102）。`/api/tilesets` の既定は
       // 公開のみなので、これが無いと自分の非公開タイルセットが UI から消える。
       // 公開/非公開の絞り込みは下流の `publicFilter` (client-side) で行う。
       const data = await api.listTilesets({ include_private: true });
-      console.log("API Response:", data);
 
       // APIレスポンスの形式に対応
       // - 配列の場合: data そのもの
@@ -96,7 +91,6 @@ export default function TilesetsPage() {
       } else if (data && typeof data === "object" && "tilesets" in data) {
         tilesetsArray = (data as { tilesets: Tileset[] }).tilesets;
       }
-      console.log("Tilesets array:", tilesetsArray);
 
       setTilesets(tilesetsArray);
       setFilteredTilesets(tilesetsArray);
@@ -432,12 +426,22 @@ export default function TilesetsPage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Link href={`/tilesets/${tileset.id}`}>
-                            <Button variant="ghost" size="icon" title={t("action_view")}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("action_view")}
+                              aria-label={t("action_view")}
+                            >
                               <Eye className="h-4 w-4" />
                             </Button>
                           </Link>
                           <Link href={`/tilesets/${tileset.id}/edit`}>
-                            <Button variant="ghost" size="icon" title={t("action_edit")}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("action_edit")}
+                              aria-label={t("action_edit")}
+                            >
                               <Pencil className="h-4 w-4" />
                             </Button>
                           </Link>

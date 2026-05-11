@@ -130,6 +130,7 @@
     "field_max_zoom": "Max zoom",
     "field_bounds": "Bounding box",
     "field_center": "Center",
+    "center_zoom_suffix": " (zoom: {z})",
     "section_api_endpoints": "API endpoints",
     "endpoint_tile_pmtiles": "Tile URL (PMTiles)",
     "endpoint_tile_raster": "Tile URL (raster)",
