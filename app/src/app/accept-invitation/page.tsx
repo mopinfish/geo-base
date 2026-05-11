@@ -22,7 +22,9 @@ function AcceptInvitationForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // token 不在は下の render guard で同期的にハンドルする (effect は呼ばれない)。
+    // token 不在は下の render guard で同期的にエラー表示する。
+    // この effect 自体はマウント時に呼ばれるが、network fetch だけスキップする
+    // (Copilot PR #131 round 2 指摘: 「effect は呼ばれない」表現は誤解を生む)。
     if (!token) return;
     authClient.getInvitationInfo(token)
       .then(setInfo)
