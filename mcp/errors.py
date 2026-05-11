@@ -260,29 +260,29 @@ def handle_api_error(
 
         if status_code == 401:
             result = {
-                "error": "認証が必要です",
+                "error": "Authentication required",
                 "code": ErrorCode.AUTH_REQUIRED.value,
-                "hint": "API_TOKEN環境変数を設定してください",
+                "hint": "Set the API_TOKEN environment variable.",
             }
         elif status_code == 403:
             result = {
-                "error": "アクセス権限がありません",
+                "error": "Access forbidden",
                 "code": ErrorCode.FORBIDDEN.value,
             }
         elif status_code == 404:
             result = {
-                "error": "リソースが見つかりません",
+                "error": "Resource not found",
                 "code": ErrorCode.NOT_FOUND.value,
             }
         elif status_code >= 500:
             result = {
-                "error": "サーバーエラーが発生しました",
+                "error": "Server error",
                 "code": ErrorCode.SERVER_ERROR.value,
                 "status_code": status_code,
             }
         else:
             result = {
-                "error": f"HTTPエラー: {status_code}",
+                "error": f"HTTP error: {status_code}",
                 "code": ErrorCode.HTTP_ERROR.value,
                 "status_code": status_code,
             }
@@ -298,7 +298,7 @@ def handle_api_error(
     # Handle httpx timeout errors
     if isinstance(e, httpx.TimeoutException):
         result = {
-            "error": "リクエストがタイムアウトしました",
+            "error": "Request timed out",
             "code": ErrorCode.TIMEOUT.value,
         }
         if context:
@@ -308,7 +308,7 @@ def handle_api_error(
     # Handle httpx network errors
     if isinstance(e, (httpx.NetworkError, httpx.ConnectError)):
         result = {
-            "error": "ネットワークエラーが発生しました",
+            "error": "Network error",
             "code": ErrorCode.NETWORK_ERROR.value,
             "detail": str(e),
         }
@@ -319,7 +319,7 @@ def handle_api_error(
     # Handle generic httpx errors
     if isinstance(e, httpx.HTTPError):
         result = {
-            "error": f"HTTPエラー: {str(e)}",
+            "error": f"HTTP error: {str(e)}",
             "code": ErrorCode.HTTP_ERROR.value,
         }
         if context:
@@ -328,7 +328,7 @@ def handle_api_error(
 
     # Handle unknown errors
     result = {
-        "error": f"予期しないエラー: {str(e)}",
+        "error": f"Unexpected error: {str(e)}",
         "code": ErrorCode.UNKNOWN_ERROR.value,
         "exception_type": type(e).__name__,
     }
