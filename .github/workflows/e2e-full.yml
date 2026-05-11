@@ -1,0 +1,132 @@
+name: E2E full (main / dispatch)
+
+# Issue #111: main マージ時と手動 (workflow_dispatch) で full E2E を実行する。
+# PR ごとの smoke は e2e-smoke.yml 側。composite action と env を共有。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "api/**"
+      - "docker/postgis-init/**"
+      - ".github/workflows/e2e-*.yml"
+      - ".github/actions/e2e-setup/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-full-${{ github.ref }}
+  # main push と dispatch を上書きキャンセルすると CI ダッシュボード上の
+  # "main is green" 状態が見えなくなるので cancel しない。
+  cancel-in-progress: false
+
+jobs:
+  full:
+    name: Run full E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/geo_base_e2e
+      JWT_SECRET: ci-test-secret-not-for-production
+      E2E_MODE: "1"
+      AUTH_PROVIDER: local
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      API_BACKEND_URL: http://localhost:8000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql (client)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          e2e-database-url: ${{ env.DATABASE_URL }}
+          worker-count: "1"
+
+      - name: Start FastAPI in background
+        working-directory: api
+        run: |
+          uv run uvicorn lib.main:app --host 0.0.0.0 --port 8000 &
+          echo "FASTAPI_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Start Next.js in background
+        working-directory: app
+        run: |
+          npm run start -- --port 3000 &
+          echo "NEXTJS_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for FastAPI
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/api/health > /dev/null; then
+              echo "FastAPI ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "FastAPI did not become ready in time" >&2
+          exit 1
+
+      - name: Wait for Next.js
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000 > /dev/null; then
+              echo "Next.js ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Next.js did not become ready in time" >&2
+          exit 1
+
+      - name: Run full E2E
+        working-directory: app
+        env:
+          PLAYWRIGHT_API_BASE_URL: http://localhost:8000
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          CI: "true"
+        run: npx playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full
+          path: app/playwright-report
+          retention-days: 14
+
+      - name: Stop background servers
+        if: always()
+        run: |
+          [ -n "${FASTAPI_PID:-}" ] && kill "$FASTAPI_PID" || true
+          [ -n "${NEXTJS_PID:-}" ] && kill "$NEXTJS_PID" || true
