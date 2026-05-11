@@ -254,9 +254,9 @@ if str(row[1]) != user.id:  # row[1] = tilesets.user_id
 
 #### I-1. メンバーがチームタイルセットを「追加」できるが「削除」できない非対称 ✅ 対応済み
 
-`api/lib/routers/teams.py` の `add_team_tileset` (POST `/teams/{id}/tilesets`) は member も許可していたが、`remove_team_tileset` (DELETE `/teams/{id}/tilesets/{tid}`) は owner/admin のみ。誤って追加したものを当人が取り消せなかった。
+`api/lib/routers/teams.py` の `add_team_tileset` (POST `/api/teams/{team_id}/tilesets`) は member も許可していたが、`remove_team_tileset` (DELETE `/api/teams/{team_id}/tilesets/{tileset_id}`) は owner/admin のみ。誤って追加したものを当人が取り消せなかった。
 
-**対応（Issue #54、案 B）:** 追加側 (`add_team_tileset`) の `check_team_permission` から `TeamRole.MEMBER` を外し、削除側と同じ `[OWNER, ADMINISTRATOR]` に統一。「owner/admin = 管理、member = 利用」の境界を明確化。回帰テスト `tests/test_routers/test_team_tileset_permissions.py` で owner/admin/member × add/delete の 6 ケースを検証。
+**対応（Issue #54、案 B）:** 追加側 (`add_team_tileset`) の `check_team_permission` から `TeamRole.MEMBER` を外し、削除側と同じ `[OWNER, ADMINISTRATOR]` に統一。「owner/admin = 管理、member = 利用」の境界を明確化。回帰テスト `api/tests/test_routers/test_team_tileset_permissions.py` で owner/admin/member × add/delete の 6 ケースを検証。
 
 #### I-2. 招待トークンが受諾後も DB に残る
 

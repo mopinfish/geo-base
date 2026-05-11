@@ -902,8 +902,8 @@ def add_team_tileset(
 ):
     """Add a tileset to the team. Owner / administrator のみ実行可能。
 
-    Issue #54 (案 B) で削除側 (DELETE /teams/{id}/tilesets/{tid}) と権限を対称化。
-    member の追加権限は廃止し、「owner/admin = 管理、member = 利用」の境界を統一。
+    Issue #54 (案 B) で `remove_team_tileset` と権限を対称化。member の追加権限は
+    廃止し、「owner/admin = 管理、member = 利用」の境界を統一。
     """
     try:
         get_team_or_404(conn, team_id)
