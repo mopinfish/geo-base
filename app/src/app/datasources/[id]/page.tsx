@@ -227,6 +227,7 @@ export default function DatasourceDetailPage() {
               variant="outline"
               onClick={handleTestConnection}
               disabled={testLoading}
+              data-testid="datasource-test-connection-button"
             >
               {testLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -254,6 +255,8 @@ export default function DatasourceDetailPage() {
                 ? "border-green-500 bg-green-50"
                 : ""
             }
+            data-testid="datasource-test-connection-result"
+            data-status={testResult.status}
           >
             {testResult.status === "ok" ? (
               <CheckCircle2 className="h-4 w-4 text-green-600" />

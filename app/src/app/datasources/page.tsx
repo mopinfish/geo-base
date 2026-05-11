@@ -319,6 +319,7 @@ export default function DatasourcesPage() {
                     checked={includePrivate}
                     onChange={(e) => setIncludePrivate(e.target.checked)}
                     className="rounded border-gray-300"
+                    data-testid="datasource-include-private-toggle"
                   />
                   プライベートを含む
                 </label>
@@ -356,6 +357,7 @@ export default function DatasourcesPage() {
                     variant="destructive"
                     size="sm"
                     onClick={() => setBulkDeleteDialogOpen(true)}
+                    data-testid="datasource-bulk-delete"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     一括削除
@@ -412,6 +414,7 @@ export default function DatasourcesPage() {
                           checked={selectedIds.size === datasources.length && datasources.length > 0}
                           onChange={toggleAllSelection}
                           className="h-4 w-4 rounded border-gray-300"
+                          data-testid="datasource-select-all"
                         />
                       </TableHead>
                       <TableHead>タイプ</TableHead>
@@ -634,6 +637,7 @@ export default function DatasourcesPage() {
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="datasource-bulk-delete-confirm"
             >
               {isBulkDeleting ? (
                 <>
