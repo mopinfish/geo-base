@@ -6,26 +6,55 @@
  * (app/src/app/layout.tsx) 経由で同じ messages が渡る。
  *
  * 解決優先順位 (spec 5.3 と整合):
- *  1. `NEXT_LOCALE` cookie (proxy.ts が事前にセット)
- *  2. それ以外は `DEFAULT_LOCALE`
- *
- * `users.preferred_locale` (DB) と `Accept-Language` の解決は proxy.ts 側で
- * 行い、結果を cookie に書く方式。これにより本ファイルは cookie だけを見れば
- * よい構造になる。
+ *  1. `NEXT_LOCALE` cookie (proxy.ts が前回までのリクエストで set 済み、
+ *     または `useLocaleSwitcher` hook が明示切替時に書き込み — PR-B 実装予定)
+ *  2. `Accept-Language` header の先頭から `LOCALES` に含まれる locale
+ *     ← **初回 SSR (cookie 未セット)** のときの一次フォールバック。これが
+ *     ないと proxy.ts は cookie を response 側にしかセットできないため
+ *     最初のレンダーが常に `DEFAULT_LOCALE` (= `en`) になり、
+ *     Accept-Language=ja のユーザーが初回だけ英語表示される
+ *     (Copilot PR #127 round 1 指摘)。
+ *  3. `FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE` (= `ja`、既存 JA ユーザー保護)
  */
 
 import { getRequestConfig } from "next-intl/server";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
-import { DEFAULT_LOCALE, LOCALES, NAMESPACES, type Locale } from "./config";
+import {
+  FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE,
+  LOCALES,
+  NAMESPACES,
+  type Locale,
+} from "./config";
 import { LOCALE_COOKIE_NAME } from "./locale-cookie";
+
+function parseAcceptLanguage(header: string): Locale | null {
+  for (const part of header.split(",")) {
+    const tag = part
+      .split(";")[0]
+      ?.trim()
+      .split("-")[0]
+      ?.toLowerCase();
+    if (tag && (LOCALES as readonly string[]).includes(tag)) {
+      return tag as Locale;
+    }
+  }
+  return null;
+}
 
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();
   const raw = cookieStore.get(LOCALE_COOKIE_NAME)?.value ?? "";
-  const locale: Locale = (LOCALES as readonly string[]).includes(raw)
-    ? (raw as Locale)
-    : DEFAULT_LOCALE;
+  let locale: Locale;
+  if ((LOCALES as readonly string[]).includes(raw)) {
+    locale = raw as Locale;
+  } else {
+    // 初回 SSR (cookie 不在) は Accept-Language → ja フォールバックの順。
+    const headerStore = await headers();
+    const acceptLanguage = headerStore.get("accept-language") ?? "";
+    locale =
+      parseAcceptLanguage(acceptLanguage) ?? FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE;
+  }
 
   // namespace ごとに JSON を eager に読む。ファイル数が少ない (現状 2) ため
   // 性能影響は無視できる。Phase 3 後半で増えたらコード分割を検討する。

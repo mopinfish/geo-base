@@ -76,7 +76,7 @@ class LocalAuthProvider(AuthProvider):
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT id, email, name, role, app_metadata, user_metadata,
-                              email_verified_at, is_active
+                              email_verified_at, is_active, preferred_locale
                        FROM users WHERE id = %s""",
                     (user_id,),
                 )
@@ -87,6 +87,7 @@ class LocalAuthProvider(AuthProvider):
                     id=str(row[0]), email=row[1], name=row[2], role=row[3],
                     app_metadata=row[4] or {}, user_metadata=row[5] or {},
                     email_verified=row[6] is not None,
+                    preferred_locale=row[8],
                 )
 
     async def get_user_by_email(self, email: str) -> Optional[User]:
@@ -96,7 +97,8 @@ class LocalAuthProvider(AuthProvider):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, email, name, role, app_metadata, user_metadata, email_verified_at
+                    """SELECT id, email, name, role, app_metadata, user_metadata,
+                              email_verified_at, preferred_locale
                        FROM users WHERE email = %s AND is_active = TRUE""",
                     (email.lower(),),
                 )
@@ -107,6 +109,7 @@ class LocalAuthProvider(AuthProvider):
                     id=str(row[0]), email=row[1], name=row[2], role=row[3],
                     app_metadata=row[4] or {}, user_metadata=row[5] or {},
                     email_verified=row[6] is not None,
+                    preferred_locale=row[7],
                 )
 
     # ============ Authentication ============
@@ -129,7 +132,7 @@ class LocalAuthProvider(AuthProvider):
             with conn.cursor() as cur:
                 cur.execute(
                     """SELECT id, password_hash, name, role, app_metadata, user_metadata,
-                              email, email_verified_at
+                              email, email_verified_at, preferred_locale
                        FROM users WHERE email = %s AND is_active = TRUE""",
                     (email.lower(),),
                 )
@@ -146,6 +149,7 @@ class LocalAuthProvider(AuthProvider):
             (
                 user_id, password_hash, name, role,
                 app_meta, user_meta, db_email, email_verified_at,
+                preferred_locale,
             ) = row
 
             if not verify_password(password, password_hash):
@@ -163,6 +167,7 @@ class LocalAuthProvider(AuthProvider):
                 id=str(user_id), email=db_email, name=name, role=role,
                 app_metadata=app_meta or {}, user_metadata=user_meta or {},
                 email_verified=email_verified_at is not None,
+                preferred_locale=preferred_locale,
             )
 
             access_token = issue_access_token(
@@ -263,7 +268,8 @@ class LocalAuthProvider(AuthProvider):
                                app_metadata, user_metadata)
                            VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb)
                            RETURNING id, email, name, role, app_metadata,
-                                     user_metadata, email_verified_at""",
+                                     user_metadata, email_verified_at,
+                                     preferred_locale""",
                         (
                             email_lower, password_hash_str, name,
                             datetime.now(timezone.utc) if email_verified else None,
@@ -278,7 +284,8 @@ class LocalAuthProvider(AuthProvider):
                                app_metadata, user_metadata)
                            VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
                            RETURNING id, email, name, role, app_metadata,
-                                     user_metadata, email_verified_at""",
+                                     user_metadata, email_verified_at,
+                                     preferred_locale""",
                         (
                             email_lower, password_hash_str, name, role,
                             datetime.now(timezone.utc) if email_verified else None,
@@ -293,6 +300,7 @@ class LocalAuthProvider(AuthProvider):
             id=str(row[0]), email=row[1], name=row[2], role=row[3],
             app_metadata=row[4] or {}, user_metadata=row[5] or {},
             email_verified=row[6] is not None,
+            preferred_locale=row[7],
         )
 
     async def update_user(
@@ -338,7 +346,8 @@ class LocalAuthProvider(AuthProvider):
                         f"""UPDATE users SET {', '.join(updates)}, updated_at = NOW()
                             WHERE id = %s
                             RETURNING id, email, name, role, app_metadata,
-                                      user_metadata, email_verified_at""",
+                                      user_metadata, email_verified_at,
+                                      preferred_locale""",
                         tuple(params),
                     )
                 except Exception as e:
@@ -354,6 +363,7 @@ class LocalAuthProvider(AuthProvider):
             id=str(row[0]), email=row[1], name=row[2], role=row[3],
             app_metadata=row[4] or {}, user_metadata=row[5] or {},
             email_verified=row[6] is not None,
+            preferred_locale=row[7],
         )
 
     async def update_preferred_locale(
@@ -506,7 +516,8 @@ class LocalAuthProvider(AuthProvider):
                 )
 
                 cur.execute(
-                    """SELECT id, email, name, role, app_metadata, user_metadata, email_verified_at
+                    """SELECT id, email, name, role, app_metadata, user_metadata,
+                              email_verified_at, preferred_locale
                        FROM users WHERE id = %s""",
                     (user_id,),
                 )
@@ -517,4 +528,5 @@ class LocalAuthProvider(AuthProvider):
             id=str(user_row[0]), email=user_row[1], name=user_row[2], role=user_row[3],
             app_metadata=user_row[4] or {}, user_metadata=user_row[5] or {},
             email_verified=user_row[6] is not None,
+            preferred_locale=user_row[7],
         )

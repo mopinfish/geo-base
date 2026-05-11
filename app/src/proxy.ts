@@ -16,14 +16,19 @@ import {
  * Resolve locale for the incoming request (Phase 3 / Issue #107).
  *
  * Priority (spec 5.3):
- *  1. `NEXT_LOCALE` cookie (含: 明示切替後の永続化、`users.preferred_locale`
- *     はログイン時に authClient が同 cookie に書く設計)
+ *  1. `NEXT_LOCALE` cookie (= 明示切替後の永続化値、ユーザーが Admin UI から
+ *     切替えたときに `useLocaleSwitcher` hook が書く想定 / PR-B 実装予定)
  *  2. `Accept-Language` header の先頭から `LOCALES` に含まれる locale
  *  3. `FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE` (= `ja`、既存 JA ユーザー保護)
  *
  * `DEFAULT_LOCALE` (= `en`) は API のフォールバック相当だが、proxy 上では
  * 「Accept-Language なしの新規訪問者」もとりあえず ja を見る想定。
  * 明示的に英語に切替えた場合は cookie で記憶される。
+ *
+ * NOTE (Phase 3a): `users.preferred_locale` (DB 永続化) と cookie の同期は
+ * PR-B (`useLocaleSwitcher`) で実装する。本 PR では cookie は proxy が
+ * Accept-Language から自動セットする経路のみ存在。login 直後の cookie
+ * 書き込みも PR-B で `authClient.login()` 側に追加する想定。
  */
 function resolveLocale(request: NextRequest): Locale {
   const cookie = request.cookies.get(LOCALE_COOKIE_NAME)?.value ?? "";

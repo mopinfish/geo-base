@@ -130,7 +130,19 @@ class AuthClient {
       body: JSON.stringify({ preferred_locale: locale }),
     });
     if (!res.ok) throw await parseAuthError(res);
-    return res.json();
+    const updatedUser: User = await res.json();
+
+    // 内部 state を更新して subscribers (= `useAuth()` consumers) に通知。
+    // これがないと UI 上の preferred_locale が古いままになる
+    // (Copilot PR #127 round 1 指摘)。
+    if (this.state.user) {
+      this.state = {
+        ...this.state,
+        user: { ...this.state.user, ...updatedUser },
+      };
+      this.notify();
+    }
+    return updatedUser;
   }
 
   getAccessToken(): string | null {
