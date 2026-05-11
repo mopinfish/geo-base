@@ -2,9 +2,9 @@
  * Phase 3b / Issue #107: 言語切替 UI の E2E。
  *
  * 検証フロー:
- *  1. 初回 (cookie 未設定) で /dashboard を開く。`test.use({ locale: "en-US" })`
- *     で Accept-Language を明示的に固定してあるため、`proxy.ts` の
- *     resolveLocale は `en` を選んで cookie に書く。
+ *  1. 初回 (cookie 未設定) でダッシュボード (`/`) を開く。
+ *     `test.use({ locale: "en-US" })` で Accept-Language を明示的に固定して
+ *     あるため、`proxy.ts` の resolveLocale は `en` を選んで cookie に書く。
  *     → Sidebar に `Dashboard` (en) が表示される。
  *  2. LanguageSwitcher を開き `日本語` を選択。
  *     → router.refresh() で RSC が再評価され `ダッシュボード` (ja) に切替。
