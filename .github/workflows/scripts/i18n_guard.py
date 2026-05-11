@@ -62,9 +62,11 @@ def iter_string_literals(node: ast.AST):
         for part in node.values:
             yield from iter_string_literals(part)
     elif isinstance(node, ast.FormattedValue):
-        # f-string の {expr:format} の expr は走査しないが、format spec の
-        # 文字列だけは見る必要は薄いのでスキップ。
-        return
+        # f-string の {expr:format_spec} の expr 部分は実行時の値で走査
+        # 不可だが、format_spec は更に JoinedStr/Constant を含むため再帰。
+        # ここをスキップすると f"...{x:日本語...}" 等で guard が抜ける。
+        if node.format_spec is not None:
+            yield from iter_string_literals(node.format_spec)
     elif isinstance(node, ast.BinOp):
         yield from iter_string_literals(node.left)
         yield from iter_string_literals(node.right)
@@ -83,8 +85,40 @@ def iter_string_literals(node: ast.AST):
         yield from iter_string_literals(node.value)
 
 
+def _call_target_name(node: ast.Call) -> str:
+    """Return the dotted name being called (best effort): `Foo.bar(...)` → `Foo.bar`,
+    `bar(...)` → `bar`. Used to identify HTTPException / JSONResponse / Response."""
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        # Walk left to assemble the chain
+        parts: list[str] = [func.attr]
+        cur: ast.AST = func.value
+        while isinstance(cur, ast.Attribute):
+            parts.append(cur.attr)
+            cur = cur.value
+        if isinstance(cur, ast.Name):
+            parts.append(cur.id)
+        return ".".join(reversed(parts))
+    return ""
+
+
+# Positional signatures for response-shape APIs whose user-facing string is
+# in a known argument index. Copilot PR #125 round 2 で `raise HTTPException(403, "...")`
+# 形式 (positional) も拾うために必要。
+POSITIONAL_TARGETS: dict[str, list[int]] = {
+    # function_name (last component) -> indices of args to inspect
+    "HTTPException": [1],     # HTTPException(status_code, detail, ...)
+    "JSONResponse": [0],      # JSONResponse(content, status_code, ...)
+    "Response": [0],          # Response(content, status_code, ...)
+}
+
+
 def scan_kwargs(path: Path, kwarg_names: set[str]) -> list[tuple[int, str]]:
-    """指定の kwarg 名の value に含まれる文字列リテラルから日本語を検出。"""
+    """指定の kwarg 名の value、および POSITIONAL_TARGETS で定義された関数の
+    特定位置にある positional 引数の文字列リテラルから日本語を検出。
+    """
     try:
         text = path.read_text(encoding="utf-8")
         tree = ast.parse(text, filename=str(path))
@@ -94,17 +128,25 @@ def scan_kwargs(path: Path, kwarg_names: set[str]) -> list[tuple[int, str]]:
     lines = text.splitlines()
     out: list[tuple[int, str]] = []
 
+    def collect(value: ast.AST) -> None:
+        for lineno, literal in iter_string_literals(value):
+            if not JP_CHARS.search(literal):
+                continue
+            src = lines[lineno - 1] if 1 <= lineno <= len(lines) else literal
+            out.append((lineno, src.strip()))
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
+        # keyword args
         for kw in node.keywords:
-            if kw.arg not in kwarg_names:
-                continue
-            for lineno, literal in iter_string_literals(kw.value):
-                if not JP_CHARS.search(literal):
-                    continue
-                src = lines[lineno - 1] if 1 <= lineno <= len(lines) else literal
-                out.append((lineno, src.strip()))
+            if kw.arg in kwarg_names:
+                collect(kw.value)
+        # positional args (for known response-shape APIs)
+        target = _call_target_name(node).rsplit(".", 1)[-1]
+        for idx in POSITIONAL_TARGETS.get(target, []):
+            if idx < len(node.args):
+                collect(node.args[idx])
     return out
 
 

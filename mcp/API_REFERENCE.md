@@ -868,9 +868,12 @@ When an error occurs, every tool returns a response in the following format:
   "error": "Error message",
   "code": "ERROR_CODE",
   "hint": "Hint for resolving the issue (optional)",
-  "detail": "Additional details (optional)"
+  "details": { "field": "value" },
+  "detail": "Single-line detail string (optional)"
 }
 ```
+
+Both `details` (a structured object, populated by `MCPError` subclasses such as `ValidationError` / `HTTPRequestError` / `ResourceNotFoundError`) and `detail` (a single-line string, used by the httpx fallback handler) may appear depending on the error path. Treat both as optional, and prefer `details` when both are present.
 
 ### Error codes
 

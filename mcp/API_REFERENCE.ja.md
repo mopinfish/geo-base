@@ -868,9 +868,12 @@ MCPサーバーの設定情報を取得します。
   "error": "エラーメッセージ",
   "code": "ERROR_CODE",
   "hint": "問題解決のヒント（オプション）",
-  "detail": "追加の詳細情報（オプション）"
+  "details": { "field": "value" },
+  "detail": "1 行の補足文字列（オプション）"
 }
 ```
+
+`details` (`ValidationError` / `HTTPRequestError` / `ResourceNotFoundError` 等の `MCPError` 系で返される構造化オブジェクト) と `detail` (httpx 例外用のフォールバックハンドラが返す 1 行文字列) のどちらも、エラー経路に応じて出現することがあります。どちらもオプショナル扱いとし、両方ある場合は `details` を優先してください。
 
 ### エラーコード一覧
 
