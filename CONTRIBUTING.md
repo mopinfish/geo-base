@@ -30,7 +30,15 @@ docker compose -f docker/docker-compose.yml up -d
 Useful checks before opening a pull request:
 
 ```bash
-cd api && uv run ruff check . && uv run black --check . && uv run pytest tests/ -q
+# api/ — pytest requires TEST_DATABASE_URL pointing at a dedicated test DB
+# (CLAUDE.md describes the geo_base_test setup). Without it, DB-touching
+# tests fail loudly rather than silently breaking the dev DB.
+cd api \
+  && uv run ruff check . \
+  && uv run black --check . \
+  && TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/geo_base_test' \
+     uv run pytest tests/ -q
+
 cd app && npm run lint && npx tsc --noEmit && npm test
 cd mcp && uv run ruff check . && uv run pytest -q
 ```

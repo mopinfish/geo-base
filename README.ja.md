@@ -63,7 +63,7 @@ pip install uv
 
 ```bash
 # リポジトリクローン
-git clone https://github.com/your-org/geo-base.git
+git clone https://github.com/mopinfish/geo-base.git
 cd geo-base
 
 # ローカルPostGIS起動
@@ -92,7 +92,10 @@ cd ..
 
 ### 環境変数
 
-各ディレクトリに`.env`ファイルを作成してください。テンプレートは`.env.example`を参照してください。
+各ディレクトリの `.env.example` をランタイムが読む場所にコピーしてください:
+
+- `api/` と `mcp/` (Python): `.env` にコピー
+- `app/` (Next.js): `.env.local` にコピー (Next.js は開発モードで `.env` を自動読込しない)
 
 ## サポートフォーマット
 

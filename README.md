@@ -94,7 +94,10 @@ cd ..
 
 ### Environment variables
 
-Each subdirectory has an `.env.example`. Copy it to `.env` and fill in the values that fit your environment.
+Each subdirectory has an `.env.example`. Copy it to the file the runtime expects and fill in the values that fit your environment:
+
+- `api/` and `mcp/` (Python): copy to `.env`
+- `app/` (Next.js): copy to `.env.local` (Next.js does not load `.env` automatically in development)
 
 ## Supported formats
 
