@@ -94,10 +94,10 @@ cd ..
 
 ### Environment variables
 
-Each subdirectory has an `.env.example`. Copy it to the file the runtime expects and fill in the values that fit your environment:
+The three service directories (`api/`, `app/`, `mcp/`) each ship an `.env.example`. Copy it to the file the runtime expects and fill in the values that fit your environment:
 
-- `api/` and `mcp/` (Python): copy to `.env`
-- `app/` (Next.js): copy to `.env.local`. Next.js does load `.env`, but this repository's convention is to use `.env.local` for the Admin UI so local-only secrets stay out of git (`.env.local` is gitignored by default in Next.js scaffolds).
+- `api/` and `mcp/` (Python): copy `.env.example` to `.env`
+- `app/` (Next.js): copy `.env.example` to `.env.local`. Next.js does load plain `.env`, but this repository's convention is to use `.env.local` for the Admin UI so local-only secrets stay out of git (`.env.local` is gitignored by default in Next.js scaffolds).
 
 ## Supported formats
 

@@ -92,10 +92,10 @@ cd ..
 
 ### 環境変数
 
-各ディレクトリの `.env.example` をランタイムが読む場所にコピーしてください:
+3 つのサービスディレクトリ (`api/`, `app/`, `mcp/`) にそれぞれ `.env.example` があります。ランタイムが読む場所にコピーしてください:
 
-- `api/` と `mcp/` (Python): `.env` にコピー
-- `app/` (Next.js): `.env.local` にコピー。Next.js 自体は `.env` も読み込みますが、本リポジトリでは Admin UI 専用のローカル設定を git 管理外に保つため `.env.local` を使う運用にしています (Next.js scaffold は `.env.local` をデフォルトで gitignore する)。
+- `api/` と `mcp/` (Python): `.env.example` を `.env` にコピー
+- `app/` (Next.js): `.env.example` を `.env.local` にコピー。Next.js 自体は `.env` も読み込みますが、本リポジトリでは Admin UI 専用のローカル設定を git 管理外に保つため `.env.local` を使う運用にしています (Next.js scaffold は `.env.local` をデフォルトで gitignore する)。
 
 ## サポートフォーマット
 
@@ -113,4 +113,4 @@ cd ..
 
 ## ライセンス
 
-MIT License
+MIT License — [LICENSE](./LICENSE) を参照してください。

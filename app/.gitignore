@@ -32,7 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-# `.env.example` は contributor 向けテンプレートとして commit する
+# Commit `.env.example` as a template for contributors.
 !.env.example
 
 # vercel
