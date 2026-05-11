@@ -127,9 +127,11 @@ test.describe("Features CRUD", () => {
     // ないこと)。
     await page.waitForURL(`/features/${feature.id}`, { timeout: 15_000 });
     // 詳細ページのプロパティ表示で更新後の値が見える。
-    await expect(page.getByText("new-edited")).toBeVisible({
-      timeout: 10_000,
-    });
+    // strict mode 違反を避けるため `feature-property-value` testid に絞る
+    // (生 JSON プレビューにも値が出るため getByText では 2 件にマッチする)。
+    await expect(
+      page.getByTestId("feature-property-value").filter({ hasText: "new-edited" }),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test("FT-12 詳細ページにマップ表示", async ({ page }) => {

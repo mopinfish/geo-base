@@ -319,7 +319,10 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 )}
               </div>
               {tileset.description && (
-                <p className="mt-1 text-muted-foreground">
+                <p
+                  className="mt-1 text-muted-foreground"
+                  data-testid="tileset-description"
+                >
                   {tileset.description}
                 </p>
               )}

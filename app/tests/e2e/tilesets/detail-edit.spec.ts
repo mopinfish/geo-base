@@ -47,7 +47,11 @@ test("TS-09 編集 → 保存 → 詳細で反映確認", async ({ page }) => {
 
   // 保存後、詳細ページに戻る。
   await page.waitForURL(`/tilesets/${tileset.id}`, { timeout: 15_000 });
-  await expect(page.getByText(NEW_DESC)).toBeVisible({ timeout: 10_000 });
+  // strict mode 違反を避けるため `tileset-description` testid に絞る
+  // (TileJSON プレビュー <pre> にも値が出るため getByText では 2 件にマッチする)。
+  await expect(page.getByTestId("tileset-description")).toHaveText(NEW_DESC, {
+    timeout: 10_000,
+  });
 });
 
 test("TS-10 is_public トグル切替", async ({ page }) => {
