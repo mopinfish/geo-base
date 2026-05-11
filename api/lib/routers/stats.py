@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from lib.database import get_db_connection
 from lib.auth import User, get_current_user
+from lib.errors import ErrorCode, api_error
 
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -120,9 +121,10 @@ def get_system_stats():
                 }
                 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get statistics: {str(e)}"
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Failed to get statistics: {str(e)}",
         )
 
 
