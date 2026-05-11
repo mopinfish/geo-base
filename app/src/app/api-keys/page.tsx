@@ -236,7 +236,10 @@ export default function ApiKeysPage() {
               外部アプリケーションからのアクセス用APIキーを管理します
             </p>
           </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
+          <Button
+            onClick={() => setShowCreateDialog(true)}
+            data-testid="api-key-create-button"
+          >
             <Plus className="w-4 h-4 mr-2" />
             新規APIキー
           </Button>
@@ -275,6 +278,9 @@ export default function ApiKeysPage() {
                 key={key.id}
                 className={key.revoked_at ? "opacity-60" : undefined}
                 data-testid="api-key-row"
+                data-key-id={key.id}
+                data-key-status={key.revoked_at ? "revoked" : key.is_expired ? "expired" : "active"}
+                data-key-scopes={key.scopes.join(",")}
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -320,6 +326,7 @@ export default function ApiKeysPage() {
                               setKeyToRevoke(key);
                               setShowRevokeDialog(true);
                             }}
+                            data-testid="api-key-revoke-menuitem"
                           >
                             <XCircle className="w-4 h-4 mr-2" />
                             無効化
@@ -331,6 +338,7 @@ export default function ApiKeysPage() {
                             setKeyToDelete(key);
                             setShowDeleteDialog(true);
                           }}
+                          data-testid="api-key-delete-menuitem"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           削除
@@ -399,6 +407,7 @@ export default function ApiKeysPage() {
                   setCreateForm((prev) => ({ ...prev, name: e.target.value }))
                 }
                 placeholder="本番環境用APIキー"
+                data-testid="api-key-form-name"
               />
             </div>
             <div className="space-y-2">
@@ -423,6 +432,7 @@ export default function ApiKeysPage() {
                         id={`scope-${scope}`}
                         checked={createForm.scopes?.includes(scope)}
                         onCheckedChange={() => toggleScope(scope)}
+                        data-testid={`api-key-form-scope-${scope}`}
                       />
                       <label
                         htmlFor={`scope-${scope}`}
@@ -504,6 +514,7 @@ export default function ApiKeysPage() {
             <Button
               onClick={handleCreateKey}
               disabled={!createForm.name.trim() || isCreating}
+              data-testid="api-key-form-submit"
             >
               {isCreating ? "作成中..." : "作成"}
             </Button>
@@ -524,13 +535,18 @@ export default function ApiKeysPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <div className="bg-muted p-4 rounded-md font-mono text-sm break-all">
+            <div
+              className="bg-muted p-4 rounded-md font-mono text-sm break-all"
+              data-testid="api-key-plaintext"
+            >
               {createdKey?.key}
             </div>
             <Button
               variant="outline"
               className="w-full mt-3"
               onClick={() => createdKey && copyToClipboard(createdKey.key)}
+              data-testid="api-key-copy-button"
+              data-copied={keyCopied ? "1" : "0"}
             >
               {keyCopied ? (
                 <>
@@ -577,6 +593,7 @@ export default function ApiKeysPage() {
               placeholder="セキュリティ上の理由など..."
               rows={2}
               className="mt-2"
+              data-testid="api-key-revoke-reason"
             />
           </div>
           <DialogFooter>
@@ -591,6 +608,7 @@ export default function ApiKeysPage() {
               variant="destructive"
               onClick={handleRevokeKey}
               disabled={isRevoking}
+              data-testid="api-key-revoke-confirm"
             >
               {isRevoking ? "無効化中..." : "無効化"}
             </Button>
@@ -620,6 +638,7 @@ export default function ApiKeysPage() {
               variant="destructive"
               onClick={handleDeleteKey}
               disabled={isDeleting}
+              data-testid="api-key-delete-confirm"
             >
               {isDeleting ? "削除中..." : "削除"}
             </Button>
