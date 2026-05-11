@@ -872,12 +872,14 @@ When an error occurs, every tool returns a response with at least the following 
   "detail": "Single-line detail",      // optional, populated by the httpx fallback path
   "status_code": 503,                  // optional, present on HTTP-origin errors
   "response": "...",                   // optional, raw upstream body (truncated to 500 chars)
-  "tileset_id": "...",                 // optional, set by NotFoundError context
-  "feature_id": "..."                  // optional, set by NotFoundError context
+  "tileset_id": "...",                 // optional, added at the top level by individual tools via `create_error_response(..., tileset_id=...)`
+  "feature_id": "..."                  // optional, added at the top level by individual tools via `create_error_response(..., feature_id=...)`
 }
 ```
 
-`details` is a structured object populated by `MCPError` subclasses (`ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError`). `detail` is a single-line string used by the httpx fallback handler in `mcp/errors.py`. Both can appear depending on the error path. Prefer `details` when both are present, and tolerate the additional top-level context keys above (clients should ignore unknown keys to stay forward-compatible).
+`details` is a structured object populated by `MCPError` subclasses (`ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError`). `NotFoundError` specifically nests `resource_type` and `resource_id` *inside* `details`. `detail` is a single-line string used by the httpx fallback handler in `mcp/errors.py`. Both can appear depending on the error path; prefer `details` when both are present.
+
+Additional top-level context keys (`status_code` / `response` / `tileset_id` / `feature_id`) come from `mcp/errors.py:create_error_response(..., **kwargs)`, called by individual tools when they want to surface IDs at the top level for client convenience. Clients should treat all extra top-level keys as optional and ignore unknown ones to stay forward-compatible.
 
 ### Error codes
 

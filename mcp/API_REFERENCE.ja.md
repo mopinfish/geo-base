@@ -872,12 +872,14 @@ MCPサーバーの設定情報を取得します。
   "detail": "1 行の補足文字列",          // オプション、httpx フォールバック経路で出る
   "status_code": 503,                    // オプション、HTTP 起因のエラーで出る
   "response": "...",                     // オプション、上流の raw body (最大 500 文字)
-  "tileset_id": "...",                   // オプション、NotFoundError コンテキストで付く
-  "feature_id": "..."                    // オプション、NotFoundError コンテキストで付く
+  "tileset_id": "...",                   // オプション、個別 tool が `create_error_response(..., tileset_id=...)` でトップレベルに付与
+  "feature_id": "..."                    // オプション、個別 tool が `create_error_response(..., feature_id=...)` でトップレベルに付与
 }
 ```
 
-`details` は `ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError` 等の `MCPError` 系で返される構造化オブジェクト、`detail` は `mcp/errors.py` の httpx フォールバックハンドラが返す 1 行文字列です。エラー経路によってどちらか / 両方が出る可能性があるため、両方ある場合は `details` を優先し、上記の追加トップレベルキーは「未知のキーは無視する」forward-compat 方針で扱ってください。
+`details` は `ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError` 等の `MCPError` 系で返される構造化オブジェクト、`detail` は `mcp/errors.py` の httpx フォールバックハンドラが返す 1 行文字列です。`NotFoundError` の場合、リソース識別子 (`resource_type` / `resource_id`) は **`details` の中** に入ります。両方ある場合は `details` を優先してください。
+
+上記スキーマ例の **トップレベルの追加キー** (`status_code` / `response` / `tileset_id` / `feature_id`) は `mcp/errors.py:create_error_response(..., **kwargs)` を経由して、個別 tool がクライアント便宜のためにトップレベルへ追加するものです。クライアント側は未知のキーも安全に無視できる forward-compat 設計で実装してください。
 
 ### エラーコード一覧
 
