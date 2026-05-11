@@ -3,6 +3,7 @@
  */
 
 import { authClient } from "./auth/client";
+import { extractApiError } from "./api-errors";
 
 // 環境変数からAPIのベースURLを取得
 // 未設定の場合は空文字 → 相対パス /api/* で叩き、Next.js の dev rewrites
@@ -154,6 +155,14 @@ export interface HealthStatus {
   postgis?: string;
 }
 
+/**
+ * Legacy `{detail: string}` 形式の error response 型。
+ *
+ * Phase 2b (#106) 以降、新しい API は `{error: {code, message, details?}}`
+ * envelope を返す (`api/lib/errors.py:api_error`)。両形式は当面共存するため
+ * `extractApiError()` が両方を吸収する。新規コードは `ApiClientError` を
+ * import して使うこと。
+ */
 export interface ApiError {
   detail: string;
 }
@@ -647,14 +656,16 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+      const fallback = `HTTP ${response.status}: ${response.statusText}`;
+      let body: unknown = null;
       try {
-        const error: ApiError = await response.json();
-        errorDetail = error.detail || errorDetail;
+        body = await response.json();
       } catch {
-        // JSONパースに失敗した場合はデフォルトのエラーメッセージを使用
+        // JSON パースに失敗した場合は fallback メッセージで Error を投げる
       }
-      throw new Error(errorDetail);
+      const extracted = extractApiError(body);
+      if (extracted) throw extracted;
+      throw new Error(fallback);
     }
 
     const contentLength = response.headers.get('content-length');
@@ -688,14 +699,16 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+      const fallback = `HTTP ${response.status}: ${response.statusText}`;
+      let body: unknown = null;
       try {
-        const error: ApiError = await response.json();
-        errorDetail = error.detail || errorDetail;
+        body = await response.json();
       } catch {
         // ignore
       }
-      throw new Error(errorDetail);
+      const extracted = extractApiError(body);
+      if (extracted) throw extracted;
+      throw new Error(fallback);
     }
 
     return response.blob();
@@ -917,12 +930,14 @@ class ApiClient {
       { method: 'POST', body: formData, headers },
     );
     if (!response.ok) {
-      let detail = `HTTP ${response.status}: ${response.statusText}`;
+      const fallback = `HTTP ${response.status}: ${response.statusText}`;
+      let body: unknown = null;
       try {
-        const err = await response.json();
-        detail = err?.detail || detail;
+        body = await response.json();
       } catch { /* keep default */ }
-      throw new Error(detail);
+      const extracted = extractApiError(body);
+      if (extracted) throw extracted;
+      throw new Error(fallback);
     }
     return response.json();
   }
@@ -943,12 +958,14 @@ class ApiClient {
       { method: 'POST', body: formData, headers },
     );
     if (!response.ok) {
-      let detail = `HTTP ${response.status}: ${response.statusText}`;
+      const fallback = `HTTP ${response.status}: ${response.statusText}`;
+      let body: unknown = null;
       try {
-        const err = await response.json();
-        detail = err?.detail || detail;
+        body = await response.json();
       } catch { /* keep default */ }
-      throw new Error(detail);
+      const extracted = extractApiError(body);
+      if (extracted) throw extracted;
+      throw new Error(fallback);
     }
     return response.json();
   }
