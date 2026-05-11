@@ -861,36 +861,42 @@ MCPサーバーの設定情報を取得します。
 
 ## エラーレスポンス
 
-すべてのツールは、エラー発生時に以下の形式でレスポンスを返します：
+すべてのツールは、エラー発生時に最低 `error` と `code` の 2 フィールドを返します。それ以外はエラー経路に応じてトップレベルに混ざる可能性のあるオプショナルフィールドです：
 
 ```json
 {
-  "error": "エラーメッセージ",
-  "code": "ERROR_CODE",
-  "hint": "問題解決のヒント（オプション）",
-  "details": { "field": "value" },
-  "detail": "1 行の補足文字列（オプション）"
+  "error": "エラーメッセージ",           // 必須
+  "code": "ERROR_CODE",                  // 必須、後述のいずれか
+  "hint": "解決のヒント",                // オプション
+  "details": { "field": "value" },       // オプション、MCPError 系で構造化される
+  "detail": "1 行の補足文字列",          // オプション、httpx フォールバック経路で出る
+  "status_code": 503,                    // オプション、HTTP 起因のエラーで出る
+  "response": "...",                     // オプション、上流の raw body (最大 500 文字)
+  "tileset_id": "...",                   // オプション、NotFoundError コンテキストで付く
+  "feature_id": "..."                    // オプション、NotFoundError コンテキストで付く
 }
 ```
 
-`details` (`ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError` 等の `MCPError` 系で返される構造化オブジェクト) と `detail` (`mcp/errors.py` の httpx 例外用フォールバックハンドラが返す 1 行文字列) のどちらも、エラー経路に応じて出現することがあります。どちらもオプショナル扱いとし、両方ある場合は `details` を優先してください。
+`details` は `ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError` 等の `MCPError` 系で返される構造化オブジェクト、`detail` は `mcp/errors.py` の httpx フォールバックハンドラが返す 1 行文字列です。エラー経路によってどちらか / 両方が出る可能性があるため、両方ある場合は `details` を優先し、上記の追加トップレベルキーは「未知のキーは無視する」forward-compat 方針で扱ってください。
 
 ### エラーコード一覧
 
-| コード | 説明 |
-|--------|------|
-| `VALIDATION_ERROR` | 入力パラメータが無効 |
-| `NOT_FOUND` | リソースが見つからない |
-| `AUTH_REQUIRED` | 認証が必要 |
-| `FORBIDDEN` | アクセス権限がない |
-| `INVALID_TOKEN` | トークン拒否（期限切れ / 不正） |
-| `TIMEOUT` | リクエストがタイムアウト |
-| `NETWORK_ERROR` | ネットワークエラー |
-| `CONNECTION_ERROR` | 上流サービスに接続できない |
-| `SERVER_ERROR` | 上流サーバーエラー（5xx） |
-| `SERVICE_UNAVAILABLE` | 上流サービスが利用不可 |
-| `HTTP_ERROR` | その他の HTTP エラー |
-| `UNKNOWN_ERROR` | 予期しないエラー |
+| コード | 状態 | 説明 |
+|--------|------|------|
+| `VALIDATION_ERROR` | active | 入力パラメータが無効 |
+| `NOT_FOUND` | active | リソースが見つからない |
+| `AUTH_REQUIRED` | active | 認証が必要 |
+| `FORBIDDEN` | active | アクセス権限がない |
+| `TIMEOUT` | active | リクエストがタイムアウト |
+| `NETWORK_ERROR` | active | ネットワークエラー |
+| `CONNECTION_ERROR` | active | 上流サービスに接続できない |
+| `SERVER_ERROR` | active | 上流サーバーエラー（5xx） |
+| `HTTP_ERROR` | active | その他の HTTP エラー |
+| `UNKNOWN_ERROR` | active | 予期しないエラー |
+| `INVALID_TOKEN` | reserved | 将来の token 検証経路用に予約済み。現状の `mcp/` は出力しない |
+| `SERVICE_UNAVAILABLE` | reserved | HTTP 503 マッピング用に予約済み。現状の `mcp/errors.py` は出力しない |
+
+`active` のコードは現行実装が実際に返します。`reserved` のコードは `ErrorCode` enum に定義されているが、対応実装が入るまでクライアントが受け取ることはありません。
 
 ### 例
 

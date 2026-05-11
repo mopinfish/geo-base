@@ -861,36 +861,42 @@ None.
 
 ## Error responses
 
-When an error occurs, every tool returns a response in the following format:
+When an error occurs, every tool returns a response with at least the following two fields. All other fields are optional and depend on the error path:
 
 ```json
 {
-  "error": "Error message",
-  "code": "ERROR_CODE",
-  "hint": "Hint for resolving the issue (optional)",
-  "details": { "field": "value" },
-  "detail": "Single-line detail string (optional)"
+  "error": "Error message",            // required
+  "code": "ERROR_CODE",                // required, one of the codes below
+  "hint": "Resolution hint",           // optional
+  "details": { "field": "value" },     // optional, populated by MCPError subclasses
+  "detail": "Single-line detail",      // optional, populated by the httpx fallback path
+  "status_code": 503,                  // optional, present on HTTP-origin errors
+  "response": "...",                   // optional, raw upstream body (truncated to 500 chars)
+  "tileset_id": "...",                 // optional, set by NotFoundError context
+  "feature_id": "..."                  // optional, set by NotFoundError context
 }
 ```
 
-Both `details` (a structured object, populated by `MCPError` subclasses such as `ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError`) and `detail` (a single-line string, used by the httpx fallback handler in `mcp/errors.py`) may appear depending on the error path. Treat both as optional, and prefer `details` when both are present.
+`details` is a structured object populated by `MCPError` subclasses (`ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError`). `detail` is a single-line string used by the httpx fallback handler in `mcp/errors.py`. Both can appear depending on the error path. Prefer `details` when both are present, and tolerate the additional top-level context keys above (clients should ignore unknown keys to stay forward-compatible).
 
 ### Error codes
 
-| Code | Description |
-|------|-------------|
-| `VALIDATION_ERROR` | Invalid input parameter |
-| `NOT_FOUND` | Resource not found |
-| `AUTH_REQUIRED` | Authentication required |
-| `FORBIDDEN` | No access permission |
-| `INVALID_TOKEN` | Token rejected (expired / malformed) |
-| `TIMEOUT` | Request timed out |
-| `NETWORK_ERROR` | Network error |
-| `CONNECTION_ERROR` | Could not connect to the upstream service |
-| `SERVER_ERROR` | Upstream server error (5xx) |
-| `SERVICE_UNAVAILABLE` | Upstream service unavailable |
-| `HTTP_ERROR` | Other HTTP error |
-| `UNKNOWN_ERROR` | Unexpected error |
+| Code | Status | Description |
+|------|--------|-------------|
+| `VALIDATION_ERROR` | active | Invalid input parameter |
+| `NOT_FOUND` | active | Resource not found |
+| `AUTH_REQUIRED` | active | Authentication required |
+| `FORBIDDEN` | active | No access permission |
+| `TIMEOUT` | active | Request timed out |
+| `NETWORK_ERROR` | active | Network error |
+| `CONNECTION_ERROR` | active | Could not connect to the upstream service |
+| `SERVER_ERROR` | active | Upstream server error (5xx) |
+| `HTTP_ERROR` | active | Other HTTP error |
+| `UNKNOWN_ERROR` | active | Unexpected error |
+| `INVALID_TOKEN` | reserved | Reserved for future token-validation paths; no current code path emits this. |
+| `SERVICE_UNAVAILABLE` | reserved | Reserved for HTTP 503 mapping; not currently emitted by `mcp/errors.py`. |
+
+`active` codes can be returned by the current implementation. `reserved` codes are defined in `ErrorCode` and listed here so clients can match them once the corresponding implementation lands; current `mcp/` does not emit them yet.
 
 ### Examples
 

@@ -49,41 +49,18 @@ JP_CHARS = re.compile(r"[぀-ゟ゠-ヿ一-鿿]")
 def iter_string_literals(node: ast.AST):
     """Recursively yield (lineno, value) for every string literal under `node`.
 
-    Handles:
-    - ast.Constant with str value
-    - ast.JoinedStr (f-string) → recurse into its parts
-    - ast.BinOp (string concat via '+') → recurse
-    - ast.Dict / ast.List / ast.Tuple / ast.Set → recurse into elements
-    - ast.Call → recurse into all args/kwargs (so content={"k": "v"} works)
-    - ast.keyword → recurse into .value
+    `ast.walk` で部分木全体を走査し、`Constant(str)` を全て拾う。これにより
+    `IfExp` (`'a' if cond else 'b'`)、`Subscript` (`{'k':'v'}['k']`)、
+    comprehensions、ネストした dict/list、Call 内 args/kwargs 等を
+    手書き分岐なしに網羅できる (Copilot PR #125 round 4 指摘)。
+
+    `FormattedValue.expr` 部分 (f-string の `{expr}`) の中の文字列も
+    Constant として拾われる。これは「リテラル日本語の検出」目的では
+    正しい挙動 (例: `f"x{'日本語' if c else 'ok'}"` の `'日本語'` を捕捉)。
     """
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        yield (getattr(node, "lineno", 0), node.value)
-    elif isinstance(node, ast.JoinedStr):
-        for part in node.values:
-            yield from iter_string_literals(part)
-    elif isinstance(node, ast.FormattedValue):
-        # f-string の {expr:format_spec} の expr 部分は実行時の値で走査
-        # 不可だが、format_spec は更に JoinedStr/Constant を含むため再帰。
-        # ここをスキップすると f"...{x:日本語...}" 等で guard が抜ける。
-        if node.format_spec is not None:
-            yield from iter_string_literals(node.format_spec)
-    elif isinstance(node, ast.BinOp):
-        yield from iter_string_literals(node.left)
-        yield from iter_string_literals(node.right)
-    elif isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-        for elt in node.elts:
-            yield from iter_string_literals(elt)
-    elif isinstance(node, ast.Dict):
-        for v in node.values:
-            yield from iter_string_literals(v)
-    elif isinstance(node, ast.Call):
-        for a in node.args:
-            yield from iter_string_literals(a)
-        for kw in node.keywords:
-            yield from iter_string_literals(kw.value)
-    elif isinstance(node, ast.keyword):
-        yield from iter_string_literals(node.value)
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+            yield (getattr(sub, "lineno", 0), sub.value)
 
 
 def _call_target_name(node: ast.Call) -> str:
@@ -116,16 +93,31 @@ POSITIONAL_TARGETS: dict[str, list[int]] = {
 }
 
 
+class GuardError(Exception):
+    """Raised when the guard cannot scan a file (parse error / IO error etc).
+
+    Treated as guard failure rather than silent skip so coverage cannot be
+    bypassed by introducing unparseable code (Copilot PR #125 round 4 指摘)。
+    """
+
+
+def _parse_file(path: Path) -> tuple[str, ast.Module]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise GuardError(f"cannot read {path}: {e}") from e
+    try:
+        tree = ast.parse(text, filename=str(path))
+    except SyntaxError as e:
+        raise GuardError(f"cannot parse {path}: {e}") from e
+    return text, tree
+
+
 def scan_kwargs(path: Path, kwarg_names: set[str]) -> list[tuple[int, str]]:
     """指定の kwarg 名の value、および POSITIONAL_TARGETS で定義された関数の
     特定位置にある positional 引数の文字列リテラルから日本語を検出。
     """
-    try:
-        text = path.read_text(encoding="utf-8")
-        tree = ast.parse(text, filename=str(path))
-    except (OSError, UnicodeDecodeError, SyntaxError):
-        return []
-
+    text, tree = _parse_file(path)
     lines = text.splitlines()
     out: list[tuple[int, str]] = []
 
@@ -157,12 +149,7 @@ def scan_all_strings(path: Path) -> list[tuple[int, str]]:
     モジュール冒頭の docstring (Expr(Constant(str)) が最初に来る) は対象外。
     関数 docstring は対象 (公開関数の説明として MCP が露出させるため)。
     """
-    try:
-        text = path.read_text(encoding="utf-8")
-        tree = ast.parse(text, filename=str(path))
-    except (OSError, UnicodeDecodeError, SyntaxError):
-        return []
-
+    text, tree = _parse_file(path)
     lines = text.splitlines()
     out: list[tuple[int, str]] = []
 
@@ -204,16 +191,33 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[3]
 
     total: list[tuple[str, Path, int, str]] = []
+    parse_failures: list[tuple[Path, str]] = []
+
+    def run_kwargs(path: Path, kwarg_names: set[str], category: str) -> None:
+        try:
+            results = scan_kwargs(path, kwarg_names)
+        except GuardError as e:
+            parse_failures.append((path, str(e)))
+            return
+        for lineno, snip in results:
+            total.append((category, path, lineno, snip))
+
+    def run_all_strings(path: Path, category: str) -> None:
+        try:
+            results = scan_all_strings(path)
+        except GuardError as e:
+            parse_failures.append((path, str(e)))
+            return
+        for lineno, snip in results:
+            total.append((category, path, lineno, snip))
 
     # 1. api/lib/routers の detail / content kwarg
     for path in collect_files(repo_root / "api" / "lib" / "routers"):
-        for lineno, snip in scan_kwargs(path, {"detail", "content"}):
-            total.append(("api/lib/routers (detail/content)", path, lineno, snip))
+        run_kwargs(path, {"detail", "content"}, "api/lib/routers (detail/content)")
 
     # 2. api/lib/models の description kwarg (Pydantic Field)
     for path in collect_files(repo_root / "api" / "lib" / "models"):
-        for lineno, snip in scan_kwargs(path, {"description"}):
-            total.append(("api/lib/models (description=)", path, lineno, snip))
+        run_kwargs(path, {"description"}, "api/lib/models (description=)")
 
     # 3. MCP の公開コード表面 (server.py / tools/*.py / errors.py)。
     #    @mcp.tool() 本体は mcp/server.py、helper 実装は mcp/tools/、
@@ -225,10 +229,19 @@ def main() -> int:
             mcp_targets.append(p)
     mcp_targets.extend(collect_files(repo_root / "mcp" / "tools"))
     for path in mcp_targets:
-        for lineno, snip in scan_all_strings(path):
-            rel_top = path.relative_to(repo_root / "mcp").parts[0]
-            cat = f"mcp/{rel_top}"
-            total.append((cat, path, lineno, snip))
+        rel_top = path.relative_to(repo_root / "mcp").parts[0]
+        run_all_strings(path, f"mcp/{rel_top}")
+
+    # Parse failures must NOT silently pass — Copilot PR #125 round 4 指摘。
+    if parse_failures:
+        print(
+            f"::error title=i18n guard::Could not scan {len(parse_failures)} file(s); "
+            "parse/IO failures are treated as guard failures to prevent silent bypass."
+        )
+        for path, reason in parse_failures:
+            rel = path.relative_to(repo_root)
+            print(f"  {rel}: {reason}")
+        return 2
 
     if not total:
         print("i18n guard: OK (no Japanese strings detected in public API/MCP surfaces)")
