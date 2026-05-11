@@ -19,7 +19,7 @@ import {
   RefreshCw,
   ZoomIn,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState, useEffect } from "react";
@@ -57,6 +57,11 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const router = useRouter();
   const { api, isReady } = useApi();
   const t = useTranslations("tilesets.detail");
+  const locale = useLocale();
+  // BCP47 タグに正規化 ("ja" → "ja-JP", "en" → "en-US")。
+  // toLocaleString が `ja` 単体でも動くが、明示的に region を渡したほうが
+  // 表示が安定する (Copilot PR #132 round 1 指摘: locale をハード指定していた)。
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
 
   const [tileset, setTileset] = useState<Tileset | null>(null);
   const [tileJSON, setTileJSON] = useState<TileJSONWithLayers | null>(null);
@@ -162,7 +167,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("ja-JP", {
+    return new Date(dateString).toLocaleString(dateLocale, {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -466,7 +471,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               {tilesetStats.latest_update && (
                 <div className="mt-4 text-sm text-muted-foreground">
                   {t("feature_last_updated")}{" "}
-                  {new Date(tilesetStats.latest_update).toLocaleString("ja-JP")}
+                  {new Date(tilesetStats.latest_update).toLocaleString(dateLocale)}
                 </div>
               )}
             </CardContent>

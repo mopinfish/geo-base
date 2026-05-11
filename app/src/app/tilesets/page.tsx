@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +52,8 @@ import {
 export default function TilesetsPage() {
   const { api, isReady } = useApi();
   const t = useTranslations("tilesets.list");
+  const locale = useLocale();
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
 
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [filteredTilesets, setFilteredTilesets] = useState<Tileset[]>([]);
@@ -149,7 +151,7 @@ export default function TilesetsPage() {
   }, [tilesets, searchQuery, typeFilter, publicFilter]);
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("ja-JP", {
+    return new Date(dateString).toLocaleDateString(dateLocale, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -264,9 +266,9 @@ export default function TilesetsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("filter_type_all")}</SelectItem>
-                  <SelectItem value="vector">vector</SelectItem>
-                  <SelectItem value="raster">raster</SelectItem>
-                  <SelectItem value="pmtiles">pmtiles</SelectItem>
+                  <SelectItem value="vector">{t("filter_type_vector")}</SelectItem>
+                  <SelectItem value="raster">{t("filter_type_raster")}</SelectItem>
+                  <SelectItem value="pmtiles">{t("filter_type_pmtiles")}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={publicFilter} onValueChange={setPublicFilter}>
