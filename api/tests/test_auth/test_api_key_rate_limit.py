@@ -327,20 +327,50 @@ class TestRedisRateLimiter:
             "Redis rate limit operation failed" in r.message for r in caplog.records
         )
 
+    @pytest.mark.parametrize("limit_value", [None, 0, -1])
+    def test_unlimited_skips_check(self, redis_limiter, limit_value):
+        """rl_min が None / 0 / 負値 (= 無制限) なら何回呼んでも raise しない。"""
+        key_id = str(uuid.uuid4())
+        # rl_day も無制限にして per-day 経路も skip
+        for _ in range(20):
+            redis_limiter.check_and_increment(
+                key_id, rl_min=limit_value, rl_day=limit_value
+            )
+
+    def test_default_prefix_includes_global_redis_prefix(self):
+        """key_prefix 未指定時は REDIS_KEY_PREFIX (既定 `geo-base:`) を含む。"""
+        from lib.redis_client import get_redis_config
+
+        # singleton reset せずに既存 config を使うが、本テストは prefix 文字列の
+        # 組み立てを検証するだけなので Redis への接続は不要
+        expected_global = get_redis_config().key_prefix  # "geo-base:" by default
+        limiter = RedisRateLimiter()
+        assert limiter._key_prefix.startswith(expected_global), (
+            f"Expected key_prefix to start with {expected_global!r}, "
+            f"got {limiter._key_prefix!r}"
+        )
+        assert limiter._key_prefix.endswith("rate:apikey"), (
+            f"Expected key_prefix to end with 'rate:apikey', "
+            f"got {limiter._key_prefix!r}"
+        )
+
     def test_expire_set_on_first_increment(self, redis_limiter):
         """新規キー作成時のみ EXPIRE が設定される（INCR 戻り値 == 1）。"""
         from lib.redis_client import get_redis
 
         client = get_redis()
         key_id = str(uuid.uuid4())
-        redis_limiter.check_and_increment(key_id, rl_min=10, rl_day=1000)
 
-        # _now() で生成されるキーと一致させる
-        now = redis_limiter._now()
-        minute_window = int(now.timestamp() // 60)
+        # `_now()` を固定時刻にパッチして、limiter が使うキーとアサート時のキーが
+        # 分境界をまたいで乖離しないようにする (旧実装は分境界付近で flaky だった)。
+        fixed_now = datetime(2026, 5, 11, 12, 30, 0, tzinfo=timezone.utc)
+        minute_window = int(fixed_now.timestamp() // 60)
         minute_key = f"{redis_limiter._key_prefix}:{key_id}:m:{minute_window}"
 
-        ttl = client.ttl(minute_key)
+        with patch.object(redis_limiter, "_now", return_value=fixed_now):
+            redis_limiter.check_and_increment(key_id, rl_min=10, rl_day=1000)
+            ttl = client.ttl(minute_key)
+
         # TTL は 120 秒以下で正の値（ちょうど 120 とは限らないため >= 100 で確認）
         assert 100 < ttl <= 120, f"Expected TTL ~120s, got {ttl}"
 

@@ -6,10 +6,10 @@
   fixed-window 集計を行う既存実装。SQL 関数 `get_api_key_rate_limit_status` /
   `increment_api_key_rate_limit` を利用。Phase 1 で `api_key_auth.py` から
   inline ロジックを切り出した形。
-- `"redis"`: `RedisRateLimiter`。Redis INCR + EXPIRE で fixed-window 集計
-  (Phase 2 で実装)。Redis 失敗時は **fail-open**（warn ログを出してリクエストを
-  通す）。rate limit は quota 制御であって認可ではないため、Redis ダウンで 503 を
-  返すより一時的に通過させる方が UX 上望ましい。
+- `"redis"`: `RedisRateLimiter`。Redis INCR + EXPIRE で fixed-window 集計。
+  Redis 失敗時は **fail-open**（warn ログを出してリクエストを通す）。rate limit
+  は quota 制御であって認可ではないため、Redis ダウンで 503 を返すより一時的に
+  通過させる方が UX 上望ましい。
 
 注: 本モジュールはログイン試行 rate limit (`auth/rate_limit.py`) とは別物。
 こちらは **認証済み API キー** が「自分の rate_limit_per_minute / per_day を
@@ -32,7 +32,7 @@
 """
 import logging
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Optional, Protocol
 
 from lib.config import get_settings
 
@@ -41,16 +41,30 @@ from .errors import RateLimited
 logger = logging.getLogger(__name__)
 
 
+def _is_unlimited(limit: Optional[int]) -> bool:
+    """rate_limit 値が「無制限」を意味するか判定する。
+
+    `api_keys.rate_limit_per_*` カラムは INTEGER NOT NULL（既定 60 / 10000）だが、
+    防御的にハンドリング:
+    - None: 設定されていない → 無制限扱い
+    - <= 0: 「0 = 全ブロック」より「無効値 = 無制限」と解釈するほうが運用ミスの被害が
+      小さい（過剰な締め付けより素通りのほうがインシデント時の rollback が簡単）
+    """
+    return limit is None or limit <= 0
+
+
 class RateLimiter(Protocol):
     """API キー rate limit の抽象インターフェース。"""
 
-    def check_and_increment(self, key_id: str, rl_min: int, rl_day: int) -> None:
+    def check_and_increment(
+        self, key_id: str, rl_min: Optional[int], rl_day: Optional[int]
+    ) -> None:
         """現在のカウントを確認し、超過していなければカウンタを +1 する。
 
         Args:
             key_id: API キーの UUID 文字列
-            rl_min: per-minute の上限。-1 なら制限なし（増分のみ実施）
-            rl_day: per-day の上限。-1 なら制限なし
+            rl_min: per-minute の上限。None または <= 0 なら制限なし（check スキップ）
+            rl_day: per-day の上限。None または <= 0 なら制限なし
 
         Raises:
             RateLimited: per-minute または per-day の上限を超過している
@@ -71,17 +85,20 @@ class DbRateLimiter:
     def __init__(self, conn):
         self._conn = conn
 
-    def check_and_increment(self, key_id: str, rl_min: int, rl_day: int) -> None:
-        # per-minute チェック
-        with self._conn.cursor() as cur:
-            cur.execute(
-                "SELECT * FROM get_api_key_rate_limit_status(%s, 'minute')",
-                (key_id,),
-            )
-            _count, _limit, _window_start, remaining = cur.fetchone()
+    def check_and_increment(
+        self, key_id: str, rl_min: Optional[int], rl_day: Optional[int]
+    ) -> None:
+        # per-minute チェック（rl_min が None / <= 0 なら無制限扱いでスキップ）
+        if not _is_unlimited(rl_min):
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM get_api_key_rate_limit_status(%s, 'minute')",
+                    (key_id,),
+                )
+                _count, _limit, _window_start, remaining = cur.fetchone()
 
-        if remaining <= 0:
-            raise RateLimited("API key rate limit exceeded (per minute)")
+            if remaining <= 0:
+                raise RateLimited("API key rate limit exceeded (per minute)")
 
         # increment per-minute / per-day（既存実装に倣って per-day は事前 check しない
         # — per-minute で守りつつ、per-day は別途運用監視で管理する想定）
@@ -97,15 +114,20 @@ class DbRateLimiter:
 
 
 class RedisRateLimiter:
-    """Redis ベースの rate limiter (Issue #56 Phase 2)。
+    """Redis ベースの rate limiter (Issue #56)。
 
     Fixed-window 集計を Redis INCR + EXPIRE で実装。`api_key_rate_limits` テーブル
     と異なり書き込み競合がなく、高頻度アクセスでもスループット低下しにくい。
 
     キー設計:
-    - per-minute: `rate:apikey:{key_id}:m:{epoch_minute}` (TTL 120s — 窓 60s +
+    - per-minute: `{key_prefix}{key_id}:m:{epoch_minute}` (TTL 120s — 窓 60s +
       clock skew 吸収)
-    - per-day: `rate:apikey:{key_id}:d:{YYYYMMDD}` (TTL 90000s = 25h)
+    - per-day: `{key_prefix}{key_id}:d:{YYYYMMDD}` (TTL 90000s = 25h)
+
+    `key_prefix` 既定値は `{REDIS_KEY_PREFIX}rate:apikey:` で、`REDIS_KEY_PREFIX`
+    env (`lib.redis_client.RedisConfig.key_prefix`、既定 `geo-base:`) によって
+    環境ごとに namespace を分離できる。`safe_redis_*` 経由の他キャッシュとも
+    一貫した namespace になる。
 
     アルゴリズム (Issue 仕様):
     1. INCR でカウンタを加算（atomic）
@@ -128,15 +150,28 @@ class RedisRateLimiter:
     MINUTE_WINDOW_TTL = 120
     DAY_WINDOW_TTL = 90000
 
-    def __init__(self, key_prefix: str = "rate:apikey"):
-        # テストで分離するために prefix を差し替え可能にしておく
+    def __init__(self, key_prefix: Optional[str] = None):
+        """
+        Args:
+            key_prefix: キー名の prefix（末尾 `:` 不要、内部で付加）。明示未指定なら
+                `{REDIS_KEY_PREFIX}rate:apikey` (REDIS_KEY_PREFIX は redis_client
+                の RedisConfig から取得、既定 `geo-base:`)。テストでは独自 prefix
+                を渡してアプリキャッシュと分離する。
+        """
+        if key_prefix is None:
+            from lib.redis_client import get_redis_config
+            # REDIS_KEY_PREFIX (既定 "geo-base:") + "rate:apikey" → "geo-base:rate:apikey"
+            # key 組み立て側で `:{key_id}:m:{window}` を付加するため、末尾 `:` は不要
+            key_prefix = f"{get_redis_config().key_prefix}rate:apikey"
         self._key_prefix = key_prefix
 
     def _now(self) -> datetime:
         # テストでパッチしやすいように分離
         return datetime.now(timezone.utc)
 
-    def check_and_increment(self, key_id: str, rl_min: int, rl_day: int) -> None:
+    def check_and_increment(
+        self, key_id: str, rl_min: Optional[int], rl_day: Optional[int]
+    ) -> None:
         from lib.redis_client import get_redis
 
         client = get_redis()
@@ -154,18 +189,25 @@ class RedisRateLimiter:
         minute_key = f"{self._key_prefix}:{key_id}:m:{minute_window}"
         day_key = f"{self._key_prefix}:{key_id}:d:{day_window}"
 
-        try:
-            m_count = client.incr(minute_key)
-            if m_count == 1:
-                client.expire(minute_key, self.MINUTE_WINDOW_TTL)
-            if m_count > rl_min:
-                raise RateLimited("API key rate limit exceeded (per minute)")
+        check_minute = not _is_unlimited(rl_min)
+        check_day = not _is_unlimited(rl_day)
 
-            d_count = client.incr(day_key)
-            if d_count == 1:
-                client.expire(day_key, self.DAY_WINDOW_TTL)
-            if d_count > rl_day:
-                raise RateLimited("API key rate limit exceeded (per day)")
+        try:
+            # per-minute: 制限ありの場合のみ INCR + check（無制限ならスキップ）
+            if check_minute:
+                m_count = client.incr(minute_key)
+                if m_count == 1:
+                    client.expire(minute_key, self.MINUTE_WINDOW_TTL)
+                if m_count > rl_min:
+                    raise RateLimited("API key rate limit exceeded (per minute)")
+
+            # per-day: 同上
+            if check_day:
+                d_count = client.incr(day_key)
+                if d_count == 1:
+                    client.expire(day_key, self.DAY_WINDOW_TTL)
+                if d_count > rl_day:
+                    raise RateLimited("API key rate limit exceeded (per day)")
         except RateLimited:
             raise
         except Exception as e:

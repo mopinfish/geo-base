@@ -1,8 +1,8 @@
 """API キー検証 + AuthContext 化 + レート制限統合。
 
 Rate limit ロジックは `api_key_rate_limit.py` の `RateLimiter` 抽象に切り出され
-ており、`settings.rate_limit_backend` で DB / Redis (Phase 2 で追加) の実装を
-切替可能（Issue #56）。
+ており、`settings.rate_limit_backend` (env: `RATE_LIMIT_BACKEND`) で DB / Redis
+の実装を切替可能（Issue #56）。
 """
 import asyncio
 import hashlib
