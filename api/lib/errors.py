@@ -117,6 +117,7 @@ class ErrorCode(str, Enum):
     TILE_INVALID_COORDINATE = "tile_invalid_coordinate"
     TILE_RENDER_FAILED = "tile_render_failed"
     TILE_SOURCE_UNAVAILABLE = "tile_source_unavailable"
+    TILE_SERVICE_UNAVAILABLE = "tile_service_unavailable"
 
     # --- validation / generic ---
     VALIDATION_FIELD_REQUIRED = "validation_field_required"
