@@ -2,6 +2,7 @@
 
 email または IP の **どちらか** が閾値超過でロック。
 """
+import os
 from typing import Optional
 
 from .errors import RateLimited
@@ -16,7 +17,17 @@ def check_login_rate_limit(
     email: Optional[str] = None,
     ip: Optional[str] = None,
 ) -> None:
-    """直近 WINDOW_MINUTES 分間の失敗回数を確認し、閾値超過なら RateLimited を raise。"""
+    """直近 WINDOW_MINUTES 分間の失敗回数を確認し、閾値超過なら RateLimited を raise。
+
+    E2E_MODE=1 のときはレート制限をスキップする (issue #111)。
+    E2E テストで意図的に wrong password を試すケース (AUTH-02) や、
+    50+ テストが連続で login する fixture 構成だと、production 設定の閾値
+    (5 attempts / 15 min) では容易に lock されてしまう。本番には E2E_MODE が
+    届かないので開発・テスト環境専用の安全弁。
+    """
+    if os.getenv("E2E_MODE") == "1":
+        return
+
     if email is None and ip is None:
         return  # チェック対象なし
 
