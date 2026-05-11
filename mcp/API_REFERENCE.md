@@ -863,7 +863,7 @@ None.
 
 When an error occurs, every tool returns a response with at least the following two fields. All other fields are optional and depend on the error path:
 
-```json
+```jsonc
 {
   "error": "Error message",            // required
   "code": "ERROR_CODE",                // required, one of the codes below
