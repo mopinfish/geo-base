@@ -217,3 +217,47 @@ export async function createApiKey(input: {
     await ctx.dispose();
   }
 }
+
+/**
+ * Team 招待を作成する。`token` は created レスポンスに含まれる
+ * (`api/lib/routers/teams.py` の create_team_invitation 参照)。
+ * 招待を受諾するには `/accept-invitation?token=...` 経由でフロントから入る
+ * か、authClient.acceptInvitation を直接叩く。
+ *
+ * NOTE: `expires_in_days` を渡す場合は 1..30 の範囲 (TeamInvitationCreate)。
+ */
+export interface CreatedInvitation {
+  id: string;
+  team_id: string;
+  email: string;
+  /** 招待 token (受諾前のみ存在)。pending → accepted/expired/cancelled で NULL に書き換えられる。 */
+  token: string | null;
+  role: string;
+  status: string;
+}
+
+export type TeamInviteRole = "administrator" | "member" | "guest";
+
+export async function inviteMember(input: {
+  teamId: string;
+  email: string;
+  role?: TeamInviteRole;
+}): Promise<CreatedInvitation> {
+  const ctx = await createApiClient();
+  try {
+    const res = await ctx.post(`/api/teams/${input.teamId}/invitations`, {
+      data: {
+        email: input.email,
+        role: input.role ?? "member",
+      },
+    });
+    if (!res.ok()) {
+      throw new Error(
+        `inviteMember failed: ${res.status()} ${await res.text()}`,
+      );
+    }
+    return (await res.json()) as CreatedInvitation;
+  } finally {
+    await ctx.dispose();
+  }
+}

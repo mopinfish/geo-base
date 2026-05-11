@@ -68,14 +68,20 @@ function AcceptInvitationForm() {
         <input
           required value={name} onChange={(e) => setName(e.target.value)}
           placeholder="お名前" className="w-full p-2 border rounded"
+          data-testid="invitation-name"
         />
         <input
           type="password" required minLength={8}
           value={password} onChange={(e) => setPassword(e.target.value)}
           placeholder="パスワード（8文字以上）" className="w-full p-2 border rounded"
+          data-testid="invitation-password"
         />
         {error && <p className="text-red-600">{error}</p>}
-        <button type="submit" disabled={loading} className="w-full p-2 bg-blue-600 text-white rounded">
+        <button
+          type="submit" disabled={loading}
+          className="w-full p-2 bg-blue-600 text-white rounded"
+          data-testid="invitation-submit"
+        >
           {loading ? "..." : "アカウント作成して参加"}
         </button>
       </form>

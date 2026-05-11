@@ -120,7 +120,10 @@ export default function TeamsPage() {
               チームを作成してメンバーとタイルセットを共有しましょう
             </p>
           </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
+          <Button
+            onClick={() => setShowCreateDialog(true)}
+            data-testid="team-create-button"
+          >
             <Plus className="w-4 h-4 mr-2" />
             新規チーム
           </Button>
@@ -241,6 +244,7 @@ export default function TeamsPage() {
                   setCreateForm((prev) => ({ ...prev, name: e.target.value }))
                 }
                 placeholder="マイチーム"
+                data-testid="team-create-name"
               />
             </div>
             <div className="space-y-2">
@@ -252,6 +256,7 @@ export default function TeamsPage() {
                   setCreateForm((prev) => ({ ...prev, slug: e.target.value }))
                 }
                 placeholder="my-team（空欄で自動生成）"
+                data-testid="team-create-slug"
               />
             </div>
             <div className="space-y-2">
@@ -278,6 +283,7 @@ export default function TeamsPage() {
             <Button
               onClick={handleCreateTeam}
               disabled={!createForm.name.trim() || isCreating}
+              data-testid="team-create-submit"
             >
               {isCreating ? "作成中..." : "作成"}
             </Button>

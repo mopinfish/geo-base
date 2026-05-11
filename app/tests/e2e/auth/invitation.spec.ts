@@ -1,17 +1,45 @@
-import { test } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
-// AUTH-10: 招待 token で新規ユーザー登録 + 自動ログイン
-//
-// このテストは `inviteMember` factory が必要なため、Tasks 6-9 batch
-// (Teams core を実装する) で完成させる。それまでスケルトンとして残す。
-//
-// 完成後の想定フロー:
-// 1. loginAsAdmin して team を作成 + member 招待
-// 2. fetchRecentToken("team_invitation", inviteEmail) で token 取得
-// 3. /accept-invitation?token=... に goto
-// 4. name + password を入力して submit
-// 5. waitForURL("/") で自動ログイン後のダッシュボード
+import { resetDatabase } from "../utils/reset-db";
+import { fetchRecentToken } from "../utils/token-fetch";
+import { loginAsAdmin } from "../utils/session";
+import { createTeam, inviteMember } from "../fixtures/factories";
 
-test.skip("AUTH-10 招待 token で新規ユーザー登録 + 自動ログイン", async () => {
-  // Pending: inviteMember factory in Tasks 6-9 batch (Teams core)
+/**
+ * AUTH-10: 招待 token で新規ユーザー登録 + 自動ログイン。
+ *
+ * 受諾後のリダイレクト先は `/teams/${info.team_id}` (accept-invitation/page.tsx 参照)。
+ * 旧プランでは `/` だったが、実装は team 詳細にジャンプする。
+ */
+test.beforeAll(async () => {
+  await loginAsAdmin();
+  await resetDatabase();
+});
+
+test("AUTH-10 招待 token で新規ユーザー登録 + 自動ログインしてチーム詳細へ", async ({
+  page,
+}) => {
+  // beforeAll で resetDB 後の session を失った可能性に備え念のため再ログイン。
+  await loginAsAdmin();
+
+  const team = await createTeam({ name: "Invitation E2E Team" });
+  const inviteEmail = `invitee-${Date.now()}@example.com`;
+  await inviteMember({ teamId: team.id, email: inviteEmail });
+
+  const token = await fetchRecentToken("team_invitation", inviteEmail);
+
+  // 招待ページへ。InvitationInfo を取得して表示するため少し待つ。
+  await page.goto(`/accept-invitation?token=${encodeURIComponent(token)}`);
+  await expect(page.getByTestId("invitation-name")).toBeVisible({
+    timeout: 10_000,
+  });
+
+  await page.getByTestId("invitation-name").fill("E2E Invitee");
+  await page.getByTestId("invitation-password").fill("Invitee-pass-1!");
+  await page.getByTestId("invitation-submit").click();
+
+  // 受諾後はチーム詳細にリダイレクト。
+  await page.waitForURL(new RegExp(`/teams/${team.id}`), {
+    timeout: 15_000,
+  });
 });
