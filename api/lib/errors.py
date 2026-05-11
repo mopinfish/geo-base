@@ -92,6 +92,7 @@ class ErrorCode(str, Enum):
     DATASOURCE_UPLOAD_FAILED = "datasource_upload_failed"
     DATASOURCE_UNSUPPORTED_FORMAT = "datasource_unsupported_format"
     DATASOURCE_INVALID = "datasource_invalid"
+    DATASOURCE_ALREADY_EXISTS = "datasource_already_exists"
 
     # --- team ---
     TEAM_NOT_FOUND = "team_not_found"

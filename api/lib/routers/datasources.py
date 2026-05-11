@@ -14,6 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.models.datasource import DatasourceType, StorageProvider, DatasourceCreate
 from lib.auth import (
     AuthContext,
@@ -217,7 +218,11 @@ def list_datasources(
         return {"datasources": datasources, "count": len(datasources)}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing datasources: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing datasources: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -262,16 +267,21 @@ def get_datasource(
 
                 if not check_tileset_access_v2(conn, tileset_for_access, auth):
                     if auth is None:
+                        # NOTE: Phase 2b では envelope 化を見送り。
+                        # api_error() は headers= を受けないため、
+                        # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                         raise HTTPException(
                             status_code=401,
                             detail="Authentication required to access this datasource",
                             headers={"WWW-Authenticate": "Bearer"},
                         )
-                    raise HTTPException(
-                        status_code=403,
-                        detail="You do not have permission to access this datasource"
+                    raise api_error(
+                        403,
+                        ErrorCode.DATASOURCE_FORBIDDEN,
+                        "You do not have permission to access this datasource",
+                        details={"datasource_id": datasource_id},
                     )
-                
+
                 return {
                     "id": str(row[0]),
                     "tileset_id": str(row[1]),
@@ -318,16 +328,21 @@ def get_datasource(
 
                 if not check_tileset_access_v2(conn, tileset_for_access, auth):
                     if auth is None:
+                        # NOTE: Phase 2b では envelope 化を見送り。
+                        # api_error() は headers= を受けないため、
+                        # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                         raise HTTPException(
                             status_code=401,
                             detail="Authentication required to access this datasource",
                             headers={"WWW-Authenticate": "Bearer"},
                         )
-                    raise HTTPException(
-                        status_code=403,
-                        detail="You do not have permission to access this datasource"
+                    raise api_error(
+                        403,
+                        ErrorCode.DATASOURCE_FORBIDDEN,
+                        "You do not have permission to access this datasource",
+                        details={"datasource_id": datasource_id},
                     )
-                
+
                 return {
                     "id": str(row[0]),
                     "tileset_id": str(row[1]),
@@ -348,12 +363,21 @@ def get_datasource(
                     "user_id": str(row[15]) if row[15] else None,
                 }
             
-            raise HTTPException(status_code=404, detail="Datasource not found")
-            
+            raise api_error(
+                404,
+                ErrorCode.DATASOURCE_NOT_FOUND,
+                "Datasource not found",
+                details={"datasource_id": datasource_id},
+            )
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching datasource: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching datasource: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -385,41 +409,56 @@ async def create_datasource(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": str(datasource.tileset_id)},
+                )
 
             tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
             if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Not authorized to add datasource to this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to add datasource to this tileset",
+                    details={"tileset_id": str(row[0])},
                 )
-            
+
             tileset_type = row[2]
-            
+
             # Validate type matches tileset type
             if datasource.type == DatasourceType.pmtiles and tileset_type != "pmtiles":
-                raise HTTPException(
-                    status_code=400,
-                    detail="PMTiles datasource can only be added to pmtiles type tileset"
+                raise api_error(
+                    400,
+                    ErrorCode.DATASOURCE_INVALID,
+                    "PMTiles datasource can only be added to pmtiles type tileset",
+                    details={"tileset_id": str(row[0]), "tileset_type": tileset_type},
                 )
             if datasource.type == DatasourceType.cog and tileset_type != "raster":
-                raise HTTPException(
-                    status_code=400,
-                    detail="COG datasource can only be added to raster type tileset"
+                raise api_error(
+                    400,
+                    ErrorCode.DATASOURCE_INVALID,
+                    "COG datasource can only be added to raster type tileset",
+                    details={"tileset_id": str(row[0]), "tileset_type": tileset_type},
                 )
-            
+
             metadata_json = json.dumps(datasource.metadata) if datasource.metadata else None
-            
+
             if datasource.type == DatasourceType.pmtiles:
                 return await _create_pmtiles_datasource(datasource, metadata_json, conn, cur)
             else:
                 return await _create_cog_datasource(datasource, metadata_json, conn, cur)
-            
+
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error creating datasource: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating datasource: {str(e)}",
+        )
 
 
 async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json, conn, cur):
@@ -430,9 +469,11 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
         (datasource.tileset_id,),
     )
     if cur.fetchone():
-        raise HTTPException(
-            status_code=400,
-            detail="Datasource already exists for this tileset"
+        raise api_error(
+            400,
+            ErrorCode.DATASOURCE_ALREADY_EXISTS,
+            "Datasource already exists for this tileset",
+            details={"tileset_id": str(datasource.tileset_id)},
         )
     
     # Fetch PMTiles metadata
@@ -525,9 +566,11 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
         (datasource.tileset_id,),
     )
     if cur.fetchone():
-        raise HTTPException(
-            status_code=400,
-            detail="Datasource already exists for this tileset"
+        raise api_error(
+            400,
+            ErrorCode.DATASOURCE_ALREADY_EXISTS,
+            "Datasource already exists for this tileset",
+            details={"tileset_id": str(datasource.tileset_id)},
         )
     
     # Fetch COG metadata
@@ -707,41 +750,53 @@ async def upload_cog(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": tileset_id},
+                )
 
             tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
             if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Not authorized to add datasource to this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to add datasource to this tileset",
+                    details={"tileset_id": tileset_id},
                 )
-            
+
             if row[2] != "raster":
-                raise HTTPException(
-                    status_code=400,
-                    detail="COG datasource can only be added to raster type tileset"
+                raise api_error(
+                    400,
+                    ErrorCode.DATASOURCE_INVALID,
+                    "COG datasource can only be added to raster type tileset",
+                    details={"tileset_id": tileset_id, "tileset_type": row[2]},
                 )
-            
+
             # Check if datasource already exists for this tileset
             cur.execute(
                 "SELECT id FROM raster_sources WHERE tileset_id = %s",
                 (tileset_id,),
             )
             if cur.fetchone():
-                raise HTTPException(
-                    status_code=400,
-                    detail="Datasource already exists for this tileset"
+                raise api_error(
+                    400,
+                    ErrorCode.DATASOURCE_ALREADY_EXISTS,
+                    "Datasource already exists for this tileset",
+                    details={"tileset_id": tileset_id},
                 )
-        
+
         # Read file content
         file_content = await file.read()
-        
+
         # Validate it's a valid COG
         is_valid, validation_message = validate_cog_file(file_content)
         if not is_valid:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid COG file: {validation_message}"
+            raise api_error(
+                400,
+                ErrorCode.DATASOURCE_UNSUPPORTED_FORMAT,
+                f"Invalid COG file: {validation_message}",
             )
         
         # Upload to S3 互換 storage (Fly Tigris by default)
@@ -772,9 +827,10 @@ async def upload_cog(
             storage.upload_file, storage_path, file_content, "image/tiff"
         )
         if not cog_url:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to upload file to storage"
+            raise api_error(
+                500,
+                ErrorCode.DATASOURCE_UPLOAD_FAILED,
+                "Failed to upload file to storage",
             )
         # Mark storage object as uploaded so we can clean it up if a subsequent
         # DB INSERT/COMMIT fails (orphan prevention).
@@ -881,7 +937,11 @@ async def upload_cog(
         conn.rollback()
         # DB INSERT/COMMIT 失敗時は upload 済み S3 オブジェクトが孤児化するため掃除
         await _cleanup_orphan_storage_object(uploaded_storage_path)
-        raise HTTPException(status_code=500, detail=f"Error uploading COG: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.DATASOURCE_UPLOAD_FAILED,
+            f"Error uploading COG: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -918,19 +978,28 @@ async def upload_pmtiles(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": tileset_id},
+                )
 
             tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
             if not await acheck_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Not authorized to add datasource to this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to add datasource to this tileset",
+                    details={"tileset_id": tileset_id},
                 )
 
             if row[2] != "pmtiles":
-                raise HTTPException(
-                    status_code=400,
-                    detail="PMTiles datasource can only be added to pmtiles type tileset"
+                raise api_error(
+                    400,
+                    ErrorCode.DATASOURCE_INVALID,
+                    "PMTiles datasource can only be added to pmtiles type tileset",
+                    details={"tileset_id": tileset_id, "tileset_type": row[2]},
                 )
 
             cur.execute(
@@ -938,9 +1007,11 @@ async def upload_pmtiles(
                 (tileset_id,),
             )
             if cur.fetchone():
-                raise HTTPException(
-                    status_code=400,
-                    detail="Datasource already exists for this tileset"
+                raise api_error(
+                    400,
+                    ErrorCode.DATASOURCE_ALREADY_EXISTS,
+                    "Datasource already exists for this tileset",
+                    details={"tileset_id": tileset_id},
                 )
 
         # Read file content
@@ -949,9 +1020,10 @@ async def upload_pmtiles(
         # Validate as PMTiles
         is_valid, validation_message = validate_pmtiles_file(file_content)
         if not is_valid:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid PMTiles file: {validation_message}"
+            raise api_error(
+                400,
+                ErrorCode.DATASOURCE_UNSUPPORTED_FORMAT,
+                f"Invalid PMTiles file: {validation_message}",
             )
 
         # Upload to S3 互換 storage (Fly Tigris by default)
@@ -977,9 +1049,10 @@ async def upload_pmtiles(
             storage.upload_file, storage_path, file_content, "application/vnd.pmtiles"
         )
         if not pmtiles_url:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to upload PMTiles to storage"
+            raise api_error(
+                500,
+                ErrorCode.DATASOURCE_UPLOAD_FAILED,
+                "Failed to upload PMTiles to storage",
             )
         # 後段の DB INSERT/COMMIT 失敗時に S3 を掃除するためのマーカー。
         uploaded_storage_path = storage_path
@@ -1074,7 +1147,11 @@ async def upload_pmtiles(
         conn.rollback()
         # DB INSERT/COMMIT 失敗時は upload 済み S3 オブジェクトが孤児化するため掃除
         await _cleanup_orphan_storage_object(uploaded_storage_path)
-        raise HTTPException(status_code=500, detail=f"Error uploading PMTiles: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.DATASOURCE_UPLOAD_FAILED,
+            f"Error uploading PMTiles: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -1112,8 +1189,11 @@ def delete_datasource(
             if row:
                 tileset_for_access = {"id": str(row[1]), "user_id": row[2]}
                 if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
-                    raise HTTPException(
-                        status_code=403, detail="Not authorized to delete this datasource"
+                    raise api_error(
+                        403,
+                        ErrorCode.DATASOURCE_FORBIDDEN,
+                        "Not authorized to delete this datasource",
+                        details={"datasource_id": datasource_id},
                     )
 
                 cur.execute("DELETE FROM pmtiles_sources WHERE id = %s", (datasource_id,))
@@ -1135,21 +1215,33 @@ def delete_datasource(
             if row:
                 tileset_for_access = {"id": str(row[1]), "user_id": row[2]}
                 if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
-                    raise HTTPException(
-                        status_code=403, detail="Not authorized to delete this datasource"
+                    raise api_error(
+                        403,
+                        ErrorCode.DATASOURCE_FORBIDDEN,
+                        "Not authorized to delete this datasource",
+                        details={"datasource_id": datasource_id},
                     )
 
                 cur.execute("DELETE FROM raster_sources WHERE id = %s", (datasource_id,))
                 conn.commit()
                 return Response(status_code=204)
 
-            raise HTTPException(status_code=404, detail="Datasource not found")
-            
+            raise api_error(
+                404,
+                ErrorCode.DATASOURCE_NOT_FOUND,
+                "Datasource not found",
+                details={"datasource_id": datasource_id},
+            )
+
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error deleting datasource: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error deleting datasource: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -1194,8 +1286,11 @@ async def test_datasource_connection(
                     "user_id": row[4],
                 }
                 if not await acheck_tileset_access_v2(conn, tileset_for_access, ctx):
-                    raise HTTPException(
-                        status_code=403, detail="Not authorized to test this datasource"
+                    raise api_error(
+                        403,
+                        ErrorCode.DATASOURCE_FORBIDDEN,
+                        "Not authorized to test this datasource",
+                        details={"datasource_id": datasource_id},
                     )
 
                 pmtiles_url = row[1]
@@ -1241,8 +1336,11 @@ async def test_datasource_connection(
                     "user_id": row[4],
                 }
                 if not await acheck_tileset_access_v2(conn, tileset_for_access, ctx):
-                    raise HTTPException(
-                        status_code=403, detail="Not authorized to test this datasource"
+                    raise api_error(
+                        403,
+                        ErrorCode.DATASOURCE_FORBIDDEN,
+                        "Not authorized to test this datasource",
+                        details={"datasource_id": datasource_id},
                     )
 
                 cog_url = row[1]
@@ -1269,9 +1367,18 @@ async def test_datasource_connection(
                         "message": f"Failed to connect: {str(e)}",
                     }
             
-            raise HTTPException(status_code=404, detail="Datasource not found")
-            
+            raise api_error(
+                404,
+                ErrorCode.DATASOURCE_NOT_FOUND,
+                "Datasource not found",
+                details={"datasource_id": datasource_id},
+            )
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error testing datasource: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error testing datasource: {str(e)}",
+        )
