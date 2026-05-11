@@ -1,42 +1,44 @@
 # geo-base MCP Server API Reference
 
-このドキュメントは、geo-base MCP サーバーで利用可能なすべてのツールの詳細なAPI仕様を提供します。
+> 🌐 **English**: this page ・ **日本語**: [API_REFERENCE.ja.md](./API_REFERENCE.ja.md)
 
-## 目次
+This document provides detailed API specifications for every tool available on the geo-base MCP server.
 
-1. [タイルセットツール](#タイルセットツール)
-2. [フィーチャーツール](#フィーチャーツール)
-3. [ジオコーディングツール](#ジオコーディングツール)
-4. [統計ツール](#統計ツール)
-5. [空間分析ツール](#空間分析ツール)
-6. [CRUD ツール](#crud-ツール)
-7. [ユーティリティツール](#ユーティリティツール)
-8. [エラーレスポンス](#エラーレスポンス)
+## Table of contents
+
+1. [Tileset tools](#tileset-tools)
+2. [Feature tools](#feature-tools)
+3. [Geocoding tools](#geocoding-tools)
+4. [Statistics tools](#statistics-tools)
+5. [Spatial analysis tools](#spatial-analysis-tools)
+6. [CRUD tools](#crud-tools)
+7. [Utility tools](#utility-tools)
+8. [Error responses](#error-responses)
 
 ---
 
-## タイルセットツール
+## Tileset tools
 
 ### `list_tilesets`
 
-タイルサーバーから利用可能なタイルセット一覧を取得します。
+Retrieves the list of tilesets available from the tile server.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `type` | string | No | null | タイルセットタイプでフィルタ (`vector`, `raster`, `pmtiles`) |
-| `is_public` | boolean | No | null | 公開/非公開ステータスでフィルタ |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `type` | string | No | null | Filter by tileset type (`vector`, `raster`, `pmtiles`) |
+| `is_public` | boolean | No | null | Filter by public/private status |
 
-#### レスポンス
+#### Response
 
 ```json
 {
   "tilesets": [
     {
       "id": "uuid",
-      "name": "タイルセット名",
-      "description": "説明",
+      "name": "Tileset name",
+      "description": "Description",
       "type": "vector",
       "format": "pbf",
       "min_zoom": 0,
@@ -52,21 +54,21 @@
 
 ### `get_tileset`
 
-特定のタイルセットの詳細情報を取得します。
+Retrieves detailed information for a specific tileset.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `tileset_id` | string (UUID) | Yes | タイルセットのUUID |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tileset_id` | string (UUID) | Yes | UUID of the tileset |
 
-#### レスポンス
+#### Response
 
 ```json
 {
   "id": "uuid",
-  "name": "タイルセット名",
-  "description": "説明",
+  "name": "Tileset name",
+  "description": "Description",
   "type": "vector",
   "format": "pbf",
   "min_zoom": 0,
@@ -85,15 +87,15 @@
 
 ### `get_tileset_tilejson`
 
-タイルセットのTileJSONメタデータを取得します。MapLibre GL JSなどのマップクライアントとの連携に使用します。
+Retrieves the TileJSON metadata for a tileset. Use it to integrate with map clients such as MapLibre GL JS.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `tileset_id` | string (UUID) | Yes | タイルセットのUUID |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tileset_id` | string (UUID) | Yes | UUID of the tileset |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -113,23 +115,23 @@
 
 ---
 
-## フィーチャーツール
+## Feature tools
 
 ### `search_features`
 
-地理フィーチャーを検索します。
+Searches geographic features.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `bbox` | string | No | null | バウンディングボックス `"minx,miny,maxx,maxy"` (WGS84) |
-| `layer` | string | No | null | レイヤー名フィルター |
-| `filter` | string | No | null | プロパティフィルター `"key=value"` |
-| `limit` | integer | No | 100 | 返すフィーチャーの最大数 (1-1000) |
-| `tileset_id` | string (UUID) | No | null | 特定のタイルセットに限定 |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `bbox` | string | No | null | Bounding box `"minx,miny,maxx,maxy"` (WGS84) |
+| `layer` | string | No | null | Layer name filter |
+| `filter` | string | No | null | Property filter `"key=value"` |
+| `limit` | integer | No | 100 | Maximum number of features to return (1-1000) |
+| `tileset_id` | string (UUID) | No | null | Restrict to a specific tileset |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -142,7 +144,7 @@
         "coordinates": [139.7671, 35.6812]
       },
       "properties": {
-        "name": "東京駅"
+        "name": "Tokyo Station"
       },
       "layer": "stations",
       "tileset_id": "uuid"
@@ -163,15 +165,15 @@
 
 ### `get_feature`
 
-特定のフィーチャーの詳細情報を取得します。
+Retrieves detailed information for a specific feature.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `feature_id` | string (UUID) | Yes | フィーチャーのUUID |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `feature_id` | string (UUID) | Yes | UUID of the feature |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -186,11 +188,11 @@
     "coordinate_count": 1
   },
   "properties": {
-    "name": "東京駅"
+    "name": "Tokyo Station"
   },
   "layer": "stations",
   "tileset_id": "uuid",
-  "tileset_name": "東京の駅",
+  "tileset_name": "Tokyo Stations",
   "created_at": "2024-01-01T00:00:00Z",
   "updated_at": "2024-01-01T00:00:00Z"
 }
@@ -200,19 +202,19 @@
 
 ### `get_features_in_tile`
 
-特定のマップタイル内のフィーチャーを取得します。
+Retrieves features that fall inside a specific map tile.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `tileset_id` | string (UUID) | Yes | - | タイルセットのUUID |
-| `z` | integer | Yes | - | ズームレベル (0-22) |
-| `x` | integer | Yes | - | タイルX座標 |
-| `y` | integer | Yes | - | タイルY座標 |
-| `layer` | string | No | null | レイヤー名フィルター |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `tileset_id` | string (UUID) | Yes | - | UUID of the tileset |
+| `z` | integer | Yes | - | Zoom level (0-22) |
+| `x` | integer | Yes | - | Tile X coordinate |
+| `y` | integer | Yes | - | Tile Y coordinate |
+| `layer` | string | No | null | Layer name filter |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -235,28 +237,28 @@
 
 ---
 
-## ジオコーディングツール
+## Geocoding tools
 
 ### `geocode`
 
-住所または地名を地理座標に変換します。OpenStreetMap Nominatim APIを使用します。
+Converts an address or place name into geographic coordinates. Uses the OpenStreetMap Nominatim API.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `query` | string | Yes | - | 検索する住所または地名 |
-| `limit` | integer | No | 5 | 最大結果数 (1-50) |
-| `country_codes` | string | No | null | ISO 3166-1 国コード（カンマ区切り） |
-| `language` | string | No | "ja" | 結果の言語 |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `query` | string | Yes | - | Address or place name to search |
+| `limit` | integer | No | 5 | Maximum number of results (1-50) |
+| `country_codes` | string | No | null | ISO 3166-1 country codes (comma-separated) |
+| `language` | string | No | "ja" | Language for the results |
 
-#### レスポンス
+#### Response
 
 ```json
 {
   "results": [
     {
-      "name": "東京駅, 丸の内, 千代田区, 東京都, 日本",
+      "name": "Tokyo Station, Marunouchi, Chiyoda, Tokyo, Japan",
       "latitude": 35.6812,
       "longitude": 139.7671,
       "type": "station",
@@ -266,9 +268,9 @@
       "osm_type": "node",
       "osm_id": 7890,
       "address": {
-        "country": "日本",
-        "city": "千代田区",
-        "road": "丸の内"
+        "country": "Japan",
+        "city": "Chiyoda",
+        "road": "Marunouchi"
       },
       "bounds": {
         "south": 35.68,
@@ -279,7 +281,7 @@
     }
   ],
   "count": 1,
-  "query": "東京駅"
+  "query": "Tokyo Station"
 }
 ```
 
@@ -287,29 +289,29 @@
 
 ### `reverse_geocode`
 
-地理座標を住所に変換します。
+Converts geographic coordinates into an address.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `latitude` | float | Yes | - | 緯度 (-90〜90) |
-| `longitude` | float | Yes | - | 経度 (-180〜180) |
-| `zoom` | integer | No | 18 | 詳細レベル (0-18) |
-| `language` | string | No | "ja" | 結果の言語 |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `latitude` | float | Yes | - | Latitude (-90 to 90) |
+| `longitude` | float | Yes | - | Longitude (-180 to 180) |
+| `zoom` | integer | No | 18 | Level of detail (0-18) |
+| `language` | string | No | "ja" | Language for the results |
 
-**ズームレベルの目安:**
-- 0: 国レベル
-- 10: 市区町村レベル
-- 14: 地区レベル
-- 16: 道路レベル
-- 18: 建物レベル
+**Zoom level guide:**
+- 0: Country level
+- 10: City/town level
+- 14: Neighborhood level
+- 16: Street level
+- 18: Building level
 
-#### レスポンス
+#### Response
 
 ```json
 {
-  "display_name": "東京駅, 丸の内, 千代田区, 東京都, 日本",
+  "display_name": "Tokyo Station, Marunouchi, Chiyoda, Tokyo, Japan",
   "coordinates": {
     "latitude": 35.6812,
     "longitude": 139.7671
@@ -320,9 +322,9 @@
   "osm_type": "node",
   "osm_id": 7890,
   "address": {
-    "country": "日本",
-    "city": "千代田区",
-    "road": "丸の内"
+    "country": "Japan",
+    "city": "Chiyoda",
+    "road": "Marunouchi"
   },
   "bounds": {
     "south": 35.68,
@@ -335,24 +337,24 @@
 
 ---
 
-## 統計ツール
+## Statistics tools
 
 ### `get_tileset_stats`
 
-タイルセットの包括的な統計情報を取得します。
+Retrieves comprehensive statistics for a tileset.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `tileset_id` | string (UUID) | Yes | タイルセットのUUID |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tileset_id` | string (UUID) | Yes | UUID of the tileset |
 
-#### レスポンス
+#### Response
 
 ```json
 {
   "tileset_id": "uuid",
-  "tileset_name": "タイルセット名",
+  "tileset_name": "Tileset name",
   "tileset_type": "vector",
   "feature_count": 150,
   "geometry_types": {
@@ -382,16 +384,16 @@
 
 ### `get_feature_distribution`
 
-フィーチャーのジオメトリタイプ分布を取得します。
+Retrieves the distribution of feature geometry types.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `tileset_id` | string (UUID) | No | null | 特定のタイルセットに限定 |
-| `bbox` | string | No | null | バウンディングボックス `"minx,miny,maxx,maxy"` |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `tileset_id` | string (UUID) | No | null | Restrict to a specific tileset |
+| `bbox` | string | No | null | Bounding box `"minx,miny,maxx,maxy"` |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -419,15 +421,15 @@
 
 ### `get_layer_stats`
 
-レイヤー別の統計情報を取得します。
+Retrieves per-layer statistics.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `tileset_id` | string (UUID) | Yes | タイルセットのUUID |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tileset_id` | string (UUID) | Yes | UUID of the tileset |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -457,16 +459,16 @@
 
 ### `get_area_stats`
 
-指定エリアの統計情報を取得します。
+Retrieves statistics for a specified area.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `bbox` | string | Yes | - | バウンディングボックス `"minx,miny,maxx,maxy"` |
-| `tileset_id` | string (UUID) | No | null | 特定のタイルセットに限定 |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `bbox` | string | Yes | - | Bounding box `"minx,miny,maxx,maxy"` |
+| `tileset_id` | string (UUID) | No | null | Restrict to a specific tileset |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -499,22 +501,22 @@
 
 ---
 
-## 空間分析ツール
+## Spatial analysis tools
 
 ### `analyze_area`
 
-指定エリアの包括的な空間分析を実行します。
+Runs a comprehensive spatial analysis on a specified area.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `bbox` | string | Yes | - | バウンディングボックス `"minx,miny,maxx,maxy"` |
-| `tileset_id` | string (UUID) | No | null | 特定のタイルセットに限定 |
-| `include_density` | boolean | No | true | 密度分析を含める |
-| `include_clustering` | boolean | No | true | クラスタリング分析を含める |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `bbox` | string | Yes | - | Bounding box `"minx,miny,maxx,maxy"` |
+| `tileset_id` | string (UUID) | No | null | Restrict to a specific tileset |
+| `include_density` | boolean | No | true | Include density analysis |
+| `include_clustering` | boolean | No | true | Include clustering analysis |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -557,18 +559,18 @@
 
 ### `calculate_distance`
 
-2点間の距離を計算します（ハバーサイン公式）。
+Calculates the distance between two points (Haversine formula).
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `lat1` | float | Yes | 始点の緯度 |
-| `lng1` | float | Yes | 始点の経度 |
-| `lat2` | float | Yes | 終点の緯度 |
-| `lng2` | float | Yes | 終点の経度 |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `lat1` | float | Yes | Latitude of the start point |
+| `lng1` | float | Yes | Longitude of the start point |
+| `lat2` | float | Yes | Latitude of the end point |
+| `lng2` | float | Yes | Longitude of the end point |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -588,20 +590,20 @@
 
 ### `find_nearest_features`
 
-指定地点の近傍フィーチャーを検索します。
+Searches for features near a specified point.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `lat` | float | Yes | - | 検索中心の緯度 |
-| `lng` | float | Yes | - | 検索中心の経度 |
-| `radius_km` | float | No | 1.0 | 検索半径（km） |
-| `limit` | integer | No | 10 | 最大結果数 (1-100) |
-| `tileset_id` | string (UUID) | No | null | 特定のタイルセットに限定 |
-| `layer` | string | No | null | レイヤー名フィルター |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `lat` | float | Yes | - | Latitude of the search center |
+| `lng` | float | Yes | - | Longitude of the search center |
+| `radius_km` | float | No | 1.0 | Search radius (km) |
+| `limit` | integer | No | 10 | Maximum number of results (1-100) |
+| `tileset_id` | string (UUID) | No | null | Restrict to a specific tileset |
+| `layer` | string | No | null | Layer name filter |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -615,7 +617,7 @@
       "id": "uuid",
       "type": "Feature",
       "geometry": {...},
-      "properties": {"name": "東京駅"},
+      "properties": {"name": "Tokyo Station"},
       "distance_km": 0.15,
       "distance_m": 150
     }
@@ -628,19 +630,19 @@
 
 ### `get_buffer_zone_features`
 
-リングバッファ（ドーナツ形状）内のフィーチャーを取得します。
+Retrieves features inside a ring buffer (donut shape).
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `lat` | float | Yes | 中心点の緯度 |
-| `lng` | float | Yes | 中心点の経度 |
-| `inner_radius_km` | float | Yes | 内側の半径（km） |
-| `outer_radius_km` | float | Yes | 外側の半径（km） |
-| `tileset_id` | string (UUID) | No | 特定のタイルセットに限定 |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `lat` | float | Yes | Latitude of the center point |
+| `lng` | float | Yes | Longitude of the center point |
+| `inner_radius_km` | float | Yes | Inner radius (km) |
+| `outer_radius_km` | float | Yes | Outer radius (km) |
+| `tileset_id` | string (UUID) | No | Restrict to a specific tileset |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -659,36 +661,36 @@
 
 ---
 
-## CRUD ツール
+## CRUD tools
 
-> **注意:** すべてのCRUDツールは認証が必要です。有効なJWTトークンを `API_TOKEN` 環境変数に設定してください。
+> **Note:** All CRUD tools require authentication. Set a valid JWT token in the `API_TOKEN` environment variable.
 
 ### `create_tileset`
 
-新しいタイルセットを作成します。
+Creates a new tileset.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `name` | string | Yes | - | タイルセット名 |
-| `type` | string | Yes | - | タイプ (`vector`, `raster`, `pmtiles`) |
-| `format` | string | Yes | - | フォーマット (`pbf`, `png`, `jpg`, `webp`, `geojson`) |
-| `description` | string | No | null | 説明 |
-| `min_zoom` | integer | No | 0 | 最小ズームレベル (0-22) |
-| `max_zoom` | integer | No | 22 | 最大ズームレベル (0-22) |
-| `bounds` | array | No | null | バウンディングボックス [west, south, east, north] |
-| `center` | array | No | null | 中心点 [longitude, latitude] |
-| `attribution` | string | No | null | 帰属テキスト |
-| `is_public` | boolean | No | false | 公開設定 |
-| `metadata` | object | No | null | 追加メタデータ |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Tileset name |
+| `type` | string | Yes | - | Type (`vector`, `raster`, `pmtiles`) |
+| `format` | string | Yes | - | Format (`pbf`, `png`, `jpg`, `webp`, `geojson`) |
+| `description` | string | No | null | Description |
+| `min_zoom` | integer | No | 0 | Minimum zoom level (0-22) |
+| `max_zoom` | integer | No | 22 | Maximum zoom level (0-22) |
+| `bounds` | array | No | null | Bounding box [west, south, east, north] |
+| `center` | array | No | null | Center point [longitude, latitude] |
+| `attribution` | string | No | null | Attribution text |
+| `is_public` | boolean | No | false | Public visibility |
+| `metadata` | object | No | null | Additional metadata |
 
-#### レスポンス
+#### Response
 
 ```json
 {
   "id": "uuid",
-  "name": "タイルセット名",
+  "name": "Tileset name",
   "type": "vector",
   "format": "pbf",
   ...
@@ -699,28 +701,28 @@
 
 ### `update_tileset`
 
-既存のタイルセットを更新します。
+Updates an existing tileset.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `tileset_id` | string (UUID) | Yes | 更新するタイルセットのUUID |
-| その他 | - | No | `create_tileset` と同じ（指定されたフィールドのみ更新） |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tileset_id` | string (UUID) | Yes | UUID of the tileset to update |
+| Other fields | - | No | Same as `create_tileset` (only the specified fields are updated) |
 
 ---
 
 ### `delete_tileset`
 
-タイルセットとそのすべてのフィーチャーを削除します。
+Deletes a tileset and all of its features.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `tileset_id` | string (UUID) | Yes | 削除するタイルセットのUUID |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `tileset_id` | string (UUID) | Yes | UUID of the tileset to delete |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -733,18 +735,18 @@
 
 ### `create_feature`
 
-タイルセットに新しいフィーチャーを作成します。
+Creates a new feature in a tileset.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `tileset_id` | string (UUID) | Yes | - | 親タイルセットのUUID |
-| `geometry` | object | Yes | - | GeoJSONジオメトリオブジェクト |
-| `properties` | object | No | null | フィーチャープロパティ |
-| `layer_name` | string | No | "default" | レイヤー名 |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `tileset_id` | string (UUID) | Yes | - | UUID of the parent tileset |
+| `geometry` | object | Yes | - | GeoJSON geometry object |
+| `properties` | object | No | null | Feature properties |
+| `layer_name` | string | No | "default" | Layer name |
 
-#### ジオメトリの例
+#### Geometry examples
 
 ```json
 // Point
@@ -761,48 +763,48 @@
 
 ### `update_feature`
 
-既存のフィーチャーを更新します。
+Updates an existing feature.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `feature_id` | string (UUID) | Yes | 更新するフィーチャーのUUID |
-| `geometry` | object | No | 新しいジオメトリ |
-| `properties` | object | No | 新しいプロパティ（既存のすべてを置換） |
-| `layer_name` | string | No | 新しいレイヤー名 |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `feature_id` | string (UUID) | Yes | UUID of the feature to update |
+| `geometry` | object | No | New geometry |
+| `properties` | object | No | New properties (replaces all existing ones) |
+| `layer_name` | string | No | New layer name |
 
 ---
 
 ### `delete_feature`
 
-フィーチャーを削除します。
+Deletes a feature.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | 説明 |
-|------|------|------|------|
-| `feature_id` | string (UUID) | Yes | 削除するフィーチャーのUUID |
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `feature_id` | string (UUID) | Yes | UUID of the feature to delete |
 
 ---
 
-## ユーティリティツール
+## Utility tools
 
 ### `get_tile_url`
 
-特定のマップタイルのURLを生成します。
+Generates the URL for a specific map tile.
 
-#### パラメータ
+#### Parameters
 
-| 名前 | 型 | 必須 | デフォルト | 説明 |
-|------|------|------|----------|------|
-| `tileset_id` | string (UUID) | Yes | - | タイルセットのUUID |
-| `z` | integer | Yes | - | ズームレベル (0-22) |
-| `x` | integer | Yes | - | タイルX座標 |
-| `y` | integer | Yes | - | タイルY座標 |
-| `format` | string | No | "pbf" | タイルフォーマット (`pbf`, `png`, `jpg`, `webp`) |
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `tileset_id` | string (UUID) | Yes | - | UUID of the tileset |
+| `z` | integer | Yes | - | Zoom level (0-22) |
+| `x` | integer | Yes | - | Tile X coordinate |
+| `y` | integer | Yes | - | Tile Y coordinate |
+| `format` | string | No | "pbf" | Tile format (`pbf`, `png`, `jpg`, `webp`) |
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -817,13 +819,13 @@
 
 ### `health_check`
 
-タイルサーバーのヘルスステータスを確認します。
+Checks the health status of the tile server.
 
-#### パラメータ
+#### Parameters
 
-なし
+None.
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -838,13 +840,13 @@
 
 ### `get_server_info`
 
-MCPサーバーの設定情報を取得します。
+Retrieves the MCP server configuration.
 
-#### パラメータ
+#### Parameters
 
-なし
+None.
 
-#### レスポンス
+#### Response
 
 ```json
 {
@@ -857,32 +859,32 @@ MCPサーバーの設定情報を取得します。
 
 ---
 
-## エラーレスポンス
+## Error responses
 
-すべてのツールは、エラー発生時に以下の形式でレスポンスを返します：
+When an error occurs, every tool returns a response in the following format:
 
 ```json
 {
-  "error": "エラーメッセージ",
+  "error": "Error message",
   "code": "ERROR_CODE",
-  "hint": "問題解決のヒント（オプション）",
-  "detail": "追加の詳細情報（オプション）"
+  "hint": "Hint for resolving the issue (optional)",
+  "detail": "Additional details (optional)"
 }
 ```
 
-### エラーコード一覧
+### Error codes
 
-| コード | 説明 |
-|--------|------|
-| `VALIDATION_ERROR` | 入力パラメータが無効 |
-| `NOT_FOUND` | リソースが見つからない |
-| `UNAUTHORIZED` | 認証が必要 |
-| `FORBIDDEN` | アクセス権限がない |
-| `HTTP_ERROR` | HTTPエラー（4xx/5xx） |
-| `NETWORK_ERROR` | ネットワークエラー |
-| `UNKNOWN_ERROR` | 予期しないエラー |
+| Code | Description |
+|------|-------------|
+| `VALIDATION_ERROR` | Invalid input parameter |
+| `NOT_FOUND` | Resource not found |
+| `UNAUTHORIZED` | Authentication required |
+| `FORBIDDEN` | No access permission |
+| `HTTP_ERROR` | HTTP error (4xx/5xx) |
+| `NETWORK_ERROR` | Network error |
+| `UNKNOWN_ERROR` | Unexpected error |
 
-### 例
+### Examples
 
 ```json
 {
