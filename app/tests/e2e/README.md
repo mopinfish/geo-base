@@ -108,6 +108,14 @@ app/tests/e2e/
 4. 認証ありなら `playwright.config.ts` の `authenticated` project に自動マッチする（`auth/` 配下にだけ置かない）。
 5. 各テストには `@smoke` タグを付ければ smoke run に含まれる。
 
+## Regression テスト
+
+過去バグの再発防止テストは `tests/e2e/regression/` 配下に置く。詳細は [`regression/README.md`](./regression/README.md) を参照。
+
+- ファイル名: `issue-<番号>-<短い説明>.spec.ts`
+- spec 内冒頭に「どの issue / PR で発生したか」と「修正内容」を記述
+- 各テストには `@regression` タグを付ける（smoke / full run には自動的に含まれる）
+
 ## セレクタ規約
 
 優先順位（i18n 対応のため）:
