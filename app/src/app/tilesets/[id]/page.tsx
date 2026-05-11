@@ -59,8 +59,8 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const t = useTranslations("tilesets.detail");
   const locale = useLocale();
   // BCP47 タグに正規化 ("ja" → "ja-JP", "en" → "en-US")。
-  // toLocaleString が `ja` 単体でも動くが、明示的に region を渡したほうが
-  // 表示が安定する (Copilot PR #132 round 1 指摘: locale をハード指定していた)。
+  // `toLocaleString(locale)` は primary subtag のみでも動くが、明示的に
+  // region を渡したほうが日付表示が安定する。
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
 
   const [tileset, setTileset] = useState<Tileset | null>(null);
@@ -211,8 +211,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const formatCenter = (center: unknown) => {
     const nums = parseCoordinates(center);
     if (!nums || nums.length < 2) return "-";
-    // zoom 部分の "(zoom: N)" / "(ズーム: N)" を catalog から取る
-    // (Copilot PR #132 round 4 指摘: 旧実装は英語 hardcoded)。
+    // zoom 部分の "(zoom: N)" / "(ズーム: N)" を catalog から取る。
     const zoomPart =
       nums[2] !== undefined ? t("center_zoom_suffix", { z: nums[2] }) : "";
     return `${nums[0].toFixed(4)}, ${nums[1].toFixed(4)}${zoomPart}`;
