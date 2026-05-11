@@ -74,6 +74,14 @@ class Settings(BaseSettings):
     # API key log sampling rate (0.0 - 1.0)
     api_key_log_sample_rate: float = 1.0
 
+    # API key rate limit backend (Issue #56)
+    # "db": 既存実装。`api_key_rate_limits` テーブルに INSERT/UPDATE で集計。
+    # "redis": Redis ベース実装（Phase 2 で実装予定）。INCR で per-minute / per-day
+    # カウンタを管理。Redis 失敗時は fail-open（warn ログ + リクエスト通過）。
+    # 既定は "db" — backward compatibility のため。本番で "redis" に切り替えるには
+    # `fly secrets set RATE_LIMIT_BACKEND=redis` を実行する。
+    rate_limit_backend: str = "db"
+
     # Server
     cors_origins: List[str] = ["*"]
     port: int = 8080  # Default port for Fly.io
