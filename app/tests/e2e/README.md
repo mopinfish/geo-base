@@ -26,6 +26,21 @@ docker compose -f docker/docker-compose.yml exec postgis bash -c \
      | psql -U postgres -d geo_base_e2e'
 ```
 
+#### Phase 2 で worker 並列を有効にする場合（既存 volume）
+
+`E2E_WORKER_COUNT > 1` で動かしたい場合は、worker 別 DB を手動で作成する:
+
+```fish
+for i in 0 1 2 3
+  docker compose -f docker/docker-compose.yml exec postgis \
+    psql -U postgres -c "CREATE DATABASE geo_base_e2e_w$i;"
+  docker compose -f docker/docker-compose.yml exec postgis bash -c \
+    "pg_dump -U postgres --schema-only --no-owner --no-acl geo_base | psql -U postgres -d geo_base_e2e_w$i"
+end
+```
+
+> 注: Phase 2 段階では Playwright 設定は `workers: 1` を維持しており、上記の worker DB は将来の並列化に備えた足場。実行時は `geo_base_e2e` (worker なし) のみ使用される。
+
 > 注: ローカル環境で postgis のホストポートが 5432 でない場合は、以降の `DATABASE_URL` の port 部分を実際のポートに合わせること。
 
 ### 2. API を `E2E_MODE=1` で起動する
@@ -92,6 +107,15 @@ app/tests/e2e/
 3. 必要なら `factories.ts` の関数で前提データを作成。
 4. 認証ありなら `playwright.config.ts` の `authenticated` project に自動マッチする（`auth/` 配下にだけ置かない）。
 5. 各テストには `@smoke` タグを付ければ smoke run に含まれる。
+
+## Regression テスト
+
+過去バグの再発防止テストは `tests/e2e/regression/` 配下に置く。詳細は [`regression/README.md`](./regression/README.md) を参照。
+
+- ファイル名: `issue-<番号>-<短い説明>.spec.ts`
+- spec 内冒頭に「どの issue / PR で発生したか」と「修正内容」を記述
+- 各テストには `@regression` タグを付ける
+- 実行範囲: `npm run test:e2e` (= `playwright test` full run) でのみ実行される。`npm run test:e2e:smoke` は `--grep @smoke` で smoke しか拾わないため **regression は smoke に含まれない**。重要 regression を smoke にも入れたい場合は `@smoke @regression` の両方を付与する
 
 ## セレクタ規約
 

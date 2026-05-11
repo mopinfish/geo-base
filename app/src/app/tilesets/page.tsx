@@ -250,10 +250,14 @@ export default function TilesetsPage() {
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  data-testid="tileset-search-input"
                 />
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger
+                  className="w-[150px]"
+                  data-testid="tileset-filter-type"
+                >
                   <SelectValue placeholder="タイプ" />
                 </SelectTrigger>
                 <SelectContent>
@@ -264,7 +268,10 @@ export default function TilesetsPage() {
                 </SelectContent>
               </Select>
               <Select value={publicFilter} onValueChange={setPublicFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger
+                  className="w-[150px]"
+                  data-testid="tileset-filter-public"
+                >
                   <SelectValue placeholder="公開状態" />
                 </SelectTrigger>
                 <SelectContent>
@@ -306,6 +313,7 @@ export default function TilesetsPage() {
                     variant="destructive"
                     size="sm"
                     onClick={() => setBulkDeleteDialogOpen(true)}
+                    data-testid="tileset-bulk-delete"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     一括削除
@@ -350,6 +358,7 @@ export default function TilesetsPage() {
                         }
                         onChange={toggleAllSelection}
                         className="h-4 w-4 rounded border-gray-300"
+                        data-testid="tileset-select-all"
                       />
                     </TableHead>
                     <TableHead>名前</TableHead>

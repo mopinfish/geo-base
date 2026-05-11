@@ -27,6 +27,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -99,6 +109,10 @@ export default function TeamDetailPage() {
   const [showAddTilesetDialog, setShowAddTilesetDialog] = useState(false);
   const [selectedTilesetId, setSelectedTilesetId] = useState<string>("");
   const [isAddingTileset, setIsAddingTileset] = useState(false);
+
+  // Delete team
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (isReady && teamId) {
@@ -232,6 +246,19 @@ export default function TeamDetailPage() {
     }
   };
 
+  const handleDeleteTeam = async () => {
+    setIsDeleting(true);
+    try {
+      await api.deleteTeam(teamId);
+      router.push("/teams");
+    } catch (err) {
+      console.error("Failed to delete team:", err);
+      setError(err instanceof Error ? err.message : "チームの削除に失敗しました");
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
   const handleRemoveTileset = async (tilesetId: string) => {
     try {
       await api.removeTeamTileset(teamId, tilesetId);
@@ -277,8 +304,20 @@ export default function TeamDetailPage() {
             <h1 className="text-2xl font-bold">{team.name}</h1>
             <p className="text-muted-foreground">@{team.slug}</p>
           </div>
-          <Button variant="outline" onClick={() => setShowEditDialog(true)}>
+          <Button
+            variant="outline"
+            onClick={() => setShowEditDialog(true)}
+            data-testid="team-edit-button"
+          >
             設定を編集
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => setShowDeleteDialog(true)}
+            data-testid="team-delete-button"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            削除
           </Button>
         </div>
 
@@ -346,14 +385,17 @@ export default function TeamDetailPage() {
           <TabsContent value="members" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">メンバー一覧</h2>
-              <Button onClick={() => setShowInviteDialog(true)}>
+              <Button
+                onClick={() => setShowInviteDialog(true)}
+                data-testid="team-invite-button"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 招待する
               </Button>
             </div>
             <div className="space-y-2">
               {members.map((member) => (
-                <Card key={member.id}>
+                <Card key={member.id} data-testid="team-member-row" data-user-id={member.user_id}>
                   <CardContent className="flex items-center justify-between py-4">
                     <div className="flex items-center gap-3">
                       {roleIcons[member.role]}
@@ -394,7 +436,10 @@ export default function TeamDetailPage() {
           <TabsContent value="invitations" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">招待一覧</h2>
-              <Button onClick={() => setShowInviteDialog(true)}>
+              <Button
+                onClick={() => setShowInviteDialog(true)}
+                data-testid="team-invitation-create-button"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 新規招待
               </Button>
@@ -408,7 +453,7 @@ export default function TeamDetailPage() {
             ) : (
               <div className="space-y-2">
                 {invitations.map((invitation) => (
-                  <Card key={invitation.id}>
+                  <Card key={invitation.id} data-testid="team-invitation-row" data-email={invitation.email}>
                     <CardContent className="flex items-center justify-between py-4">
                       <div>
                         <div className="font-medium">{invitation.email}</div>
@@ -554,6 +599,7 @@ export default function TeamDetailPage() {
                   setInviteForm((prev) => ({ ...prev, email: e.target.value }))
                 }
                 placeholder="user@example.com"
+                data-testid="team-invite-email"
               />
             </div>
             <div className="space-y-2">
@@ -594,12 +640,38 @@ export default function TeamDetailPage() {
             <Button
               onClick={handleInviteMember}
               disabled={!inviteForm.email.trim() || isInviting}
+              data-testid="team-invite-submit"
             >
               {isInviting ? "送信中..." : "招待を送信"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Team AlertDialog (破壊的操作なので AlertDialog で confirm) */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>チームを削除</AlertDialogTitle>
+            <AlertDialogDescription>
+              本当に「{team.name}」を削除しますか？
+              この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>
+              キャンセル
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteTeam}
+              disabled={isDeleting}
+              data-testid="team-delete-confirm"
+            >
+              {isDeleting ? "削除中..." : "削除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Add Tileset Dialog */}
       <Dialog open={showAddTilesetDialog} onOpenChange={setShowAddTilesetDialog}>

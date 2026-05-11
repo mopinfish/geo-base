@@ -63,7 +63,7 @@ export default function DatasourcesPage() {
   
   // 接続テストの状態
   const [testingId, setTestingId] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, { status: 'ok' | 'error'; message?: string }>>({});
+  const [testResults, setTestResults] = useState<Record<string, { status: 'success' | 'error'; message?: string }>>({});
 
   // 選択状態の管理
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -319,6 +319,7 @@ export default function DatasourcesPage() {
                     checked={includePrivate}
                     onChange={(e) => setIncludePrivate(e.target.checked)}
                     className="rounded border-gray-300"
+                    data-testid="datasource-include-private-toggle"
                   />
                   プライベートを含む
                 </label>
@@ -356,6 +357,7 @@ export default function DatasourcesPage() {
                     variant="destructive"
                     size="sm"
                     onClick={() => setBulkDeleteDialogOpen(true)}
+                    data-testid="datasource-bulk-delete"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     一括削除
@@ -412,6 +414,7 @@ export default function DatasourcesPage() {
                           checked={selectedIds.size === datasources.length && datasources.length > 0}
                           onChange={toggleAllSelection}
                           className="h-4 w-4 rounded border-gray-300"
+                          data-testid="datasource-select-all"
                         />
                       </TableHead>
                       <TableHead>タイプ</TableHead>
@@ -485,7 +488,7 @@ export default function DatasourcesPage() {
                         </TableCell>
                         <TableCell>
                           {testResults[ds.id] ? (
-                            testResults[ds.id].status === 'ok' ? (
+                            testResults[ds.id].status === 'success' ? (
                               <div className="flex items-center gap-1 text-green-600">
                                 <CheckCircle2 className="h-4 w-4" />
                                 <span className="text-xs">OK</span>
@@ -634,6 +637,7 @@ export default function DatasourcesPage() {
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="datasource-bulk-delete-confirm"
             >
               {isBulkDeleting ? (
                 <>

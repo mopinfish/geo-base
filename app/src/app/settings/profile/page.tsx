@@ -94,6 +94,7 @@ export default function ProfileSettingsPage() {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="お名前"
                   disabled={loading}
+                  data-testid="profile-name"
                 />
               </div>
               <div className="space-y-2">
@@ -105,11 +106,15 @@ export default function ProfileSettingsPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@example.com"
                   disabled={loading}
+                  data-testid="profile-email"
                 />
               </div>
 
               {message && (
-                <div className="flex items-center gap-2 text-sm text-green-600">
+                <div
+                  className="flex items-center gap-2 text-sm text-green-600"
+                  data-testid="profile-success"
+                >
                   <Check className="h-4 w-4" />
                   {message}
                 </div>
@@ -121,7 +126,7 @@ export default function ProfileSettingsPage() {
                 </div>
               )}
 
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading} data-testid="profile-submit">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

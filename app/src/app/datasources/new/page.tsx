@@ -270,7 +270,7 @@ export default function NewDatasourcePage() {
                     onValueChange={(v) => handleTypeChange(v as DatasourceType)}
                     disabled={isSubmitting}
                   >
-                    <SelectTrigger id="type">
+                    <SelectTrigger id="type" data-testid="datasource-form-type">
                       <SelectValue placeholder="タイプを選択" />
                     </SelectTrigger>
                     <SelectContent>
@@ -328,7 +328,7 @@ export default function NewDatasourcePage() {
                       onValueChange={setTilesetId}
                       disabled={isSubmitting}
                     >
-                      <SelectTrigger id="tileset">
+                      <SelectTrigger id="tileset" data-testid="datasource-form-tileset">
                         <SelectValue placeholder="タイルセットを選択" />
                       </SelectTrigger>
                       <SelectContent>
@@ -404,6 +404,7 @@ export default function NewDatasourcePage() {
                               ? "border-green-500 focus:ring-green-500"
                               : ""
                           }
+                          data-testid="datasource-form-url"
                         />
                         {urlValid !== null && (
                           <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -441,7 +442,7 @@ export default function NewDatasourcePage() {
                         onValueChange={(v) => setStorageProvider(v as StorageProvider)}
                         disabled={isSubmitting}
                       >
-                        <SelectTrigger id="storage">
+                        <SelectTrigger id="storage" data-testid="datasource-form-storage-provider">
                           <SelectValue placeholder="ストレージを選択" />
                         </SelectTrigger>
                         <SelectContent>
@@ -510,6 +511,7 @@ export default function NewDatasourcePage() {
                       filteredTilesets.length === 0 ||
                       (inputMode === "url" ? !url || !urlValid : !file)
                     }
+                    data-testid="datasource-form-submit"
                   >
                     {isSubmitting ? (
                       <>

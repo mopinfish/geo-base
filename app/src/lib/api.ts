@@ -210,7 +210,11 @@ export interface DatasourceCreate {
 }
 
 export interface DatasourceTestResult {
-  status: 'ok' | 'error';
+  // API (`POST /api/datasources/{id}/test`) は成功時に `status: "success"`、
+  // 失敗時に `status: "error"` を返す (api/lib/routers/datasources.py:test_datasource_connection)。
+  // 以前は型を `"ok" | "error"` にしていて API の `"success"` を成功として
+  // 扱えていなかった。
+  status: 'success' | 'error';
   type: DatasourceType;
   url?: string;
   message?: string;

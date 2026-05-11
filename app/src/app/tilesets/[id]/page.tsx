@@ -60,6 +60,9 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const [tilesetStats, setTilesetStats] = useState<TilesetStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // アクション系の一時的な失敗（公開トグル等）。fetch 用の `error` とは分離して
+  // 「アクションが失敗しても詳細ページの内容は維持」する。
+  const [actionError, setActionError] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [showMapPreview, setShowMapPreview] = useState(true);
   // マップリフレッシュ用のキー（更新ボタン押下時にインクリメント）
@@ -126,6 +129,28 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const handleDelete = async () => {
     await api.deleteTileset(id);
     router.push("/tilesets");
+  };
+
+  /**
+   * is_public フラグをトグルする (TS-10)。
+   * 楽観的更新せず、API レスポンスを再取得して反映する。
+   */
+  const handleTogglePublic = async () => {
+    if (!tileset) return;
+    setActionError(null);
+    try {
+      const updated = await api.updateTileset(id, {
+        is_public: !tileset.is_public,
+      });
+      setTileset(updated);
+    } catch (err) {
+      console.error("Toggle public failed:", err);
+      // fetch 用の `error` を汚すと「タイルセットが見つかりません」分岐に入って
+      // 詳細ページ全体が消えてしまうため、アクション専用の state を使う。
+      setActionError(
+        err instanceof Error ? err.message : "公開設定の切り替えに失敗しました",
+      );
+    }
   };
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -275,19 +300,23 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-bold">{tileset.name}</h1>
-                <Badge variant={tileset.is_public ? "default" : "secondary"}>
-                  {tileset.is_public ? (
-                    <>
-                      <Globe className="mr-1 h-3 w-3" />
-                      公開
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="mr-1 h-3 w-3" />
-                      非公開
-                    </>
-                  )}
-                </Badge>
+                {tileset.is_public ? (
+                  <Badge
+                    variant="default"
+                    data-testid="tileset-public-badge"
+                  >
+                    <Globe className="mr-1 h-3 w-3" />
+                    公開
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="secondary"
+                    data-testid="tileset-private-badge"
+                  >
+                    <Lock className="mr-1 h-3 w-3" />
+                    非公開
+                  </Badge>
+                )}
               </div>
               {tileset.description && (
                 <p className="mt-1 text-muted-foreground">
@@ -308,6 +337,25 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               />
               更新
             </Button>
+            <Button
+              onClick={handleTogglePublic}
+              variant="outline"
+              size="sm"
+              data-testid="tileset-public-toggle"
+              title={tileset.is_public ? "非公開にする" : "公開にする"}
+            >
+              {tileset.is_public ? (
+                <>
+                  <Lock className="mr-2 h-4 w-4" />
+                  非公開にする
+                </>
+              ) : (
+                <>
+                  <Globe className="mr-2 h-4 w-4" />
+                  公開にする
+                </>
+              )}
+            </Button>
             <Link href={`/tilesets/${id}/edit`}>
               <Button variant="outline" size="sm">
                 <Pencil className="mr-2 h-4 w-4" />
@@ -318,6 +366,14 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               tilesetName={tileset.name}
               onConfirm={handleDelete}
             />
+            {actionError && (
+              <p
+                className="ml-2 self-center text-xs text-destructive"
+                data-testid="tileset-action-error"
+              >
+                {actionError}
+              </p>
+            )}
             {tileset.type === "vector" && (
               <ExportFeaturesButton tilesetId={id} tilesetName={tileset.name} />
             )}

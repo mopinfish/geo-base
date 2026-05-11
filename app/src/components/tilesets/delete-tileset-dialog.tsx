@@ -45,7 +45,11 @@ export function DeleteTilesetDialog({
     <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
       <AlertDialogTrigger asChild>
         {trigger || (
-          <Button variant="destructive" size="sm">
+          <Button
+            variant="destructive"
+            size="sm"
+            data-testid="tileset-delete-button"
+          >
             <Trash2 className="mr-2 h-4 w-4" />
             削除
           </Button>
