@@ -30,7 +30,15 @@ function PasswordResetConfirmForm() {
     }
   };
 
-  if (!token) return <div className="container py-12"><p>無効なリンクです。</p></div>;
+  if (!token) {
+    return (
+      <div className="container py-12">
+        <p className="text-red-600" data-testid="password-reset-error">
+          無効なリンクです。
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="container max-w-md mx-auto py-12">
@@ -40,9 +48,19 @@ function PasswordResetConfirmForm() {
           type="password" required minLength={8}
           value={password} onChange={(e) => setPassword(e.target.value)}
           placeholder="新しいパスワード（8文字以上）" className="w-full p-2 border rounded"
+          data-testid="password-reset-confirm-password"
         />
-        {error && <p className="text-red-600">{error}</p>}
-        <button type="submit" disabled={loading} className="w-full p-2 bg-blue-600 text-white rounded">
+        {error && (
+          <p className="text-red-600" data-testid="password-reset-error">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full p-2 bg-blue-600 text-white rounded"
+          data-testid="password-reset-confirm-submit"
+        >
           {loading ? "..." : "更新"}
         </button>
       </form>

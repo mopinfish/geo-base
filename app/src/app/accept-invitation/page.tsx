@@ -43,7 +43,14 @@ function AcceptInvitationForm() {
     }
   };
 
-  if (error && !info) return <div className="container py-12"><p className="text-red-600">{error}</p></div>;
+  if (error && !info)
+    return (
+      <div className="container py-12">
+        <p className="text-red-600" data-testid="invitation-error">
+          {error}
+        </p>
+      </div>
+    );
   if (!info) return <div className="container py-12">Loading...</div>;
 
   if (info.has_existing_account) {
@@ -51,8 +58,11 @@ function AcceptInvitationForm() {
       <div className="container max-w-md mx-auto py-12">
         <h1 className="text-2xl font-bold mb-4">チーム招待: {info.team_name}</h1>
         <p className="mb-4">この email には既にアカウントがあります。ログインしてから受諾してください。</p>
-        <a href={`/login?next=${encodeURIComponent(`/accept-invitation?token=${token}&continue=accept`)}`}
-           className="block p-2 bg-blue-600 text-white rounded text-center">
+        <a
+          href={`/login?next=${encodeURIComponent(`/accept-invitation?token=${token}&continue=accept`)}`}
+          className="block p-2 bg-blue-600 text-white rounded text-center"
+          data-testid="invitation-login-link"
+        >
           ログイン
         </a>
       </div>
