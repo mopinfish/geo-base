@@ -41,10 +41,16 @@ export function LanguageSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {/*
+         * 現在 locale と一致する項目は disabled。
+         * 同一 locale 選択で cookie 上書き + API 呼出 + RSC refresh が無駄に
+         * 走るのを防ぐ (Copilot PR #129 round 1 指摘)。
+         */}
         <DropdownMenuItem
           onClick={() => switchTo("en")}
           data-testid="language-switcher-en"
           aria-current={current === "en"}
+          disabled={current === "en"}
         >
           {t("label_en")}
         </DropdownMenuItem>
@@ -52,6 +58,7 @@ export function LanguageSwitcher() {
           onClick={() => switchTo("ja")}
           data-testid="language-switcher-ja"
           aria-current={current === "ja"}
+          disabled={current === "ja"}
         >
           {t("label_ja")}
         </DropdownMenuItem>

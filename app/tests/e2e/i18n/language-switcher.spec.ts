@@ -2,9 +2,9 @@
  * Phase 3b / Issue #107: 言語切替 UI の E2E。
  *
  * 検証フロー:
- *  1. 初回 (cookie 未設定) で /dashboard を開く。Playwright default の
- *     Accept-Language が `en-US,en;q=0.9` のため、`proxy.ts` の
- *     resolveLocale は `en` を選んで cookie に書く想定。
+ *  1. 初回 (cookie 未設定) で /dashboard を開く。`test.use({ locale: "en-US" })`
+ *     で Accept-Language を明示的に固定してあるため、`proxy.ts` の
+ *     resolveLocale は `en` を選んで cookie に書く。
  *     → Sidebar に `Dashboard` (en) が表示される。
  *  2. LanguageSwitcher を開き `日本語` を選択。
  *     → router.refresh() で RSC が再評価され `ダッシュボード` (ja) に切替。
@@ -21,9 +21,14 @@ import { expect, test } from "../fixtures/authenticated-test";
 const SIDEBAR_NAV = "nav";
 
 test.describe("LanguageSwitcher", () => {
+  // Playwright default の Accept-Language は実行環境 (ローカル / CI) の
+  // ブラウザ設定に依存して flake し得るため、明示的に en-US に固定する
+  // (Copilot PR #129 round 1 指摘)。
+  test.use({ locale: "en-US" });
+
   test("LS-01 言語切替 → reload で維持 → 戻せる", async ({ page, context }) => {
-    // 1) 初回。Playwright default の Accept-Language は en 系のため
-    //    Sidebar が英語表示で立ち上がる想定。
+    // 1) 初回。locale=en-US で Accept-Language が en 系に固定されているため
+    //    proxy.ts は NEXT_LOCALE cookie を `en` で初期化し、Sidebar が英語表示。
     await page.goto("/");
 
     const sidebar = page.locator(SIDEBAR_NAV);
