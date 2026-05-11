@@ -66,6 +66,14 @@ class ErrorCode(str, Enum):
     AUTH_TOKEN_INVALID = "auth_token_invalid"
     AUTH_REFRESH_FAILED = "auth_refresh_failed"
     AUTH_RATE_LIMITED = "auth_rate_limited"
+    AUTH_USER_ALREADY_EXISTS = "auth_user_already_exists"
+    AUTH_USER_NOT_FOUND = "auth_user_not_found"
+    AUTH_WEAK_PASSWORD = "auth_weak_password"
+    AUTH_ORIGIN_NOT_ALLOWED = "auth_origin_not_allowed"
+    AUTH_INVITATION_NOT_FOUND = "auth_invitation_not_found"
+    AUTH_INVITATION_INVALID = "auth_invitation_invalid"
+    AUTH_INVITATION_EXPIRED = "auth_invitation_expired"
+    AUTH_PROVIDER_ERROR = "auth_provider_error"
 
     # --- tileset ---
     TILESET_NOT_FOUND = "tileset_not_found"
