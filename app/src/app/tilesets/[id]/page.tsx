@@ -1,37 +1,39 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { AdminLayout } from "@/components/layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { DeleteTilesetDialog } from "@/components/tilesets/delete-tileset-dialog";
-import { TilesetMapPreview } from "@/components/map";
-import { ExportFeaturesButton } from "@/components/features";
-import { useApi } from "@/hooks/use-api";
-import type { Tileset, TileJSON, TilesetStats } from "@/lib/api";
 import {
   ArrowLeft,
-  Pencil,
-  RefreshCw,
-  Layers,
-  Globe,
-  Lock,
-  Copy,
-  Check,
-  ExternalLink,
-  MapPin,
-  ZoomIn,
+  BarChart3,
   Calendar,
-  Map,
+  Check,
+  Copy,
+  Database,
+  ExternalLink,
   Eye,
   EyeOff,
-  BarChart3,
-  Database,
+  Globe,
+  Layers,
+  Lock,
+  Map,
+  MapPin,
+  Pencil,
+  RefreshCw,
+  ZoomIn,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { use, useState, useEffect } from "react";
+
+import { ExportFeaturesButton } from "@/components/features";
+import { AdminLayout } from "@/components/layout";
+import { TilesetMapPreview } from "@/components/map";
+import { DeleteTilesetDialog } from "@/components/tilesets/delete-tileset-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { useApi } from "@/hooks/use-api";
+import type { Tileset, TileJSON, TilesetStats } from "@/lib/api";
 
 // TileJSON with vector_layers の型定義
 interface VectorLayer {
@@ -54,6 +56,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const { id } = use(params);
   const router = useRouter();
   const { api, isReady } = useApi();
+  const t = useTranslations("tilesets.detail");
 
   const [tileset, setTileset] = useState<Tileset | null>(null);
   const [tileJSON, setTileJSON] = useState<TileJSONWithLayers | null>(null);
@@ -107,9 +110,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
         setMapRefreshKey(Date.now());
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "タイルセットの取得に失敗しました"
-      );
+      setError(err instanceof Error ? err.message : t("error_fetch"));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -120,6 +121,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
     if (isReady) {
       fetchTileset(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isReady]);
 
   const handleRefresh = () => {
@@ -145,10 +147,10 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
       setTileset(updated);
     } catch (err) {
       console.error("Toggle public failed:", err);
-      // fetch 用の `error` を汚すと「タイルセットが見つかりません」分岐に入って
-      // 詳細ページ全体が消えてしまうため、アクション専用の state を使う。
+      // fetch 用の `error` を汚すと "not_found" 分岐に入って詳細ページ全体が
+      // 消えてしまうため、アクション専用の state を使う。
       setActionError(
-        err instanceof Error ? err.message : "公開設定の切り替えに失敗しました",
+        err instanceof Error ? err.message : t("error_toggle_public"),
       );
     }
   };
@@ -225,17 +227,17 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   };
 
   /**
-   * タイルセットのタイプに応じたラベルを取得
+   * タイルセットのタイプに応じたラベルを catalog から取得
    */
   const getTileUrlLabel = (type: string): string => {
     switch (type) {
       case "pmtiles":
-        return "タイルURL（PMTiles）";
+        return t("endpoint_tile_pmtiles");
       case "raster":
-        return "タイルURL（ラスター）";
+        return t("endpoint_tile_raster");
       case "vector":
       default:
-        return "タイルURL（ベクター）";
+        return t("endpoint_tile_vector");
     }
   };
 
@@ -264,14 +266,12 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
           <Link href="/tilesets">
             <Button variant="outline">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              戻る
+              {t("back")}
             </Button>
           </Link>
           <Card className="border-destructive">
             <CardContent className="pt-6">
-              <p className="text-destructive">
-                {error || "タイルセットが見つかりません"}
-              </p>
+              <p className="text-destructive">{error || t("not_found")}</p>
             </CardContent>
           </Card>
         </div>
@@ -306,7 +306,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                     data-testid="tileset-public-badge"
                   >
                     <Globe className="mr-1 h-3 w-3" />
-                    公開
+                    {t("badge_public")}
                   </Badge>
                 ) : (
                   <Badge
@@ -314,7 +314,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                     data-testid="tileset-private-badge"
                   >
                     <Lock className="mr-1 h-3 w-3" />
-                    非公開
+                    {t("badge_private")}
                   </Badge>
                 )}
               </div>
@@ -338,31 +338,31 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               <RefreshCw
                 className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
               />
-              更新
+              {t("refresh")}
             </Button>
             <Button
               onClick={handleTogglePublic}
               variant="outline"
               size="sm"
               data-testid="tileset-public-toggle"
-              title={tileset.is_public ? "非公開にする" : "公開にする"}
+              title={tileset.is_public ? t("toggle_to_private") : t("toggle_to_public")}
             >
               {tileset.is_public ? (
                 <>
                   <Lock className="mr-2 h-4 w-4" />
-                  非公開にする
+                  {t("toggle_to_private")}
                 </>
               ) : (
                 <>
                   <Globe className="mr-2 h-4 w-4" />
-                  公開にする
+                  {t("toggle_to_public")}
                 </>
               )}
             </Button>
             <Link href={`/tilesets/${id}/edit`}>
               <Button variant="outline" size="sm">
                 <Pencil className="mr-2 h-4 w-4" />
-                編集
+                {t("edit")}
               </Button>
             </Link>
             <DeleteTilesetDialog
@@ -389,7 +389,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Map className="h-5 w-5" />
-                マッププレビュー
+                {t("section_map_preview")}
               </CardTitle>
               <Button
                 variant="ghost"
@@ -399,12 +399,12 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 {showMapPreview ? (
                   <>
                     <EyeOff className="mr-2 h-4 w-4" />
-                    非表示
+                    {t("map_preview_hide")}
                   </>
                 ) : (
                   <>
                     <Eye className="mr-2 h-4 w-4" />
-                    表示
+                    {t("map_preview_show")}
                   </>
                 )}
               </Button>
@@ -418,10 +418,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 height="400px"
                 refreshKey={mapRefreshKey}
               />
-              <p className="mt-2 text-xs text-muted-foreground">
-                ※ データソースが登録されていない場合、タイルは表示されません。
-                フィーチャーを編集した場合は「更新」ボタンを押してください。
-              </p>
+              <p className="mt-2 text-xs text-muted-foreground">{t("map_preview_hint")}</p>
             </CardContent>
           )}
         </Card>
@@ -432,7 +429,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
-                フィーチャー統計
+                {t("section_feature_stats")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -442,33 +439,33 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                     {tilesetStats.feature_count.toLocaleString()}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    総フィーチャー数
+                    {t("feature_total")}
                   </div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold">
                     {tilesetStats.geometry_types?.Point?.toLocaleString() ?? 0}
                   </div>
-                  <div className="text-sm text-muted-foreground">ポイント</div>
+                  <div className="text-sm text-muted-foreground">{t("feature_points")}</div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold">
                     {tilesetStats.geometry_types?.LineString?.toLocaleString() ??
                       0}
                   </div>
-                  <div className="text-sm text-muted-foreground">ライン</div>
+                  <div className="text-sm text-muted-foreground">{t("feature_lines")}</div>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <div className="text-2xl font-bold">
                     {tilesetStats.geometry_types?.Polygon?.toLocaleString() ??
                       0}
                   </div>
-                  <div className="text-sm text-muted-foreground">ポリゴン</div>
+                  <div className="text-sm text-muted-foreground">{t("feature_polygons")}</div>
                 </div>
               </div>
               {tilesetStats.latest_update && (
                 <div className="mt-4 text-sm text-muted-foreground">
-                  最終更新:{" "}
+                  {t("feature_last_updated")}{" "}
                   {new Date(tilesetStats.latest_update).toLocaleString("ja-JP")}
                 </div>
               )}
@@ -482,14 +479,14 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Layers className="h-5 w-5" />
-                タイル情報
+                {t("section_tile_info")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    タイプ
+                    {t("field_type")}
                   </p>
                   <Badge variant="outline" className="mt-1">
                     {tileset.type}
@@ -497,7 +494,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    フォーマット
+                    {t("field_format")}
                   </p>
                   <code className="mt-1 inline-block rounded bg-muted px-2 py-1 text-sm">
                     {tileset.format}
@@ -518,7 +515,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                   <Separator />
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">
-                      帰属表示
+                      {t("field_attribution")}
                     </p>
                     <p className="mt-1 text-sm">{tileset.attribution}</p>
                   </div>
@@ -532,14 +529,14 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ZoomIn className="h-5 w-5" />
-                ズーム・範囲
+                {t("section_zoom_range")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    最小ズーム
+                    {t("field_min_zoom")}
                   </p>
                   <p className="mt-1 text-lg font-semibold">
                     {tileset.min_zoom ?? 0}
@@ -547,7 +544,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    最大ズーム
+                    {t("field_max_zoom")}
                   </p>
                   <p className="mt-1 text-lg font-semibold">
                     {tileset.max_zoom ?? 22}
@@ -560,7 +557,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               <div>
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                   <MapPin className="h-3 w-3" />
-                  バウンディングボックス
+                  {t("field_bounds")}
                 </p>
                 <code className="mt-1 inline-block rounded bg-muted px-2 py-1 text-xs">
                   {formatBounds(tileset.bounds)}
@@ -570,7 +567,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               <div>
                 <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                   <MapPin className="h-3 w-3" />
-                  中心座標
+                  {t("field_center")}
                 </p>
                 <code className="mt-1 inline-block rounded bg-muted px-2 py-1 text-xs">
                   {formatCenter(tileset.center)}
@@ -584,7 +581,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ExternalLink className="h-5 w-5" />
-                APIエンドポイント
+                {t("section_api_endpoints")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -615,7 +612,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               <div>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-muted-foreground">
-                    TileJSON URL（全レイヤー）
+                    {t("endpoint_tilejson_all")}
                   </p>
                   <Button
                     variant="ghost"
@@ -642,12 +639,11 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                     <div className="flex items-center gap-2 mb-3">
                       <Database className="h-4 w-4" />
                       <p className="text-sm font-medium text-muted-foreground">
-                        レイヤー別TileJSON URL（QGIS用）
+                        {t("endpoint_tilejson_layer_header")}
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground mb-3">
-                      QGISで使用する場合は、各レイヤーごとのTileJSON
-                      URLを使用してください。
+                      {t("endpoint_tilejson_layer_hint")}
                     </p>
                     <div className="space-y-2">
                       {vectorLayers.map((layer) => {
@@ -718,27 +714,27 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />
-                メタデータ
+                {t("section_metadata")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    作成日時
+                    {t("field_created_at")}
                   </p>
                   <p className="mt-1">{formatDate(tileset.created_at)}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    更新日時
+                    {t("field_updated_at")}
                   </p>
                   <p className="mt-1">{formatDate(tileset.updated_at)}</p>
                 </div>
                 {tileset.owner_id && (
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">
-                      オーナーID
+                      {t("field_owner_id")}
                     </p>
                     <code className="mt-1 inline-block rounded bg-muted px-2 py-1 text-xs">
                       {tileset.owner_id}
@@ -752,7 +748,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
                   <Separator className="my-4" />
                   <div>
                     <p className="text-sm font-medium text-muted-foreground mb-2">
-                      カスタムメタデータ
+                      {t("field_custom_metadata")}
                     </p>
                     <pre className="rounded bg-muted px-3 py-2 text-xs overflow-auto">
                       {JSON.stringify(tileset.metadata, null, 2)}
