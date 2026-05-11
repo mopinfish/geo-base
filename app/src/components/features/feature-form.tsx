@@ -173,16 +173,49 @@ export function FeatureForm({
       setCoordinates(null);
       return;
     }
+    // 各 [number, number] の検査。長さ 2 + 両方 finite な number。
+    // 型アサーションだけ通すと文字列座標などが素通りして
+    // isGeometryValid (配列長のみで判定) を欺ける (Copilot PR #122 round 4 指摘)。
+    const isNumPair = (v: unknown): v is [number, number] =>
+      Array.isArray(v) &&
+      v.length === 2 &&
+      typeof v[0] === "number" &&
+      Number.isFinite(v[0]) &&
+      typeof v[1] === "number" &&
+      Number.isFinite(v[1]);
+
     // 既存の geometryType / coordinates 形式に変換 (Polygon は外環のみ)。
-    setGeometryType(obj.type);
     if (obj.type === "Point") {
-      setCoordinates(obj.coordinates as [number, number]);
+      if (!isNumPair(obj.coordinates)) {
+        setGeojsonError("Point の coordinates は [number, number] が必要です");
+        setCoordinates(null);
+        return;
+      }
+      setGeometryType("Point");
+      setCoordinates(obj.coordinates);
     } else if (obj.type === "LineString") {
-      setCoordinates(obj.coordinates as [number, number][]);
+      const arr = obj.coordinates as unknown[];
+      if (arr.length < 2 || !arr.every(isNumPair)) {
+        setGeojsonError(
+          "LineString の coordinates は [number, number] の配列 (>=2) が必要です",
+        );
+        setCoordinates(null);
+        return;
+      }
+      setGeometryType("LineString");
+      setCoordinates(arr as [number, number][]);
     } else {
       // Polygon: coordinates = [outerRing, ...holes] の外環だけ拾う。
-      const outer = (obj.coordinates as [number, number][][])[0];
-      setCoordinates(Array.isArray(outer) ? outer : null);
+      const outer = (obj.coordinates as unknown[])[0];
+      if (!Array.isArray(outer) || outer.length < 3 || !outer.every(isNumPair)) {
+        setGeojsonError(
+          "Polygon の外環は [number, number] の配列 (>=3) が必要です",
+        );
+        setCoordinates(null);
+        return;
+      }
+      setGeometryType("Polygon");
+      setCoordinates(outer as [number, number][]);
     }
     setGeojsonError(null);
   };
