@@ -305,8 +305,20 @@ def handle_api_error(
             result.update(context)
         return result
 
-    # Handle httpx network errors
-    if isinstance(e, (httpx.NetworkError, httpx.ConnectError)):
+    # Handle httpx connect errors first (more specific than the generic
+    # NetworkError below, since httpx.ConnectError is a subclass of NetworkError).
+    if isinstance(e, httpx.ConnectError):
+        result = {
+            "error": "Could not connect to the upstream service",
+            "code": ErrorCode.CONNECTION_ERROR.value,
+            "detail": str(e),
+        }
+        if context:
+            result.update(context)
+        return result
+
+    # Handle other httpx network errors
+    if isinstance(e, httpx.NetworkError):
         result = {
             "error": "Network error",
             "code": ErrorCode.NETWORK_ERROR.value,

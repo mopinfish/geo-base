@@ -873,7 +873,7 @@ When an error occurs, every tool returns a response in the following format:
 }
 ```
 
-Both `details` (a structured object, populated by `MCPError` subclasses such as `ValidationError` / `HTTPRequestError` / `ResourceNotFoundError`) and `detail` (a single-line string, used by the httpx fallback handler) may appear depending on the error path. Treat both as optional, and prefer `details` when both are present.
+Both `details` (a structured object, populated by `MCPError` subclasses such as `ValidationError` / `APIError` / `NotFoundError` / `AuthenticationError` / `NetworkError`) and `detail` (a single-line string, used by the httpx fallback handler in `mcp/errors.py`) may appear depending on the error path. Treat both as optional, and prefer `details` when both are present.
 
 ### Error codes
 

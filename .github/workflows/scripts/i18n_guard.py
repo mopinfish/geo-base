@@ -17,13 +17,18 @@ fail-fast で検証する。Phase 1 完了時点で API/Pydantic は全て英語
 
 検出パターン: Hiragana (U+3040–U+309F) / Katakana (U+30A0–U+30FF) /
 CJK 統合漢字 (U+4E00–U+9FFF) のいずれかが文字列リテラル中に含まれる場合。
-`ast` モジュールで Python を構文解析するため、コメント (`# ...`) と
-docstring 以外の単純な式文 (`"some literal"` を式として書いたもの) は
-自然と検出対象から外れ、複数行にまたがる `detail=(...)` や f-string、
-辞書のネストにも対応する。
+`ast` モジュールで Python を構文解析するため、複数行にまたがる
+`detail=(...)` や f-string、辞書のネスト、HTTPException / JSONResponse /
+Response の特定位置 positional 引数にも対応する。
 
-spec 14 章「コードコメントの一括英語化はしない」を守るため、コメントと
-モジュールトップの docstring は検出対象外。
+検出対象 / 非対象の境界:
+  - **対象**: 上記 1-4 の文脈下にある `ast.Constant`(str) / `JoinedStr` /
+    `BinOp` / `Dict` / `List` / `Tuple` 等の string ノード。
+    MCP 側 (項目 4) は関数 docstring も含めて全文字列リテラルを検査する
+    (公開 tool の I/O 説明として client に露出するため)。
+  - **非対象**: Python のコメント (`# ...`) と **モジュールトップの
+    docstring** (リポジトリ内部向けの説明として通常残置される)。
+    spec 14 章「コードコメントの一括英語化はしない」を守る。
 
 Usage:
   python3 .github/workflows/scripts/i18n_guard.py
@@ -39,10 +44,6 @@ from pathlib import Path
 # Hiragana (U+3040–U+309F), Katakana (U+30A0–U+30FF + prolonged sound mark),
 # CJK 統合漢字 (U+4E00–U+9FFF)。
 JP_CHARS = re.compile(r"[぀-ゟ゠-ヿ一-鿿]")
-
-# Keyword arguments whose values must not contain Japanese (API/Pydantic
-# kwargs). For `mcp/`, we scan all string literals regardless.
-TARGET_KWARGS = {"detail", "description", "content"}
 
 
 def iter_string_literals(node: ast.AST):
