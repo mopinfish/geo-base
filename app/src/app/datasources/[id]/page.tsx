@@ -249,24 +249,24 @@ export default function DatasourceDetailPage() {
         {/* 接続テスト結果 */}
         {testResult && (
           <Alert
-            variant={testResult.status === "ok" ? "default" : "destructive"}
+            variant={testResult.status === "success" ? "default" : "destructive"}
             className={
-              testResult.status === "ok"
+              testResult.status === "success"
                 ? "border-green-500 bg-green-50"
                 : ""
             }
             data-testid="datasource-test-connection-result"
             data-status={testResult.status}
           >
-            {testResult.status === "ok" ? (
+            {testResult.status === "success" ? (
               <CheckCircle2 className="h-4 w-4 text-green-600" />
             ) : (
               <XCircle className="h-4 w-4" />
             )}
             <AlertDescription
-              className={testResult.status === "ok" ? "text-green-600" : ""}
+              className={testResult.status === "success" ? "text-green-600" : ""}
             >
-              {testResult.status === "ok"
+              {testResult.status === "success"
                 ? "接続に成功しました。データソースは正常にアクセス可能です。"
                 : testResult.message || "接続に失敗しました。"}
             </AlertDescription>
