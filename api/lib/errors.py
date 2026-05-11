@@ -7,7 +7,7 @@
 ## 使い方
 
 ```python
-from lib.errors import ApiError, ErrorCode, api_error
+from lib.errors import ErrorCode, api_error
 
 # 新しいやり方 (推奨、envelope を返す)
 raise api_error(
@@ -79,6 +79,7 @@ class ErrorCode(str, Enum):
     TILESET_NOT_FOUND = "tileset_not_found"
     TILESET_FORBIDDEN = "tileset_forbidden"
     TILESET_NAME_CONFLICT = "tileset_name_conflict"
+    TILESET_LAYER_NOT_FOUND = "tileset_layer_not_found"
     TILESET_INVALID = "tileset_invalid"
 
     # --- feature ---
@@ -100,6 +101,7 @@ class ErrorCode(str, Enum):
     TEAM_OWNER_REQUIRED = "team_owner_required"
     TEAM_MEMBER_EXISTS = "team_member_exists"
     TEAM_MEMBER_NOT_FOUND = "team_member_not_found"
+    TEAM_TILESET_ALREADY_SHARED = "team_tileset_already_shared"
     TEAM_INVITATION_NOT_FOUND = "team_invitation_not_found"
     TEAM_INVITATION_EXPIRED = "team_invitation_expired"
     TEAM_INVITATION_ALREADY_USED = "team_invitation_already_used"
@@ -122,6 +124,9 @@ class ErrorCode(str, Enum):
     TILE_RENDER_FAILED = "tile_render_failed"
     TILE_SOURCE_UNAVAILABLE = "tile_source_unavailable"
     TILE_SERVICE_UNAVAILABLE = "tile_service_unavailable"
+
+    # --- colormap ---
+    COLORMAP_NOT_FOUND = "colormap_not_found"
 
     # --- validation / generic ---
     VALIDATION_FIELD_REQUIRED = "validation_field_required"

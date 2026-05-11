@@ -85,11 +85,15 @@ def _call_target_name(node: ast.Call) -> str:
 # Positional signatures for response-shape APIs whose user-facing string is
 # in a known argument index. Copilot PR #125 round 2 で `raise HTTPException(403, "...")`
 # 形式 (positional) も拾うために必要。
+#
+# Copilot PR #126 round 1 で `api_error(status, code, message, ...)` の
+# 第 3 引数 `message` も追加 (envelope 移行後はこれが UI 表示文字列)。
 POSITIONAL_TARGETS: dict[str, list[int]] = {
     # function_name (last component) -> indices of args to inspect
     "HTTPException": [1],     # HTTPException(status_code, detail, ...)
     "JSONResponse": [0],      # JSONResponse(content, status_code, ...)
     "Response": [0],          # Response(content, status_code, ...)
+    "api_error": [2],         # api_error(status_code, code, message, ...)
 }
 
 

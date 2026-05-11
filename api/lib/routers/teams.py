@@ -1122,7 +1122,7 @@ def add_team_tileset(
             if cur.fetchone():
                 raise api_error(
                     400,
-                    ErrorCode.TILESET_NAME_CONFLICT,
+                    ErrorCode.TEAM_TILESET_ALREADY_SHARED,
                     "Tileset is already shared with this team",
                     details={"team_id": team_id, "tileset_id": str(tileset_data.tileset_id)},
                 )

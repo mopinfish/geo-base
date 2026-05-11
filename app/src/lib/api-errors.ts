@@ -98,6 +98,7 @@ const JA_MESSAGES: Record<string, string> = {
   tileset_not_found: "タイルセットが見つかりません",
   tileset_forbidden: "このタイルセットへのアクセス権限がありません",
   tileset_name_conflict: "同名のタイルセットが既に存在します",
+  tileset_layer_not_found: "指定したレイヤーがタイルセットに存在しません",
   tileset_invalid: "タイルセットの内容が不正です",
 
   // feature
@@ -126,6 +127,7 @@ const JA_MESSAGES: Record<string, string> = {
   team_invitation_email_mismatch: "招待先のメールアドレスと一致しません",
   team_invitation_invalid_status: "招待の状態が不正です",
   team_invalid: "チームの内容が不正です",
+  team_tileset_already_shared: "このタイルセットは既にチームと共有されています",
 
   // api_key
   api_key_not_found: "API キーが見つかりません",
@@ -141,6 +143,9 @@ const JA_MESSAGES: Record<string, string> = {
   tile_render_failed: "タイルの描画に失敗しました",
   tile_source_unavailable: "タイルのソースに接続できません",
   tile_service_unavailable: "タイル配信サービスが利用できません",
+
+  // colormap
+  colormap_not_found: "指定したカラーマップが見つかりません",
 
   // validation
   validation_field_required: "必須項目が入力されていません",

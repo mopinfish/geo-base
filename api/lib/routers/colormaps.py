@@ -75,7 +75,7 @@ def get_colormap_info(name: str):
         if not cmap:
             raise api_error(
                 404,
-                ErrorCode.VALIDATION_INVALID_VALUE,
+                ErrorCode.COLORMAP_NOT_FOUND,
                 f"Colormap '{name}' not found",
                 details={"colormap": name},
             )

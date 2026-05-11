@@ -384,7 +384,7 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
         if layer and not db_layer_names:
             raise api_error(
                 404,
-                ErrorCode.TILESET_NOT_FOUND,
+                ErrorCode.TILESET_LAYER_NOT_FOUND,
                 f"Layer '{layer}' not found in tileset",
                 details={"tileset_id": tileset_id, "layer": layer},
             )
