@@ -374,6 +374,63 @@ class TestRedisRateLimiter:
         # TTL は 120 秒以下で正の値（ちょうど 120 とは限らないため >= 100 で確認）
         assert 100 < ttl <= 120, f"Expected TTL ~120s, got {ttl}"
 
+    def test_ttl_self_recovers_for_orphan_key(self, redis_limiter):
+        """過去の EXPIRE 失敗で TTL 未設定 (-1) のキーが残った場合、次の
+        check_and_increment で TTL が自己回復する (EXPIRE NX の効果)。"""
+        from lib.redis_client import get_redis
+
+        client = get_redis()
+        key_id = str(uuid.uuid4())
+        fixed_now = datetime(2026, 5, 11, 12, 30, 0, tzinfo=timezone.utc)
+        minute_window = int(fixed_now.timestamp() // 60)
+        minute_key = f"{redis_limiter._key_prefix}:{key_id}:m:{minute_window}"
+
+        # 「INCR は成功したが EXPIRE が失敗した」状態を再現:
+        # INCR 直接実行 → TTL を意図的に PERSIST (-1) にする
+        client.incr(minute_key)
+        client.persist(minute_key)
+        assert client.ttl(minute_key) == -1, "Test setup: key must have no TTL"
+
+        # 次の check_and_increment で TTL が付与されることを期待
+        with patch.object(redis_limiter, "_now", return_value=fixed_now):
+            redis_limiter.check_and_increment(key_id, rl_min=100, rl_day=10000)
+            ttl = client.ttl(minute_key)
+
+        assert 100 < ttl <= 120, (
+            f"Expected TTL to be self-recovered to ~120s, got {ttl}. "
+            "EXPIRE NX should set TTL on previously-orphan key."
+        )
+
+    def test_existing_ttl_not_extended(self, redis_limiter):
+        """EXPIRE NX なので、既に TTL があるキーには TTL を再延長しない
+        （窓のリセットタイミングが意図せず後ろにずれるのを防ぐ）。"""
+        from lib.redis_client import get_redis
+
+        client = get_redis()
+        key_id = str(uuid.uuid4())
+        fixed_now = datetime(2026, 5, 11, 12, 30, 0, tzinfo=timezone.utc)
+        minute_window = int(fixed_now.timestamp() // 60)
+        minute_key = f"{redis_limiter._key_prefix}:{key_id}:m:{minute_window}"
+
+        # 1 回目: TTL が付与される
+        with patch.object(redis_limiter, "_now", return_value=fixed_now):
+            redis_limiter.check_and_increment(key_id, rl_min=100, rl_day=10000)
+
+        # 手動で TTL を短くする (60s に削る)
+        client.expire(minute_key, 60)
+        first_modified_ttl = client.ttl(minute_key)
+        assert first_modified_ttl <= 60
+
+        # 2 回目: NX なので TTL は再延長されない（60s 以下のまま）
+        with patch.object(redis_limiter, "_now", return_value=fixed_now):
+            redis_limiter.check_and_increment(key_id, rl_min=100, rl_day=10000)
+            second_ttl = client.ttl(minute_key)
+
+        assert second_ttl <= 60, (
+            f"Expected TTL not to be extended (was 60, got {second_ttl}). "
+            "EXPIRE NX must not overwrite existing TTL."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Concurrency (Phase 3) — 100 並行リクエストで Redis backend が正確に counter を

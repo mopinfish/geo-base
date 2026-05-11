@@ -119,19 +119,20 @@ class RedisRateLimiter:
     Fixed-window 集計を Redis INCR + EXPIRE で実装。`api_key_rate_limits` テーブル
     と異なり書き込み競合がなく、高頻度アクセスでもスループット低下しにくい。
 
-    キー設計:
-    - per-minute: `{key_prefix}{key_id}:m:{epoch_minute}` (TTL 120s — 窓 60s +
-      clock skew 吸収)
-    - per-day: `{key_prefix}{key_id}:d:{YYYYMMDD}` (TTL 90000s = 25h)
+    キー設計（既定設定での実キー例）:
+    - per-minute: `geo-base:rate:apikey:{key_id}:m:{epoch_minute}` (TTL 120s)
+    - per-day: `geo-base:rate:apikey:{key_id}:d:{YYYYMMDD}` (TTL 90000s = 25h)
 
-    `key_prefix` 既定値は `{REDIS_KEY_PREFIX}rate:apikey:` で、`REDIS_KEY_PREFIX`
-    env (`lib.redis_client.RedisConfig.key_prefix`、既定 `geo-base:`) によって
-    環境ごとに namespace を分離できる。`safe_redis_*` 経由の他キャッシュとも
-    一貫した namespace になる。
+    `key_prefix` 既定値は `{REDIS_KEY_PREFIX}rate:apikey` (末尾 `:` なし、
+    `check_and_increment` 内で `:{key_id}:m:{window}` の形に組み立てる)。
+    `REDIS_KEY_PREFIX` env (`lib.redis_client.RedisConfig.key_prefix`、
+    既定 `geo-base:`) によって環境ごとに namespace を分離できる。`safe_redis_*`
+    経由の他キャッシュとも一貫した namespace になる。
 
-    アルゴリズム (Issue 仕様):
+    アルゴリズム:
     1. INCR でカウンタを加算（atomic）
-    2. 戻り値が 1 なら EXPIRE を設定（窓初回作成時のみ）
+    2. `EXPIRE key ttl NX` で TTL 未設定のキーにのみ TTL を付与
+       （`nx=True` で既存 TTL を上書きしない → 何度呼んでも自己回復する）
     3. 戻り値が limit を超過していれば RateLimited を raise
 
     挙動上の注意:
@@ -153,10 +154,12 @@ class RedisRateLimiter:
     def __init__(self, key_prefix: Optional[str] = None):
         """
         Args:
-            key_prefix: キー名の prefix（末尾 `:` 不要、内部で付加）。明示未指定なら
+            key_prefix: キー名の prefix（**末尾 `:` 不要** — `check_and_increment`
+                内で `:{key_id}:m:{window}` の形に組み立てる）。明示未指定なら
                 `{REDIS_KEY_PREFIX}rate:apikey` (REDIS_KEY_PREFIX は redis_client
-                の RedisConfig から取得、既定 `geo-base:`)。テストでは独自 prefix
-                を渡してアプリキャッシュと分離する。
+                の RedisConfig から取得、既定 `geo-base:`)。例: 既定設定だと最終キー
+                は `geo-base:rate:apikey:{key_id}:m:{epoch_minute}` となる。
+                テストでは独自 prefix を渡してアプリキャッシュと分離する。
         """
         if key_prefix is None:
             from lib.redis_client import get_redis_config
@@ -196,16 +199,19 @@ class RedisRateLimiter:
             # per-minute: 制限ありの場合のみ INCR + check（無制限ならスキップ）
             if check_minute:
                 m_count = client.incr(minute_key)
-                if m_count == 1:
-                    client.expire(minute_key, self.MINUTE_WINDOW_TTL)
+                # `EXPIRE key ttl NX` で「TTL 未設定のキーにのみ TTL を付与」する。
+                # 旧実装 (m_count == 1 のとき EXPIRE) では、何らかの理由で前回の
+                # EXPIRE が失敗した場合に TTL なしキーが永続化して以降カウントが
+                # リセットされない事故があり得た。nx=True による idempotent な
+                # TTL 付与で、TTL 未設定状態を毎回の呼び出しで自己回復する。
+                client.expire(minute_key, self.MINUTE_WINDOW_TTL, nx=True)
                 if m_count > rl_min:
                     raise RateLimited("API key rate limit exceeded (per minute)")
 
             # per-day: 同上
             if check_day:
                 d_count = client.incr(day_key)
-                if d_count == 1:
-                    client.expire(day_key, self.DAY_WINDOW_TTL)
+                client.expire(day_key, self.DAY_WINDOW_TTL, nx=True)
                 if d_count > rl_day:
                     raise RateLimited("API key rate limit exceeded (per day)")
         except RateLimited:
