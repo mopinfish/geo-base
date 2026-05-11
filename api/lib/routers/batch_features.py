@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.auth import User, require_auth
 from lib.cache import invalidate_tileset_cache
 from lib.batch import (
@@ -147,14 +148,21 @@ def _check_tileset_ownership(cur, tileset_id: str, user_id: str) -> bool:
     )
     row = cur.fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="Tileset not found")
-    
-    if str(row[0]) != user_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Not authorized to modify this tileset"
+        raise api_error(
+            404,
+            ErrorCode.TILESET_NOT_FOUND,
+            "Tileset not found",
+            details={"tileset_id": tileset_id},
         )
-    
+
+    if str(row[0]) != user_id:
+        raise api_error(
+            403,
+            ErrorCode.TILESET_FORBIDDEN,
+            "Not authorized to modify this tileset",
+            details={"tileset_id": tileset_id},
+        )
+
     return True
 
 
@@ -188,9 +196,10 @@ def export_features(
     """
     # Validate request
     if not request.tileset_id and not request.feature_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Either tileset_id or feature_ids must be provided"
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_FIELD_REQUIRED,
+            "Either tileset_id or feature_ids must be provided",
         )
     
     try:
@@ -247,7 +256,11 @@ def export_features(
         raise
     except Exception as e:
         logger.error(f"Export error: {e}")
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Export failed: {str(e)}",
+        )
 
 
 @router.get("/export/{tileset_id}")
@@ -277,8 +290,13 @@ def export_features_get(
                 if len(bbox_tuple) != 4:
                     raise ValueError("bbox must have 4 values")
             except ValueError as e:
-                raise HTTPException(status_code=400, detail=f"Invalid bbox: {e}")
-        
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_INVALID_VALUE,
+                    f"Invalid bbox: {e}",
+                    details={"bbox": bbox},
+                )
+
         if format.lower() == "csv":
             csv_content = export_features_csv(
                 conn,
@@ -310,7 +328,11 @@ def export_features_get(
         raise
     except Exception as e:
         logger.error(f"Export error: {e}")
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Export failed: {str(e)}",
+        )
 
 
 @router.get("/export/{tileset_id}/stream")
@@ -339,8 +361,13 @@ def export_features_streaming(
                 if len(bbox_tuple) != 4:
                     raise ValueError("bbox must have 4 values")
             except ValueError as e:
-                raise HTTPException(status_code=400, detail=f"Invalid bbox: {e}")
-        
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_INVALID_VALUE,
+                    f"Invalid bbox: {e}",
+                    details={"bbox": bbox},
+                )
+
         def generate():
             for chunk in export_features_geojson_streaming(
                 conn,
@@ -362,7 +389,11 @@ def export_features_streaming(
         raise
     except Exception as e:
         logger.error(f"Streaming export error: {e}")
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Export failed: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -424,15 +455,16 @@ def batch_update(
                 )
                 
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Either feature_ids or tileset_id must be provided"
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_FIELD_REQUIRED,
+                    "Either feature_ids or tileset_id must be provided",
                 )
-            
+
             # Invalidate cache for affected tilesets
             for tid in affected_tilesets:
                 invalidate_tileset_cache(f"vector:{tid}")
-            
+
             return BatchOperationResponse(
                 success_count=result.success_count,
                 failed_count=result.failed_count,
@@ -442,12 +474,16 @@ def batch_update(
                 status=result.status.value,
                 duration_seconds=result.duration_seconds,
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Batch update error: {e}")
-        raise HTTPException(status_code=500, detail=f"Batch update failed: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Batch update failed: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -518,11 +554,12 @@ def batch_delete(
                 )
                 
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Either feature_ids or tileset_id must be provided"
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_FIELD_REQUIRED,
+                    "Either feature_ids or tileset_id must be provided",
                 )
-            
+
             # Invalidate cache for affected tilesets (only if not dry run)
             if not request.dry_run:
                 for tid in affected_tilesets:
@@ -542,7 +579,11 @@ def batch_delete(
         raise
     except Exception as e:
         logger.error(f"Batch delete error: {e}")
-        raise HTTPException(status_code=500, detail=f"Batch delete failed: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Batch delete failed: {str(e)}",
+        )
 
 
 @router.delete("/bulk")
@@ -557,9 +598,11 @@ def batch_delete_simple(
     Alternative to POST for simple batch deletes.
     """
     if len(feature_ids) > 10000:
-        raise HTTPException(
-            status_code=400,
-            detail="Maximum 10000 features per request"
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_OUT_OF_RANGE,
+            "Maximum 10000 features per request",
+            details={"feature_count": len(feature_ids), "max_allowed": 10000},
         )
     
     try:
@@ -586,4 +629,8 @@ def batch_delete_simple(
         raise
     except Exception as e:
         logger.error(f"Batch delete error: {e}")
-        raise HTTPException(status_code=500, detail=f"Batch delete failed: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Batch delete failed: {str(e)}",
+        )
