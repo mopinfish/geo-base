@@ -20,9 +20,15 @@ test.describe("a11y: /features", () => {
   test.beforeAll(async () => {
     await loginAsAdmin();
     await resetDatabase();
+    // /features ページは tileset_id 未指定 (= 全件タブ) では public tileset の
+    // features しか返さない (api/lib/routers/features.py の list_features 参照)。
+    // a11y spec で `feature-list-row` を visible 待ちするため public で作成。
+    // 既存 `tests/e2e/features/list.spec.ts` と同じパターン
+    // (Copilot PR #133 round 1 指摘)。
     const tileset = await createTileset({
       name: "a11y-feature-fixture",
       type: "vector",
+      isPublic: true,
     });
     await createFeature({
       tilesetId: tileset.id,
