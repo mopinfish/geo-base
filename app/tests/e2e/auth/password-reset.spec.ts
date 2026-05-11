@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, request } from "@playwright/test";
 
 import { resetDatabase } from "../utils/reset-db";
 import { E2E_ADMIN_EMAIL } from "../utils/session";
@@ -22,53 +22,82 @@ test("AUTH-07 パスワードリセット申請 → 成功メッセージ", asyn
   });
 });
 
-test("AUTH-08 reset token で新パスワード設定 → 新パスワードでログイン可", async ({
-  page,
-}) => {
-  // 申請して token 発行
-  await page.goto("/password-reset/request");
-  await page.getByTestId("password-reset-email").fill(E2E_ADMIN_EMAIL);
-  await page.getByTestId("password-reset-submit").click();
-  await expect(page.getByTestId("password-reset-success")).toBeVisible({
-    timeout: 10_000,
+test.describe("Password reset round-trip (AUTH-08)", () => {
+  // CI 初回実行 (run 25650874619) で AUTH-08 が timeout を超え、
+  // inline rollback が走らず admin password が壊れた状態で残り、
+  // 後続のすべての authenticated テストが 401 で fail するカスケード障害が
+  // 発生した。これを防ぐため:
+  // 1. test timeout を 60s に拡張 (CI の page goto は 1 回で 1-3s かかる)
+  // 2. rollback は inline ではなく `afterAll` で API 直叩きで実行する
+  //    (テスト本体が timeout / fail しても確実に走る)
+  test.afterAll(async () => {
+    const apiBase =
+      process.env.PLAYWRIGHT_API_BASE_URL || "http://localhost:8000";
+    const ctx = await request.newContext({ baseURL: apiBase });
+    try {
+      await ctx.post("/api/auth/password-reset/request", {
+        data: { email: E2E_ADMIN_EMAIL },
+      });
+      const token = await fetchRecentToken(
+        "password_reset",
+        E2E_ADMIN_EMAIL,
+      );
+      const res = await ctx.post("/api/auth/password-reset/confirm", {
+        data: { token, new_password: ORIGINAL_PASSWORD },
+      });
+      if (!res.ok()) {
+        // 失敗してもテストは止めない (元々失敗してた場合、admin password は
+        // まだ ORIGINAL のままの可能性も高い)。ログだけ残す。
+        // eslint-disable-next-line no-console
+        console.error(
+          `AUTH-08 rollback warn: confirm ${res.status()} ${await res.text()}`,
+        );
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("AUTH-08 password rollback failed:", err);
+    } finally {
+      await ctx.dispose();
+    }
   });
 
-  // console backend が記録した token を取り出す
-  const token = await fetchRecentToken("password_reset", E2E_ADMIN_EMAIL);
+  test("AUTH-08 reset token で新パスワード設定 → 新パスワードでログイン可", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
 
-  // 確認ページで新パスワード設定
-  await page.goto(`/password-reset/confirm?token=${encodeURIComponent(token)}`);
-  await page.getByTestId("password-reset-confirm-password").fill(NEW_PASSWORD);
-  await page.getByTestId("password-reset-confirm-submit").click();
-  await expect(
-    page.getByTestId("password-reset-confirm-success"),
-  ).toBeVisible({ timeout: 10_000 });
+    // 申請して token 発行
+    await page.goto("/password-reset/request");
+    await page.getByTestId("password-reset-email").fill(E2E_ADMIN_EMAIL);
+    await page.getByTestId("password-reset-submit").click();
+    await expect(page.getByTestId("password-reset-success")).toBeVisible({
+      timeout: 10_000,
+    });
 
-  // 新パスワードでログイン
-  await page.goto("/login");
-  await page.getByTestId("login-email").fill(E2E_ADMIN_EMAIL);
-  await page.getByTestId("login-password").fill(NEW_PASSWORD);
-  await page.getByTestId("login-submit").click();
-  await page.waitForURL("/", { timeout: 15_000 });
+    // console backend が記録した token を取り出す
+    const token = await fetchRecentToken("password_reset", E2E_ADMIN_EMAIL);
 
-  // rollback: 元のパスワードに戻す (admin user は他テストと共有のため必須)
-  await page.goto("/password-reset/request");
-  await page.getByTestId("password-reset-email").fill(E2E_ADMIN_EMAIL);
-  await page.getByTestId("password-reset-submit").click();
-  await expect(page.getByTestId("password-reset-success")).toBeVisible({
-    timeout: 10_000,
+    // 確認ページで新パスワード設定
+    await page.goto(
+      `/password-reset/confirm?token=${encodeURIComponent(token)}`,
+    );
+    await page
+      .getByTestId("password-reset-confirm-password")
+      .fill(NEW_PASSWORD);
+    await page.getByTestId("password-reset-confirm-submit").click();
+    await expect(
+      page.getByTestId("password-reset-confirm-success"),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // 新パスワードでログイン
+    await page.goto("/login");
+    await page.getByTestId("login-email").fill(E2E_ADMIN_EMAIL);
+    await page.getByTestId("login-password").fill(NEW_PASSWORD);
+    await page.getByTestId("login-submit").click();
+    await page.waitForURL("/", { timeout: 15_000 });
+
+    // rollback は `afterAll` で API 経由実行 (テスト失敗時も確実に走るため)
   });
-  const rollback = await fetchRecentToken("password_reset", E2E_ADMIN_EMAIL);
-  await page.goto(
-    `/password-reset/confirm?token=${encodeURIComponent(rollback)}`,
-  );
-  await page
-    .getByTestId("password-reset-confirm-password")
-    .fill(ORIGINAL_PASSWORD);
-  await page.getByTestId("password-reset-confirm-submit").click();
-  await expect(
-    page.getByTestId("password-reset-confirm-success"),
-  ).toBeVisible({ timeout: 10_000 });
 });
 
 test("AUTH-09 無効な reset token → エラー表示", async ({ page }) => {
