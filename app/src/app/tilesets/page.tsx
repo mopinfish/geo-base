@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
+
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +51,9 @@ import {
 
 export default function TilesetsPage() {
   const { api, isReady } = useApi();
+  const t = useTranslations("tilesets.list");
+  const locale = useLocale();
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
 
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [filteredTilesets, setFilteredTilesets] = useState<Tileset[]>([]);
@@ -66,21 +71,16 @@ export default function TilesetsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTilesets = useCallback(async () => {
-    if (!isReady) {
-      console.log("API not ready yet, skipping fetch");
-      return;
-    }
+    if (!isReady) return;
 
     setIsLoading(true);
     setError(null);
     try {
-      console.log("Fetching tilesets...");
       // ログイン済みユーザーが所有する非公開タイルセットも一覧に出すため
       // include_private=true を明示する（issue #102）。`/api/tilesets` の既定は
       // 公開のみなので、これが無いと自分の非公開タイルセットが UI から消える。
       // 公開/非公開の絞り込みは下流の `publicFilter` (client-side) で行う。
       const data = await api.listTilesets({ include_private: true });
-      console.log("API Response:", data);
 
       // APIレスポンスの形式に対応
       // - 配列の場合: data そのもの
@@ -91,7 +91,6 @@ export default function TilesetsPage() {
       } else if (data && typeof data === "object" && "tilesets" in data) {
         tilesetsArray = (data as { tilesets: Tileset[] }).tilesets;
       }
-      console.log("Tilesets array:", tilesetsArray);
 
       setTilesets(tilesetsArray);
       setFilteredTilesets(tilesetsArray);
@@ -100,15 +99,13 @@ export default function TilesetsPage() {
       setSelectedIds(new Set());
     } catch (err) {
       console.error("Fetch error:", err);
-      setError(
-        err instanceof Error ? err.message : "タイルセットの取得に失敗しました"
-      );
+      setError(err instanceof Error ? err.message : t("error_fetch"));
       setTilesets([]);
       setFilteredTilesets([]);
     } finally {
       setIsLoading(false);
     }
-  }, [api, isReady]);
+  }, [api, isReady, t]);
 
   // isReadyになったらfetch
   useEffect(() => {
@@ -148,7 +145,7 @@ export default function TilesetsPage() {
   }, [tilesets, searchQuery, typeFilter, publicFilter]);
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("ja-JP", {
+    return new Date(dateString).toLocaleDateString(dateLocale, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -196,14 +193,14 @@ export default function TilesetsPage() {
       );
 
       if (errors.length > 0) {
-        setError(`${errors.length}件の削除に失敗しました`);
+        setError(t("bulk_delete_partial_error", { count: errors.length }));
       }
 
       // データを再取得
       await fetchTilesets();
       setBulkDeleteDialogOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_delete"));
     } finally {
       setIsDeleting(false);
     }
@@ -215,8 +212,8 @@ export default function TilesetsPage() {
         {/* ヘッダー */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">タイルセット</h1>
-            <p className="text-muted-foreground">タイルセットの一覧と管理</p>
+            <h1 className="text-3xl font-bold">{t("title")}</h1>
+            <p className="text-muted-foreground">{t("subtitle")}</p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -228,12 +225,12 @@ export default function TilesetsPage() {
               <RefreshCw
                 className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
               />
-              更新
+              {t("refresh")}
             </Button>
             <Link href="/tilesets/new" data-testid="tileset-create-link">
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                新規作成
+                {t("new")}
               </Button>
             </Link>
           </div>
@@ -246,7 +243,7 @@ export default function TilesetsPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="タイルセットを検索..."
+                  placeholder={t("search_placeholder")}
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -257,29 +254,29 @@ export default function TilesetsPage() {
                 <SelectTrigger
                   className="w-[150px]"
                   data-testid="tileset-filter-type"
-                  aria-label="タイプで絞り込み"
+                  aria-label={t("filter_type_label")}
                 >
-                  <SelectValue placeholder="タイプ" />
+                  <SelectValue placeholder={t("filter_type_placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">すべてのタイプ</SelectItem>
-                  <SelectItem value="vector">ベクタ</SelectItem>
-                  <SelectItem value="raster">ラスタ</SelectItem>
-                  <SelectItem value="pmtiles">PMTiles</SelectItem>
+                  <SelectItem value="all">{t("filter_type_all")}</SelectItem>
+                  <SelectItem value="vector">{t("filter_type_vector")}</SelectItem>
+                  <SelectItem value="raster">{t("filter_type_raster")}</SelectItem>
+                  <SelectItem value="pmtiles">{t("filter_type_pmtiles")}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={publicFilter} onValueChange={setPublicFilter}>
                 <SelectTrigger
                   className="w-[150px]"
                   data-testid="tileset-filter-public"
-                  aria-label="公開状態で絞り込み"
+                  aria-label={t("filter_public_label")}
                 >
-                  <SelectValue placeholder="公開状態" />
+                  <SelectValue placeholder={t("filter_public_placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">すべて</SelectItem>
-                  <SelectItem value="public">公開</SelectItem>
-                  <SelectItem value="private">非公開</SelectItem>
+                  <SelectItem value="all">{t("filter_public_all")}</SelectItem>
+                  <SelectItem value="public">{t("filter_public_public")}</SelectItem>
+                  <SelectItem value="private">{t("filter_public_private")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -301,7 +298,7 @@ export default function TilesetsPage() {
             <CardContent className="py-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
-                  {selectedIds.size}件を選択中
+                  {t("selected_count", { count: selectedIds.size })}
                 </span>
                 <div className="flex gap-2">
                   <Button
@@ -309,7 +306,7 @@ export default function TilesetsPage() {
                     size="sm"
                     onClick={() => setSelectedIds(new Set())}
                   >
-                    選択解除
+                    {t("clear_selection")}
                   </Button>
                   <Button
                     variant="destructive"
@@ -318,7 +315,7 @@ export default function TilesetsPage() {
                     data-testid="tileset-bulk-delete"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    一括削除
+                    {t("bulk_delete")}
                   </Button>
                 </div>
               </div>
@@ -331,9 +328,9 @@ export default function TilesetsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Layers className="h-5 w-5" />
-              タイルセット一覧
+              {t("section_title")}
               <Badge variant="secondary" className="ml-2">
-                {filteredTilesets.length} 件
+                {t("count_badge", { count: filteredTilesets.length })}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -345,7 +342,7 @@ export default function TilesetsPage() {
             ) : filteredTilesets.length === 0 ? (
               <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
                 <Layers className="mb-2 h-8 w-8" />
-                <p>タイルセットがありません</p>
+                <p>{t("empty")}</p>
               </div>
             ) : (
               <Table>
@@ -363,12 +360,12 @@ export default function TilesetsPage() {
                         data-testid="tileset-select-all"
                       />
                     </TableHead>
-                    <TableHead>名前</TableHead>
-                    <TableHead>タイプ</TableHead>
-                    <TableHead>フォーマット</TableHead>
-                    <TableHead>公開</TableHead>
-                    <TableHead>更新日</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
+                    <TableHead>{t("column_name")}</TableHead>
+                    <TableHead>{t("column_type")}</TableHead>
+                    <TableHead>{t("column_format")}</TableHead>
+                    <TableHead>{t("column_public")}</TableHead>
+                    <TableHead>{t("column_updated")}</TableHead>
+                    <TableHead className="text-right">{t("column_actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -414,12 +411,12 @@ export default function TilesetsPage() {
                         {tileset.is_public ? (
                           <Badge variant="default" className="gap-1">
                             <Globe className="h-3 w-3" />
-                            公開
+                            {t("badge_public")}
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="gap-1">
                             <Lock className="h-3 w-3" />
-                            非公開
+                            {t("badge_private")}
                           </Badge>
                         )}
                       </TableCell>
@@ -429,12 +426,22 @@ export default function TilesetsPage() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Link href={`/tilesets/${tileset.id}`}>
-                            <Button variant="ghost" size="icon" title="詳細">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("action_view")}
+                              aria-label={t("action_view")}
+                            >
                               <Eye className="h-4 w-4" />
                             </Button>
                           </Link>
                           <Link href={`/tilesets/${tileset.id}/edit`}>
-                            <Button variant="ghost" size="icon" title="編集">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("action_edit")}
+                              aria-label={t("action_edit")}
+                            >
                               <Pencil className="h-4 w-4" />
                             </Button>
                           </Link>
@@ -456,18 +463,14 @@ export default function TilesetsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              タイルセットを一括削除しますか？
-            </AlertDialogTitle>
+            <AlertDialogTitle>{t("bulk_delete_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              選択した {selectedIds.size} 件のタイルセットを削除します。
-              タイルセットに含まれるフィーチャーやデータソースも削除されます。
-              この操作は取り消せません。
+              {t("bulk_delete_description", { count: selectedIds.size })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
-              キャンセル
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
@@ -477,12 +480,12 @@ export default function TilesetsPage() {
               {isDeleting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  削除中...
+                  {t("deleting")}
                 </>
               ) : (
                 <>
                   <Trash2 className="mr-2 h-4 w-4" />
-                  {selectedIds.size}件を削除
+                  {t("bulk_delete_button", { count: selectedIds.size })}
                 </>
               )}
             </AlertDialogAction>
