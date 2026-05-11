@@ -878,10 +878,15 @@ MCPサーバーの設定情報を取得します。
 |--------|------|
 | `VALIDATION_ERROR` | 入力パラメータが無効 |
 | `NOT_FOUND` | リソースが見つからない |
-| `UNAUTHORIZED` | 認証が必要 |
+| `AUTH_REQUIRED` | 認証が必要 |
 | `FORBIDDEN` | アクセス権限がない |
-| `HTTP_ERROR` | HTTPエラー（4xx/5xx） |
+| `INVALID_TOKEN` | トークン拒否（期限切れ / 不正） |
+| `TIMEOUT` | リクエストがタイムアウト |
 | `NETWORK_ERROR` | ネットワークエラー |
+| `CONNECTION_ERROR` | 上流サービスに接続できない |
+| `SERVER_ERROR` | 上流サーバーエラー（5xx） |
+| `SERVICE_UNAVAILABLE` | 上流サービスが利用不可 |
+| `HTTP_ERROR` | その他の HTTP エラー |
 | `UNKNOWN_ERROR` | 予期しないエラー |
 
 ### 例
@@ -905,7 +910,7 @@ MCPサーバーの設定情報を取得します。
 ```json
 {
   "error": "Authentication required",
-  "code": "UNAUTHORIZED",
+  "code": "AUTH_REQUIRED",
   "hint": "This feature may belong to a private tileset. Configure API_TOKEN."
 }
 ```

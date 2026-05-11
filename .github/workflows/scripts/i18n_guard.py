@@ -1,20 +1,29 @@
 #!/usr/bin/env python3
 """i18n guard (Phase 2 / Issue #106).
 
-API レスポンス相当箇所と MCP tool 記述に日本語混入がないことを fail-fast で
-検証する。Phase 1 完了時点で API/Pydantic は全て英語化済みなので、本ガードは
-「リグレッション防止」が主目的。
+API レスポンス相当箇所と MCP の公開コード表面に日本語混入がないことを
+fail-fast で検証する。Phase 1 完了時点で API/Pydantic は全て英語化済みなので、
+本ガードは「リグレッション防止」が主目的。
 
 検出範囲:
-  1. api/lib/routers/**/*.py の `detail=...` を含む行の文字列リテラル
-  2. api/lib/models/**/*.py の Pydantic Field(..., description="...") の文字列
-  3. api/lib/routers/**/*.py の JSONResponse / Response(content=...) の文字列
-  4. mcp/tools/**/*.py の @mcp.tool() を含むファイル全体の文字列リテラル
+  1. `api/lib/routers/**/*.py` の `HTTPException(detail=...)` 等で
+     `detail` キーワード引数に渡される文字列リテラル
+  2. `api/lib/models/**/*.py` の Pydantic `Field(..., description=...)` で
+     `description` キーワード引数に渡される文字列リテラル
+  3. `api/lib/routers/**/*.py` の `JSONResponse(content=...)` 等の
+     `content` キーワード引数 (dict 内の値文字列も再帰的に検査)
+  4. `mcp/server.py` / `mcp/tools/**/*.py` / `mcp/errors.py` の全文字列
+     リテラル (公開ツール記述全体が対象)
 
-検出パターン: Hiragana / Katakana / CJK 統合漢字 (基本多言語面) が
-文字列リテラル中に含まれる場合。`tokenize` モジュールで Python を字句解析し、
-コメント (`# ...`) は除外。spec 14 章「コードコメントの一括英語化はしない」
-に従い、純コメントは検査しない。
+検出パターン: Hiragana (U+3040–U+309F) / Katakana (U+30A0–U+30FF) /
+CJK 統合漢字 (U+4E00–U+9FFF) のいずれかが文字列リテラル中に含まれる場合。
+`ast` モジュールで Python を構文解析するため、コメント (`# ...`) と
+docstring 以外の単純な式文 (`"some literal"` を式として書いたもの) は
+自然と検出対象から外れ、複数行にまたがる `detail=(...)` や f-string、
+辞書のネストにも対応する。
+
+spec 14 章「コードコメントの一括英語化はしない」を守るため、コメントと
+モジュールトップの docstring は検出対象外。
 
 Usage:
   python3 .github/workflows/scripts/i18n_guard.py
@@ -22,58 +31,121 @@ Usage:
 
 from __future__ import annotations
 
-import io
+import ast
 import re
 import sys
-import tokenize
 from pathlib import Path
-from typing import Callable
 
 # Hiragana (U+3040–U+309F), Katakana (U+30A0–U+30FF + prolonged sound mark),
 # CJK 統合漢字 (U+4E00–U+9FFF)。
 JP_CHARS = re.compile(r"[぀-ゟ゠-ヿ一-鿿]")
 
+# Keyword arguments whose values must not contain Japanese (API/Pydantic
+# kwargs). For `mcp/`, we scan all string literals regardless.
+TARGET_KWARGS = {"detail", "description", "content"}
 
-def iter_string_tokens(path: Path):
-    """Yield `(lineno, token_string, raw_source)` for each STRING token in `path`.
 
-    `tokenize` correctly handles Python lexical rules: triple-quoted strings,
-    nested apostrophes inside double-quoted strings, escape sequences, etc.
+def iter_string_literals(node: ast.AST):
+    """Recursively yield (lineno, value) for every string literal under `node`.
+
+    Handles:
+    - ast.Constant with str value
+    - ast.JoinedStr (f-string) → recurse into its parts
+    - ast.BinOp (string concat via '+') → recurse
+    - ast.Dict / ast.List / ast.Tuple / ast.Set → recurse into elements
+    - ast.Call → recurse into all args/kwargs (so content={"k": "v"} works)
+    - ast.keyword → recurse into .value
     """
-    try:
-        with path.open("rb") as fh:
-            for tok in tokenize.tokenize(fh.readline):
-                if tok.type == tokenize.STRING:
-                    yield (tok.start[0], tok.string)
-    except (SyntaxError, tokenize.TokenizeError, UnicodeDecodeError, OSError):
-        # Best-effort: skip files we can't tokenize.
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        yield (getattr(node, "lineno", 0), node.value)
+    elif isinstance(node, ast.JoinedStr):
+        for part in node.values:
+            yield from iter_string_literals(part)
+    elif isinstance(node, ast.FormattedValue):
+        # f-string の {expr:format} の expr は走査しないが、format spec の
+        # 文字列だけは見る必要は薄いのでスキップ。
         return
+    elif isinstance(node, ast.BinOp):
+        yield from iter_string_literals(node.left)
+        yield from iter_string_literals(node.right)
+    elif isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        for elt in node.elts:
+            yield from iter_string_literals(elt)
+    elif isinstance(node, ast.Dict):
+        for v in node.values:
+            yield from iter_string_literals(v)
+    elif isinstance(node, ast.Call):
+        for a in node.args:
+            yield from iter_string_literals(a)
+        for kw in node.keywords:
+            yield from iter_string_literals(kw.value)
+    elif isinstance(node, ast.keyword):
+        yield from iter_string_literals(node.value)
 
 
-def scan_file(
-    path: Path,
-    *,
-    line_filter: Callable[[str], bool] | None = None,
-) -> list[tuple[int, str]]:
-    """Return list of `(lineno, line_snippet)` where a string literal contains
-    Japanese. If `line_filter` is given, only include violations whose source
-    line passes the filter (e.g. line contains "detail=").
-    """
+def scan_kwargs(path: Path, kwarg_names: set[str]) -> list[tuple[int, str]]:
+    """指定の kwarg 名の value に含まれる文字列リテラルから日本語を検出。"""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text, filename=str(path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
         return []
 
+    lines = text.splitlines()
     out: list[tuple[int, str]] = []
-    for lineno, literal in iter_string_tokens(path):
-        if not JP_CHARS.search(literal):
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
             continue
-        if not (1 <= lineno <= len(lines)):
+        for kw in node.keywords:
+            if kw.arg not in kwarg_names:
+                continue
+            for lineno, literal in iter_string_literals(kw.value):
+                if not JP_CHARS.search(literal):
+                    continue
+                src = lines[lineno - 1] if 1 <= lineno <= len(lines) else literal
+                out.append((lineno, src.strip()))
+    return out
+
+
+def scan_all_strings(path: Path) -> list[tuple[int, str]]:
+    """ファイル中の全文字列リテラル (式 / call / 代入の右辺など) から日本語を検出。
+
+    モジュール冒頭の docstring (Expr(Constant(str)) が最初に来る) は対象外。
+    関数 docstring は対象 (公開関数の説明として MCP が露出させるため)。
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text, filename=str(path))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return []
+
+    lines = text.splitlines()
+    out: list[tuple[int, str]] = []
+
+    # モジュールトップの docstring を skip 用に記憶
+    module_docstring_node: ast.AST | None = None
+    if (
+        tree.body
+        and isinstance(tree.body[0], ast.Expr)
+        and isinstance(tree.body[0].value, ast.Constant)
+        and isinstance(tree.body[0].value.value, str)
+    ):
+        module_docstring_node = tree.body[0].value
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant):
             continue
-        source_line = lines[lineno - 1]
-        if line_filter is not None and not line_filter(source_line):
+        if not isinstance(node.value, str):
             continue
-        out.append((lineno, source_line.strip()))
+        if node is module_docstring_node:
+            continue
+        if not JP_CHARS.search(node.value):
+            continue
+        lineno = getattr(node, "lineno", 0)
+        src = lines[lineno - 1] if 1 <= lineno <= len(lines) else node.value
+        out.append((lineno, src.strip()))
+
     return out
 
 
@@ -90,25 +162,17 @@ def main() -> int:
 
     total: list[tuple[str, Path, int, str]] = []
 
-    # 1. api/lib/routers の detail=...
+    # 1. api/lib/routers の detail / content kwarg
     for path in collect_files(repo_root / "api" / "lib" / "routers"):
-        for lineno, snip in scan_file(path, line_filter=lambda L: "detail=" in L):
-            total.append(("api/lib/routers (detail=)", path, lineno, snip))
+        for lineno, snip in scan_kwargs(path, {"detail", "content"}):
+            total.append(("api/lib/routers (detail/content)", path, lineno, snip))
 
-    # 2. Pydantic Field(..., description=...)
+    # 2. api/lib/models の description kwarg (Pydantic Field)
     for path in collect_files(repo_root / "api" / "lib" / "models"):
-        for lineno, snip in scan_file(path, line_filter=lambda L: "description=" in L):
+        for lineno, snip in scan_kwargs(path, {"description"}):
             total.append(("api/lib/models (description=)", path, lineno, snip))
 
-    # 3. JSONResponse / Response の content
-    response_re = re.compile(r"\bJSONResponse\b|\bResponse\(")
-    for path in collect_files(repo_root / "api" / "lib" / "routers"):
-        for lineno, snip in scan_file(
-            path, line_filter=lambda L: bool(response_re.search(L))
-        ):
-            total.append(("api/lib/routers (JSONResponse/Response)", path, lineno, snip))
-
-    # 4. MCP の公開コード表面 (server.py / tools/*.py / errors.py)。
+    # 3. MCP の公開コード表面 (server.py / tools/*.py / errors.py)。
     #    @mcp.tool() 本体は mcp/server.py、helper 実装は mcp/tools/、
     #    error response 整形は mcp/errors.py。Phase 2 (#106) の対象。
     mcp_targets: list[Path] = []
@@ -118,15 +182,15 @@ def main() -> int:
             mcp_targets.append(p)
     mcp_targets.extend(collect_files(repo_root / "mcp" / "tools"))
     for path in mcp_targets:
-        for lineno, snip in scan_file(path):
-            rel_dir = "mcp/" + path.relative_to(repo_root / "mcp").parts[0]
-            total.append((rel_dir, path, lineno, snip))
+        for lineno, snip in scan_all_strings(path):
+            rel_top = path.relative_to(repo_root / "mcp").parts[0]
+            cat = f"mcp/{rel_top}"
+            total.append((cat, path, lineno, snip))
 
     if not total:
         print("i18n guard: OK (no Japanese strings detected in public API/MCP surfaces)")
         return 0
 
-    # Group by category
     by_cat: dict[str, list[tuple[Path, int, str]]] = {}
     for cat, path, lineno, snip in total:
         by_cat.setdefault(cat, []).append((path, lineno, snip))
@@ -143,7 +207,7 @@ def main() -> int:
     print(
         "\nIf a literal must remain (e.g. a non-ASCII example in the MCP "
         "geocoder), move it into a Python comment (`# ...`) — the guard "
-        "only flags STRING tokens, never comments."
+        "inspects AST string nodes only, never comments or module-level docstrings."
     )
     return 1
 

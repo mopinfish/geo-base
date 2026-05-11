@@ -878,10 +878,15 @@ When an error occurs, every tool returns a response in the following format:
 |------|-------------|
 | `VALIDATION_ERROR` | Invalid input parameter |
 | `NOT_FOUND` | Resource not found |
-| `UNAUTHORIZED` | Authentication required |
+| `AUTH_REQUIRED` | Authentication required |
 | `FORBIDDEN` | No access permission |
-| `HTTP_ERROR` | HTTP error (4xx/5xx) |
+| `INVALID_TOKEN` | Token rejected (expired / malformed) |
+| `TIMEOUT` | Request timed out |
 | `NETWORK_ERROR` | Network error |
+| `CONNECTION_ERROR` | Could not connect to the upstream service |
+| `SERVER_ERROR` | Upstream server error (5xx) |
+| `SERVICE_UNAVAILABLE` | Upstream service unavailable |
+| `HTTP_ERROR` | Other HTTP error |
 | `UNKNOWN_ERROR` | Unexpected error |
 
 ### Examples
@@ -905,7 +910,7 @@ When an error occurs, every tool returns a response in the following format:
 ```json
 {
   "error": "Authentication required",
-  "code": "UNAUTHORIZED",
+  "code": "AUTH_REQUIRED",
   "hint": "This feature may belong to a private tileset. Configure API_TOKEN."
 }
 ```
