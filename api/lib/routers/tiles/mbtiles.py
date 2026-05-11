@@ -7,7 +7,7 @@ In production, use database-backed tiles instead.
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Response
 
 from lib.errors import ErrorCode, api_error
 from lib.tiles import (

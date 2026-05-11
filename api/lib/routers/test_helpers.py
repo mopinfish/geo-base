@@ -52,9 +52,17 @@ _RESETTABLE_TABLES = [
 
 
 def _assert_e2e_mode_or_die() -> None:
-    """ハンドラ突入時の二重防御。本番に出ても fail-closed にする。"""
+    """ハンドラ突入時の二重防御。本番に出ても fail-closed にする。
+
+    本来 main.py で E2E_MODE=1 のときだけ router を include するため到達不能
+    だが、router を import し忘れたケース等の最後の安全網。FastAPI 標準の
+    404 と区別がつかない (`{detail: "Not Found"}`) plain HTTPException を
+    使うことで、production に endpoint が露出している事実そのものを隠す。
+    envelope code は意図的に使わない (`INTERNAL_UNEXPECTED` 等で 'translated
+    error message in production' を出さないため)。
+    """
     if os.getenv("E2E_MODE") != "1":
-        raise api_error(404, ErrorCode.INTERNAL_UNEXPECTED, "Not Found")
+        raise HTTPException(status_code=404, detail="Not Found")
 
 
 def _assert_e2e_database_or_die() -> None:

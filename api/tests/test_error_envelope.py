@@ -67,6 +67,32 @@ def test_is_envelope_detail_negative_cases():
     assert not is_envelope_detail([1, 2])
 
 
+def test_is_envelope_detail_rejects_non_string_code_or_message():
+    """Copilot PR #126 round 2 指摘: code/message が string でない場合は
+    envelope と認識しない。"""
+    # code が int
+    assert not is_envelope_detail({"error": {"code": 123, "message": "ok"}})
+    # message が dict
+    assert not is_envelope_detail({"error": {"code": "x", "message": {}}})
+    # message が None
+    assert not is_envelope_detail({"error": {"code": "x", "message": None}})
+
+
+def test_is_envelope_detail_rejects_non_dict_details():
+    """details が ある場合は dict であることを要求 (Copilot PR #126 round 2)。"""
+    assert not is_envelope_detail(
+        {"error": {"code": "x", "message": "y", "details": "not a dict"}}
+    )
+    assert not is_envelope_detail(
+        {"error": {"code": "x", "message": "y", "details": [1, 2]}}
+    )
+    # details が None でも reject (実用上不要なら is_envelope_detail を呼ぶ前に
+    # del すべき。本 guard では invalid 扱い)
+    assert not is_envelope_detail(
+        {"error": {"code": "x", "message": "y", "details": None}}
+    )
+
+
 # --- exception handler integration ---
 
 

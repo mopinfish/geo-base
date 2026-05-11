@@ -197,10 +197,23 @@ def is_envelope_detail(detail: Any) -> bool:
     main.py の exception handler が、`detail.error.code` がある場合は
     body をそのまま (= `{error: {...}}`) で返し、そうでなければ default
     の `{detail: ...}` を返すために使う。
+
+    型を厳密にチェックする (Copilot PR #126 round 2 指摘):
+    - `code` と `message` は string であること
+    - `details` がある場合は dict であること
+    これにより `{error: {"code": 123, ...}}` のような不一致 dict を
+    誤って unwrap して clients に壊れた envelope を返すのを防ぐ。
     """
     if not isinstance(detail, dict):
         return False
     inner = detail.get(ENVELOPE_MARKER_KEY)
     if not isinstance(inner, dict):
         return False
-    return "code" in inner and "message" in inner
+    if not isinstance(inner.get("code"), str):
+        return False
+    if not isinstance(inner.get("message"), str):
+        return False
+    # `details` is optional but, if present, must be a dict.
+    if "details" in inner and not isinstance(inner["details"], dict):
+        return False
+    return True

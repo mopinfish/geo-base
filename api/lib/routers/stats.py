@@ -2,13 +2,9 @@
 Statistics endpoints.
 """
 
-import uuid
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
 
 from lib.database import get_db_connection
-from lib.auth import User, get_current_user
 from lib.errors import ErrorCode, api_error
 
 
