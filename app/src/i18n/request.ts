@@ -27,20 +27,7 @@ import {
   type Locale,
 } from "./config";
 import { LOCALE_COOKIE_NAME } from "./locale-cookie";
-
-function parseAcceptLanguage(header: string): Locale | null {
-  for (const part of header.split(",")) {
-    const tag = part
-      .split(";")[0]
-      ?.trim()
-      .split("-")[0]
-      ?.toLowerCase();
-    if (tag && (LOCALES as readonly string[]).includes(tag)) {
-      return tag as Locale;
-    }
-  }
-  return null;
-}
+import { parseAcceptLanguage } from "./parse-accept-language";
 
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();

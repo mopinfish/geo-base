@@ -8,8 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 
-def _build_client(monkeypatch) -> tuple[TestClient, AsyncMock]:
-    """`require_auth` を override してテスト用ユーザーを返す + provider mock。"""
+def _build_client(monkeypatch) -> tuple[TestClient, MagicMock]:
+    """`require_auth` を override してテスト用ユーザーを返す + provider mock。
+
+    戻り値は `(TestClient, provider_mock)`。`provider_mock` は `MagicMock` で、
+    `update_preferred_locale` のみを `AsyncMock` として注入している
+    (他属性は MagicMock の自動生成挙動)。
+    """
     monkeypatch.setenv("E2E_MODE", "0")
     monkeypatch.setenv(
         "DATABASE_URL",

@@ -11,6 +11,7 @@ import {
   LOCALE_COOKIE_MAX_AGE,
   LOCALE_COOKIE_NAME,
 } from "@/i18n/locale-cookie";
+import { parseAcceptLanguage } from "@/i18n/parse-accept-language";
 
 /**
  * Resolve locale for the incoming request (Phase 3 / Issue #107).
@@ -36,16 +37,10 @@ function resolveLocale(request: NextRequest): Locale {
     return cookie as Locale;
   }
 
-  const acceptLanguage = request.headers.get("accept-language") ?? "";
-  const candidates = acceptLanguage
-    .split(",")
-    .map((part) => part.split(";")[0]?.trim().split("-")[0]?.toLowerCase())
-    .filter((c): c is string => Boolean(c));
-  for (const c of candidates) {
-    if ((LOCALES as readonly string[]).includes(c)) {
-      return c as Locale;
-    }
-  }
+  const fromAcceptLanguage = parseAcceptLanguage(
+    request.headers.get("accept-language") ?? "",
+  );
+  if (fromAcceptLanguage) return fromAcceptLanguage;
 
   return FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE;
 }
