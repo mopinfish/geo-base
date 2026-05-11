@@ -26,6 +26,11 @@ function AcceptInvitationForm() {
     // この effect 自体はマウント時に呼ばれるが、network fetch だけスキップする
     // (Copilot PR #131 round 2 指摘: 「effect は呼ばれない」表現は誤解を生む)。
     if (!token) return;
+    // 古い fetch の error / info を確実にクリアしてから再 fetch する。
+    // これがないと、token が変わって fetch が成功してもフォーム上に古い
+    // エラーメッセージが残る (Copilot PR #131 round 3 指摘)。
+    setError(null);
+    setInfo(null);
     authClient.getInvitationInfo(token)
       .then(setInfo)
       .catch((err) =>
