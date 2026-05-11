@@ -200,19 +200,58 @@ export interface CreatedApiKey {
 export async function createApiKey(input: {
   name: string;
   scopes?: string[];
+  /**
+   * 作成時に有効期限を付ける場合の日数 (1..365)。`ApiKeyCreate.expires_in_days`
+   * に射影される。過去日付の expires_at を作りたい場合は本フィールドではなく、
+   * `expireApiKey` (test_helpers) を使って既存キーを更新する。
+   */
+  expiresInDays?: number;
 }): Promise<CreatedApiKey> {
   const ctx = await createApiClient();
   try {
-    const res = await ctx.post("/api/api-keys", {
-      data: {
-        name: input.name,
-        scopes: input.scopes ?? ["read"],
-      },
-    });
+    const data: Record<string, unknown> = {
+      name: input.name,
+      scopes: input.scopes ?? ["read"],
+    };
+    if (input.expiresInDays !== undefined) {
+      data.expires_in_days = input.expiresInDays;
+    }
+    const res = await ctx.post("/api/api-keys", { data });
     if (!res.ok()) {
       throw new Error(`createApiKey failed: ${res.status()} ${await res.text()}`);
     }
     return (await res.json()) as CreatedApiKey;
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/**
+ * E2E 専用: 既存 API キーの `expires_at` を過去日時に書き換える。
+ * `ApiKeyCreate.expires_in_days` は 1..365 の正の範囲しか許さないので、
+ * 「すでに期限切れ」の状態を作るために test_helpers エンドポイントを使う。
+ */
+export async function expireApiKey(input: {
+  keyId: string;
+  minutesAgo?: number;
+}): Promise<void> {
+  // test_helpers は API_BASE 側の `/api/test/api-keys/expire` に同居している。
+  // resetDatabase と同じく認証不要の request context で直接叩く。
+  const { request } = await import("@playwright/test");
+  const apiBase = process.env.PLAYWRIGHT_API_BASE_URL || "http://localhost:8000";
+  const ctx = await request.newContext({ baseURL: apiBase });
+  try {
+    const res = await ctx.post("/api/test/api-keys/expire", {
+      data: {
+        key_id: input.keyId,
+        minutes_ago: input.minutesAgo ?? 60,
+      },
+    });
+    if (!res.ok()) {
+      throw new Error(
+        `expireApiKey failed: ${res.status()} ${await res.text()}`,
+      );
+    }
   } finally {
     await ctx.dispose();
   }
