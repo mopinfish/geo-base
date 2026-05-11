@@ -7,14 +7,11 @@ import { loginAsAdmin } from "../utils/session";
 /**
  * Features の CRUD: 新規作成 (Point/Polygon) / 編集 / 詳細 (FT-09〜FT-12)。
  *
- * FT-09 と FT-10: FeatureForm は MapLibre GL ベースの GeometryEditor で
- * 座標を入力する設計 (`@/components/map/GeometryEditor`)。マウスクリックや
- * マーカードラッグが必要で、Playwright で安定して操作するのが難しい (E2E
- * における flakiness の典型)。GeoJSON を文字列で直接入力するモードは
- * 現状の UI に存在せず、新規追加は本タスクの範囲外。Phase 3 で
- *   - FeatureForm に "GeoJSON 文字列入力" モードを追加するか
- *   - GeometryEditor を test-only に "fillCoordinates" hook 経由で操作する
- * のどちらかで対応する想定。今は test.skip。
+ * FT-09 と FT-10: FeatureForm に Phase 3 で「GeoJSON 直接入力」モード
+ * (`feature-form-mode-geojson` タブ + `feature-form-geometry-text` textarea)
+ * を追加し、MapLibre のマウス操作に依存せず geometry を入れられるように
+ * したので有効化済み。`/features/new` で tileset を選び、GeoJSON 文字列を
+ * fill して submit し、詳細ページ (`/features/<id>`) への遷移を待つ。
  *
  * FT-11 と FT-12 は factory で feature を作成し、編集ページのプロパティ
  * 行 input と詳細ページのマップ要素を確認する形で実装している。
@@ -24,22 +21,78 @@ test.describe("Features CRUD", () => {
     await loginAsAdmin();
   });
 
-  test.skip(
-    "FT-09 Point geometry で新規作成",
-    // Reason: FeatureForm は MapLibre GL の GeometryEditor (マウスクリックで
-    // 座標を打つ UI) のみで、Playwright から安定して座標を入れる手段が無い。
-    // GeoJSON 文字列直接入力のフォールバックを追加してから本テストを有効化する
-    // (Phase 3 予定)。
-    () => {},
-  );
+  test("FT-09 Point geometry で新規作成", async ({ page }) => {
+    await resetDatabase();
+    const tileset = await createTileset({
+      name: "ft-create-point",
+      type: "vector",
+      isPublic: true,
+    });
 
-  test.skip(
-    "FT-10 Polygon geometry で新規作成",
-    // Reason: FT-09 と同様。GeometryEditor のマウス操作 (連続クリックで頂点を
-    // 打つ UI) を Playwright で stable に再現できないため、Phase 3 で
-    // GeoJSON 直接入力モードを追加してから有効化する。
-    () => {},
-  );
+    await page.goto("/features/new");
+    // フォームの hydrate (tileset list fetch) を待つ。
+    await expect(page.getByTestId("feature-form-tileset")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // tileset 選択 (shadcn Select は trigger をクリック → option をクリック)。
+    await page.getByTestId("feature-form-tileset").click();
+    await page.getByRole("option", { name: tileset.name }).click();
+
+    // GeoJSON 直接入力モードに切替えて Point を流し込む。
+    await page.getByTestId("feature-form-mode-geojson").click();
+    await page
+      .getByTestId("feature-form-geometry-text")
+      .fill('{"type":"Point","coordinates":[139.767,35.681]}');
+
+    // Submit ボタンが有効になるのを待ってからクリック。
+    const submit = page.getByTestId("feature-form-submit");
+    await expect(submit).toBeEnabled({ timeout: 5_000 });
+    await submit.click();
+
+    // 作成後は `/features/<id>` (edit でも new でもない) に遷移する。
+    await page.waitForURL(/\/features\/[a-f0-9-]+$/, { timeout: 15_000 });
+  });
+
+  test("FT-10 Polygon geometry で新規作成", async ({ page }) => {
+    await resetDatabase();
+    const tileset = await createTileset({
+      name: "ft-create-polygon",
+      type: "vector",
+      isPublic: true,
+    });
+
+    await page.goto("/features/new");
+    await expect(page.getByTestId("feature-form-tileset")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page.getByTestId("feature-form-tileset").click();
+    await page.getByRole("option", { name: tileset.name }).click();
+
+    // Polygon の coordinates は [outerRing, ...holes]、外環は閉じた ring。
+    const polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [139.7, 35.6],
+          [139.8, 35.6],
+          [139.8, 35.7],
+          [139.7, 35.6],
+        ],
+      ],
+    };
+    await page.getByTestId("feature-form-mode-geojson").click();
+    await page
+      .getByTestId("feature-form-geometry-text")
+      .fill(JSON.stringify(polygon));
+
+    const submit = page.getByTestId("feature-form-submit");
+    await expect(submit).toBeEnabled({ timeout: 5_000 });
+    await submit.click();
+
+    await page.waitForURL(/\/features\/[a-f0-9-]+$/, { timeout: 15_000 });
+  });
 
   test("FT-11 プロパティ編集", async ({ page }) => {
     await resetDatabase();

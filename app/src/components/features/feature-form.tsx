@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Plus, Trash2, MapPin, ChevronDown, ChevronUp } from "lucide-react";
 import { GeometryEditor } from "@/components/map";
 import type { Tileset, FeatureCreate, FeatureUpdate } from "@/lib/api";
@@ -118,6 +120,63 @@ export function FeatureForm({
 
   // 座標入力の展開状態
   const [showCoordInputs, setShowCoordInputs] = useState(false);
+
+  // ジオメトリ入力モード: "map" (既存の MapLibre GeometryEditor) /
+  // "geojson" (テキストで GeoJSON 文字列を直接入れる)。既定は "map" で
+  // 既存ユーザー体験を変えない。
+  const [inputMode, setInputMode] = useState<"map" | "geojson">("map");
+  const [geojsonText, setGeojsonText] = useState<string>(() => {
+    if (!initialData?.geometry) return "";
+    try {
+      return JSON.stringify(initialData.geometry, null, 2);
+    } catch {
+      return "";
+    }
+  });
+  const [geojsonError, setGeojsonError] = useState<string | null>(null);
+
+  // GeoJSON 文字列を既存の geometryType / coordinates state に流し込む。
+  // 簡易バリデーションのみで、座標の数値検査は既存の isGeometryValid に委ねる。
+  const applyGeojsonText = (text: string) => {
+    setGeojsonText(text);
+    if (!text.trim()) {
+      setGeojsonError(null);
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // 入力途中で parse できないのは UX 上問題ないので、state は触らない。
+      setGeojsonError("JSON として解釈できません");
+      return;
+    }
+    if (!parsed || typeof parsed !== "object") {
+      setGeojsonError("オブジェクトを入力してください");
+      return;
+    }
+    const obj = parsed as { type?: unknown; coordinates?: unknown };
+    if (typeof obj.type !== "string" || !Array.isArray(obj.coordinates)) {
+      setGeojsonError("type と coordinates が必要です");
+      return;
+    }
+    if (obj.type !== "Point" && obj.type !== "LineString" && obj.type !== "Polygon") {
+      setGeojsonError("Point / LineString / Polygon のみ対応しています");
+      return;
+    }
+    // 既存の geometryType / coordinates 形式に変換 (Polygon は外環のみ)。
+    setGeometryType(obj.type);
+    if (obj.type === "Point") {
+      setCoordinates(obj.coordinates as [number, number]);
+    } else if (obj.type === "LineString") {
+      setCoordinates(obj.coordinates as [number, number][]);
+    } else {
+      // Polygon: coordinates = [outerRing, ...holes] の外環だけ拾う。
+      const outer = (obj.coordinates as [number, number][][])[0];
+      setCoordinates(Array.isArray(outer) ? outer : null);
+    }
+    setGeojsonError(null);
+  };
 
   // プロパティを追加
   const addProperty = () => {
@@ -382,91 +441,129 @@ export function FeatureForm({
             )}
           </div>
 
-          {/* 地図エディタ */}
-          <GeometryEditor
-            geometryType={geometryType}
-            coordinates={coordinates}
-            onChange={handleCoordinatesChange}
-            height="400px"
-          />
+          {/* 入力モード切替: マップ描画 or GeoJSON 直接入力 */}
+          <Tabs
+            value={inputMode}
+            onValueChange={(v) => setInputMode(v as "map" | "geojson")}
+          >
+            <TabsList>
+              <TabsTrigger value="map" data-testid="feature-form-mode-map">
+                マップで描画
+              </TabsTrigger>
+              <TabsTrigger value="geojson" data-testid="feature-form-mode-geojson">
+                GeoJSON 直接入力
+              </TabsTrigger>
+            </TabsList>
 
-          {/* 座標入力フィールド（折りたたみ可能） */}
-          <div className="border rounded-md">
-            <button
-              type="button"
-              className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50"
-              onClick={() => setShowCoordInputs(!showCoordInputs)}
-            >
-              <span>座標を数値で編集</span>
-              {showCoordInputs ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </button>
-            
-            {showCoordInputs && (
-              <div className="p-3 border-t space-y-3">
-                {coordsArray.map((coord, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2 rounded-md border p-2"
-                  >
-                    <span className="text-sm font-medium w-8">#{index + 1}</span>
-                    <div className="flex-1 grid grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-xs">経度</Label>
-                        <Input
-                          type="number"
-                          step="any"
-                          value={coord[0]}
-                          onChange={(e) =>
-                            updateCoordinate(index, "lng", parseFloat(e.target.value))
-                          }
-                          placeholder="経度"
-                          className="h-8"
-                        />
+            <TabsContent value="map" className="space-y-4">
+              {/* 地図エディタ */}
+              <GeometryEditor
+                geometryType={geometryType}
+                coordinates={coordinates}
+                onChange={handleCoordinatesChange}
+                height="400px"
+              />
+
+              {/* 座標入力フィールド（折りたたみ可能） */}
+              <div className="border rounded-md">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50"
+                  onClick={() => setShowCoordInputs(!showCoordInputs)}
+                >
+                  <span>座標を数値で編集</span>
+                  {showCoordInputs ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+
+                {showCoordInputs && (
+                  <div className="p-3 border-t space-y-3">
+                    {coordsArray.map((coord, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 rounded-md border p-2"
+                      >
+                        <span className="text-sm font-medium w-8">#{index + 1}</span>
+                        <div className="flex-1 grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">経度</Label>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={coord[0]}
+                              onChange={(e) =>
+                                updateCoordinate(index, "lng", parseFloat(e.target.value))
+                              }
+                              placeholder="経度"
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">緯度</Label>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={coord[1]}
+                              onChange={(e) =>
+                                updateCoordinate(index, "lat", parseFloat(e.target.value))
+                              }
+                              placeholder="緯度"
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeCoordinate(index)}
+                          disabled={geometryType !== "Point" && coordsArray.length <= 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div>
-                        <Label className="text-xs">緯度</Label>
-                        <Input
-                          type="number"
-                          step="any"
-                          value={coord[1]}
-                          onChange={(e) =>
-                            updateCoordinate(index, "lat", parseFloat(e.target.value))
-                          }
-                          placeholder="緯度"
-                          className="h-8"
-                        />
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeCoordinate(index)}
-                      disabled={geometryType !== "Point" && coordsArray.length <= 1}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    ))}
+
+                    {geometryType !== "Point" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addCoordinate}
+                        className="w-full"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        座標を追加
+                      </Button>
+                    )}
                   </div>
-                ))}
-                
-                {geometryType !== "Point" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addCoordinate}
-                    className="w-full"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    座標を追加
-                  </Button>
                 )}
               </div>
-            )}
-          </div>
+            </TabsContent>
+
+            <TabsContent value="geojson" className="space-y-2">
+              <Label htmlFor="feature-form-geometry-text">
+                GeoJSON Geometry (Point / LineString / Polygon)
+              </Label>
+              <Textarea
+                id="feature-form-geometry-text"
+                data-testid="feature-form-geometry-text"
+                value={geojsonText}
+                onChange={(e) => applyGeojsonText(e.target.value)}
+                placeholder='{"type":"Point","coordinates":[139.7,35.6]}'
+                rows={6}
+                className="font-mono text-sm"
+              />
+              {geojsonError && (
+                <p className="text-sm text-destructive">{geojsonError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                GeoJSON Geometry オブジェクトを貼り付けてください。Polygon は外環のみ反映されます。
+              </p>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
