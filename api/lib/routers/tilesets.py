@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from lib.config import get_settings
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.models.tileset import TilesetCreate, TilesetUpdate
 from lib.cache import invalidate_tileset_cache
 from lib.auth import (
@@ -93,9 +94,11 @@ def list_tilesets(
         # Validate type parameter if provided
         valid_types = {"vector", "raster", "pmtiles"}
         if type is not None and type.lower() not in valid_types:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Invalid type '{type}'. Must be one of: {', '.join(sorted(valid_types))}"
+            raise api_error(
+                400,
+                ErrorCode.VALIDATION_INVALID_VALUE,
+                f"Invalid type '{type}'. Must be one of: {', '.join(sorted(valid_types))}",
+                details={"type": type, "valid_types": sorted(valid_types)},
             )
         
         with conn.cursor() as cur:
@@ -149,7 +152,11 @@ def list_tilesets(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing tilesets: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing tilesets: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -180,21 +187,31 @@ def get_tileset(
             row = cur.fetchone()
 
         if not row:
-            raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"Tileset not found: {tileset_id}",
+                details={"tileset_id": tileset_id},
+            )
 
         tileset = dict(zip(columns, row))
 
         # Check access (v2: supports JWT + API key + team-based sharing)
         if not check_tileset_access_v2(conn, tileset, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "You do not have permission to access this tileset",
+                details={"tileset_id": tileset_id},
             )
 
         # Convert types
@@ -215,7 +232,11 @@ def get_tileset(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching tileset: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -249,7 +270,12 @@ def get_tileset_tilejson(
             row = cur.fetchone()
 
         if not row:
-            raise HTTPException(status_code=404, detail=f"Tileset not found: {tileset_id}")
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"Tileset not found: {tileset_id}",
+                details={"tileset_id": tileset_id},
+            )
 
         _row_id, tileset_type, is_public, owner_user_id = row
         tileset_for_access = {
@@ -261,14 +287,19 @@ def get_tileset_tilejson(
         # Check access (v2: supports JWT + API key + team-based sharing)
         if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "You do not have permission to access this tileset",
+                details={"tileset_id": tileset_id},
             )
 
         base_url = get_base_url(request)
@@ -281,12 +312,21 @@ def get_tileset_tilejson(
         elif tileset_type == "raster":
             return _get_raster_tilejson(tileset_id, conn, base_url)
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown tileset type: {tileset_type}")
+            raise api_error(
+                400,
+                ErrorCode.TILESET_INVALID,
+                f"Unknown tileset type: {tileset_type}",
+                details={"tileset_id": tileset_id, "type": tileset_type},
+            )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error generating TileJSON: {str(e)}",
+        )
 
 
 def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: str):
@@ -305,8 +345,13 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
         row = cur.fetchone()
     
     if not row:
-        raise HTTPException(status_code=404, detail="Tileset not found")
-    
+        raise api_error(
+            404,
+            ErrorCode.TILESET_NOT_FOUND,
+            "Tileset not found",
+            details={"tileset_id": tileset_id},
+        )
+
     (name, description, min_zoom, max_zoom, attribution,
      xmin, ymin, xmax, ymax, center_x, center_y) = row
     
@@ -337,9 +382,11 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
         db_layer_names = [row[0] for row in cur.fetchall()]
         
         if layer and not db_layer_names:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Layer '{layer}' not found in tileset"
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"Layer '{layer}' not found in tileset",
+                details={"tileset_id": tileset_id, "layer": layer},
             )
         
         for db_layer_name in db_layer_names:
@@ -433,7 +480,12 @@ def _get_pmtiles_tilejson(tileset_id: str, conn, base_url: str):
         row = cur.fetchone()
     
     if not row:
-        raise HTTPException(status_code=404, detail="PMTiles source not found")
+        raise api_error(
+            404,
+            ErrorCode.DATASOURCE_NOT_FOUND,
+            "PMTiles source not found",
+            details={"tileset_id": tileset_id},
+        )
     
     (pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers,
      name, description, attribution) = row
@@ -475,7 +527,12 @@ def _get_raster_tilejson(tileset_id: str, conn, base_url: str):
         row = cur.fetchone()
     
     if not row:
-        raise HTTPException(status_code=404, detail="Raster source not found")
+        raise api_error(
+            404,
+            ErrorCode.DATASOURCE_NOT_FOUND,
+            "Raster source not found",
+            details={"tileset_id": tileset_id},
+        )
     
     (name, description, tile_format, min_zoom, max_zoom, attribution, cog_url,
      xmin, ymin, xmax, ymax, center_x, center_y) = row
@@ -521,9 +578,11 @@ def create_tileset(
     タイルセットは ctx.user_id の所有として作成される。
     """
     if not ctx.has_scope("write"):
-        raise HTTPException(
-            status_code=403,
-            detail="write scope required to create tileset"
+        raise api_error(
+            403,
+            ErrorCode.API_KEY_INVALID_SCOPE,
+            "write scope required to create tileset",
+            details={"required_scope": "write"},
         )
     try:
         with conn.cursor() as cur:
@@ -597,7 +656,11 @@ def create_tileset(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error creating tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating tileset: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -637,23 +700,33 @@ def calculate_tileset_bounds(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": tileset_id},
+                )
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
             if not check_tileset_write_access_v2(
                 conn, tileset_for_access, ctx, "update"
             ):
-                raise HTTPException(
-                    status_code=403, detail="Not authorized to update this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to update this tileset",
+                    details={"tileset_id": tileset_id},
                 )
 
             tileset_type = row[2]
 
             # Only calculate bounds for vector tilesets (which have features)
             if tileset_type != "vector":
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Bounds calculation is only supported for vector tilesets, not {tileset_type}"
+                raise api_error(
+                    400,
+                    ErrorCode.TILESET_INVALID,
+                    f"Bounds calculation is only supported for vector tilesets, not {tileset_type}",
+                    details={"tileset_id": tileset_id, "type": tileset_type},
                 )
 
             cur.execute(
@@ -711,7 +784,11 @@ def calculate_tileset_bounds(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error calculating bounds: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error calculating bounds: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -747,14 +824,22 @@ def update_tileset(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": tileset_id},
+                )
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
             if not check_tileset_write_access_v2(
                 conn, tileset_for_access, ctx, "update"
             ):
-                raise HTTPException(
-                    status_code=403, detail="Not authorized to update this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to update this tileset",
+                    details={"tileset_id": tileset_id},
                 )
 
             updates = []
@@ -803,7 +888,11 @@ def update_tileset(
                 params.append(json.dumps(tileset.metadata))
 
             if not updates:
-                raise HTTPException(status_code=400, detail="No fields to update")
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_FIELD_REQUIRED,
+                    "No fields to update",
+                )
 
             updates.append("updated_at = NOW()")
             params.append(tileset_id)
@@ -846,7 +935,11 @@ def update_tileset(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error updating tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error updating tileset: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -882,14 +975,22 @@ def delete_tileset(
             row = cur.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": tileset_id},
+                )
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
             if not check_tileset_write_access_v2(
                 conn, tileset_for_access, ctx, "delete"
             ):
-                raise HTTPException(
-                    status_code=403, detail="Not authorized to delete this tileset"
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to delete this tileset",
+                    details={"tileset_id": tileset_id},
                 )
 
             # FK CASCADE で features も削除される
@@ -906,4 +1007,8 @@ def delete_tileset(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error deleting tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error deleting tileset: {str(e)}",
+        )
