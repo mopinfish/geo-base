@@ -146,3 +146,111 @@ def test_tokens_endpoint_returns_pending_invitation_token(monkeypatch):
     # SQL に email パラメータが渡されていることも検証 (regression 対策)。
     args, _ = mock_cursor.execute.call_args
     assert args[1] == ("invitee@example.com",)
+
+
+def test_tokens_endpoint_returns_password_reset_token_from_console_backend(
+    monkeypatch,
+):
+    """console email backend が記録した password_reset token を取得できる。"""
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/geo_base_e2e",
+    )
+    monkeypatch.setenv("E2E_MODE", "1")
+
+    from lib.auth.email_backends import console_backend
+
+    console_backend._RECENT_PASSWORD_RESET_TOKENS["admin@example.com"] = (
+        "test-reset-token-xyz"
+    )
+
+    try:
+        app = _make_app(monkeypatch, "1")
+        client = TestClient(app)
+        res = client.get(
+            "/api/test/tokens?type=password_reset&email=admin@example.com"
+        )
+        assert res.status_code == 200, res.text
+        assert res.json() == {"token": "test-reset-token-xyz"}
+    finally:
+        console_backend._RECENT_PASSWORD_RESET_TOKENS.pop(
+            "admin@example.com", None
+        )
+
+
+def test_tokens_endpoint_404_when_no_password_reset_token(monkeypatch):
+    """password_reset token が dict に存在しないなら 404。"""
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/geo_base_e2e",
+    )
+    app = _make_app(monkeypatch, "1")
+    client = TestClient(app)
+
+    from lib.auth.email_backends import console_backend
+
+    # 念のため dict を空にする
+    console_backend._RECENT_PASSWORD_RESET_TOKENS.pop(
+        "nobody@example.com", None
+    )
+
+    res = client.get(
+        "/api/test/tokens?type=password_reset&email=nobody@example.com"
+    )
+    assert res.status_code == 404
+
+
+def test_console_backend_records_password_reset_url_token():
+    """ConsoleEmailBackend.send 時に email 本文の URL から token を抽出する。"""
+    import asyncio
+    import os
+
+    from lib.auth.email_backends.console_backend import (
+        _RECENT_PASSWORD_RESET_TOKENS,
+        ConsoleEmailBackend,
+        get_recent_password_reset_token,
+    )
+
+    os.environ["E2E_MODE"] = "1"
+    try:
+        _RECENT_PASSWORD_RESET_TOKENS.clear()
+        body = (
+            "パスワードリセット URL:\n"
+            "http://localhost:3000/password-reset/confirm?token=abc123xyz\n"
+        )
+        asyncio.run(
+            ConsoleEmailBackend().send(
+                to="user@example.com", subject="Reset", body=body
+            )
+        )
+        assert get_recent_password_reset_token("user@example.com") == "abc123xyz"
+    finally:
+        del os.environ["E2E_MODE"]
+        _RECENT_PASSWORD_RESET_TOKENS.clear()
+
+
+def test_console_backend_does_not_record_when_e2e_mode_off():
+    """E2E_MODE が unset のときは token を記録しない (production 隔離)。"""
+    import asyncio
+    import os
+
+    from lib.auth.email_backends.console_backend import (
+        _RECENT_PASSWORD_RESET_TOKENS,
+        ConsoleEmailBackend,
+        get_recent_password_reset_token,
+    )
+
+    os.environ.pop("E2E_MODE", None)
+    try:
+        _RECENT_PASSWORD_RESET_TOKENS.clear()
+        body = (
+            "http://localhost:3000/password-reset/confirm?token=should-not-record\n"
+        )
+        asyncio.run(
+            ConsoleEmailBackend().send(
+                to="user2@example.com", subject="Reset", body=body
+            )
+        )
+        assert get_recent_password_reset_token("user2@example.com") is None
+    finally:
+        _RECENT_PASSWORD_RESET_TOKENS.clear()

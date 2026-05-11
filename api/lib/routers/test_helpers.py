@@ -94,22 +94,37 @@ def reset_database():
 
 @router.get("/tokens")
 def get_recent_token(
-    type: Literal["team_invitation"],
+    type: Literal["team_invitation", "password_reset"],
     email: str | None = None,
 ):
     """E2E から最新の token を引き取るための専用エンドポイント。
 
-    現状サポート:
+    サポート:
     - `type=team_invitation`: `team_invitations.token` (plain) を email で検索
-
-    NOTE: password_reset は token_hash しか保存されない仕様で平文を取り出せないため、
-    別の手段（console email backend のキャプチャ等）が必要。Phase 3 で対応。
+    - `type=password_reset`: console email backend が email 送信時に
+      捕捉したリセット token を返す (E2E_MODE 下のみ動作)。
+      password_reset_tokens テーブルには token_hash しか保存されないため
+      DB 経由では取り出せない。送信メール本文を経由してメモリに保持する。
     """
     _assert_e2e_mode_or_die()
     _assert_e2e_database_or_die()
     if not email:
         raise HTTPException(status_code=400, detail="email is required")
 
+    if type == "password_reset":
+        # console backend のメモリ dict から取得する。
+        from lib.auth.email_backends.console_backend import (
+            get_recent_password_reset_token,
+        )
+
+        token = get_recent_password_reset_token(email)
+        if not token:
+            raise HTTPException(
+                status_code=404, detail=f"No password_reset token for {email}"
+            )
+        return {"token": token}
+
+    # team_invitation: 既存ロジック (SQL で取得)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             # `status = 'pending'` + `token IS NOT NULL` で「実際に有効な
