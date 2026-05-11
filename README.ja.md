@@ -95,7 +95,7 @@ cd ..
 各ディレクトリの `.env.example` をランタイムが読む場所にコピーしてください:
 
 - `api/` と `mcp/` (Python): `.env` にコピー
-- `app/` (Next.js): `.env.local` にコピー (Next.js は開発モードで `.env` を自動読込しない)
+- `app/` (Next.js): `.env.local` にコピー。Next.js 自体は `.env` も読み込みますが、本リポジトリでは Admin UI 専用のローカル設定を git 管理外に保つため `.env.local` を使う運用にしています (Next.js scaffold は `.env.local` をデフォルトで gitignore する)。
 
 ## サポートフォーマット
 

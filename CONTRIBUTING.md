@@ -27,20 +27,21 @@ docker compose -f docker/docker-compose.yml up -d
 # mcp/   → uv sync && uv run python server.py
 ```
 
-Useful checks before opening a pull request:
+Useful checks before opening a pull request (each block is a subshell so
+your terminal stays at the repo root between them):
 
 ```bash
 # api/ — pytest requires TEST_DATABASE_URL pointing at a dedicated test DB
 # (CLAUDE.md describes the geo_base_test setup). Without it, DB-touching
 # tests fail loudly rather than silently breaking the dev DB.
-cd api \
+( cd api \
   && uv run ruff check . \
   && uv run black --check . \
   && TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/geo_base_test' \
-     uv run pytest tests/ -q
+     uv run pytest tests/ -q )
 
-cd app && npm run lint && npx tsc --noEmit && npm test
-cd mcp && uv run ruff check . && uv run pytest -q
+( cd app && npm run lint && npx tsc --noEmit && npm test )
+( cd mcp && uv run ruff check . && uv run pytest -q )
 ```
 
 For end-to-end Playwright tests, see [`app/tests/e2e/README.md`](./app/tests/e2e/README.md).
@@ -49,7 +50,7 @@ For end-to-end Playwright tests, see [`app/tests/e2e/README.md`](./app/tests/e2e
 
 1. **Fork or branch** — for outside contributors, fork the repository; maintainers use feature branches in this repo (`feat/...`, `fix/...`, `docs/...`).
 2. **Keep PRs focused** — one logical change per PR. Bundle related refactors only when they directly support the change.
-3. **Write tests** — bug fixes need a regression test; new features need coverage for the happy path and at least one edge case. Use `tests/e2e/regression/` for cross-cutting regression scenarios.
+3. **Write tests** — bug fixes need a regression test; new features need coverage for the happy path and at least one edge case. Use `app/tests/e2e/regression/` for cross-cutting regression scenarios.
 4. **Run the checks above** before pushing. CI will run the same lints and tests.
 5. **Reference issues** — link the issue your PR closes (`Closes #123`) or refers to (`Refs: #123`) in the body, not the title.
 6. **Mark `draft`** if your PR is still in progress, then flip to *ready for review* once CI is green.

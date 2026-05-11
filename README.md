@@ -97,7 +97,7 @@ cd ..
 Each subdirectory has an `.env.example`. Copy it to the file the runtime expects and fill in the values that fit your environment:
 
 - `api/` and `mcp/` (Python): copy to `.env`
-- `app/` (Next.js): copy to `.env.local` (Next.js does not load `.env` automatically in development)
+- `app/` (Next.js): copy to `.env.local`. Next.js does load `.env`, but this repository's convention is to use `.env.local` for the Admin UI so local-only secrets stay out of git (`.env.local` is gitignored by default in Next.js scaffolds).
 
 ## Supported formats
 
