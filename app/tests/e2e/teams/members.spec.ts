@@ -107,11 +107,45 @@ test.describe("Teams members - removal", () => {
     await expect(targetRow).toHaveCount(0);
   });
 
-  // TM-05 (role 変更) は team 詳細 UI に member の role を変更する操作が
-  // 存在しないため Phase 2 では skip。API は updateTeamMember を持つが、
-  // UI で公開されたら同 spec を有効化する。
-  test.skip("TM-05 member の role 変更 (UI 未実装のため Phase 3 移管)", async () => {
-    // intentionally empty
+  // TM-05 (role 変更) — Phase 3 (Issue #112) で UI を追加して有効化。
+  // dropdown menu に「管理者に変更」「メンバーに変更」を追加し、
+  // api.updateTeamMember 経由で role を変更する。
+  test("TM-05 member の role 変更", async ({ page }) => {
+    const team = await createTeam({ name: "TM-05 Team" });
+    const memberEmail = `tm05-${Date.now()}@example.com`;
+
+    // member role で招待 → accept。
+    await inviteMember({ teamId: team.id, email: memberEmail });
+    const token = await fetchRecentToken("team_invitation", memberEmail);
+    await acceptInvitationAsNewUser(token, "TM05 User", "Member-pass-1!");
+
+    // admin として再ログイン (factory session を確実に admin に戻す)。
+    await loginAsAdmin();
+
+    await page.goto(`/teams/${team.id}`);
+
+    // owner + 受諾 user の 2 名が並ぶ。対象は受諾 user。
+    const memberRow = page
+      .getByTestId("team-member-row")
+      .filter({ hasText: memberEmail });
+    await expect(memberRow).toBeVisible();
+    // 招待時の default role は "member" なので、最初の表示は「メンバー」。
+    await expect(memberRow).toContainText("メンバー");
+
+    // dropdown を開いて「管理者に変更」を選択。
+    await memberRow.getByRole("button").last().click();
+    await page.getByTestId("team-member-role-promote").click();
+
+    // role が "administrator" → ラベル「管理者」に切り替わる。
+    await expect(memberRow).toContainText("管理者", { timeout: 10_000 });
+
+    // 続けて demote (メンバーに戻す) も検証する。dropdown 再展開 → promote
+    // 側が disabled、demote 側を click。
+    await memberRow.getByRole("button").last().click();
+    await expect(page.getByTestId("team-member-role-promote")).toBeDisabled();
+    await page.getByTestId("team-member-role-demote").click();
+
+    await expect(memberRow).toContainText("メンバー", { timeout: 10_000 });
   });
 });
 

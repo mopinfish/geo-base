@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth/context";
 import { apiFetch } from "@/lib/api";
 import { AdminLayout } from "@/components/layout";
@@ -27,6 +27,16 @@ export default function ProfileSettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // `useAuth()` は authClient.refresh() 経由で非同期に user をセットするため、
+  // 初回マウント時 (user=null) に確定した useState の値は空のままになる。
+  // user が確定したタイミングで一度だけフォームに転写する。
+  useEffect(() => {
+    if (user) {
+      setName((prev) => (prev === "" ? user.name || "" : prev));
+      setEmail((prev) => (prev === "" ? user.email || "" : prev));
+    }
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

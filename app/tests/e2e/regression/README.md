@@ -13,6 +13,8 @@
 | Test ID | 元 issue / PR | 内容 |
 |---|---|---|
 | TS-13 | #102 / PR #103 | 自分の非公開 tileset が `/tilesets` 一覧に表示される |
+| DS-09 | #101 / PR #104 | s3:// スキームの datasource が API 経由で作成・一覧表示できる |
+| DASH-03 | #115 / PR #116 | dashboard のカウントが自分の非公開 tileset も含める |
 
 ## 新規追加の流れ
 

@@ -354,17 +354,21 @@ def list_team_members(
             raise HTTPException(status_code=403, detail="You are not a member of this team")
         
         with conn.cursor() as cur:
+            # E2E (TM-05/TM-06) や UI 表示で member.user_email を必要とするため、
+            # users テーブルを LEFT JOIN して email/name を一緒に返す。
             cur.execute(
                 """SELECT tm.id, tm.team_id, tm.user_id, tm.role, tm.notification_enabled,
-                          tm.joined_at, tm.updated_at
+                          tm.joined_at, tm.updated_at,
+                          u.email AS user_email, u.name AS user_name
                    FROM team_members tm
+                   LEFT JOIN users u ON u.id = tm.user_id
                    WHERE tm.team_id = %s
                    ORDER BY tm.joined_at""",
                 (team_id,)
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         members = []
         for row in rows:
             member = dict(zip(columns, row))
@@ -376,6 +380,8 @@ def list_team_members(
                 "notification_enabled": member['notification_enabled'],
                 "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
                 "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
+                "user_email": member.get('user_email'),
+                "user_name": member.get('user_name'),
             })
         
         return {
@@ -488,6 +494,8 @@ def update_team_member(
         params.extend([team_id, user_id])
         
         with conn.cursor() as cur:
+            # list_team_members と同じく user_email / user_name を返して
+            # クライアント側の state 更新で member.user_email が失われないようにする。
             cur.execute(
                 f"""UPDATE team_members SET {', '.join(updates)}, updated_at = NOW()
                     WHERE team_id = %s AND user_id = %s
@@ -496,10 +504,15 @@ def update_team_member(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+            member = dict(zip(columns, row))
+            cur.execute(
+                "SELECT email, name FROM users WHERE id = %s",
+                (member['user_id'],)
+            )
+            user_row = cur.fetchone()
+
         conn.commit()
-        
-        member = dict(zip(columns, row))
+
         return {
             "id": str(member['id']),
             "team_id": str(member['team_id']),
@@ -508,8 +521,10 @@ def update_team_member(
             "notification_enabled": member['notification_enabled'],
             "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
             "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
+            "user_email": user_row[0] if user_row else None,
+            "user_name": user_row[1] if user_row else None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

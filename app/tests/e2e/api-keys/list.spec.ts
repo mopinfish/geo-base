@@ -1,7 +1,7 @@
 import { test, expect } from "../fixtures/authenticated-test";
 
 import { resetDatabase } from "../utils/reset-db";
-import { createApiKey } from "../fixtures/factories";
+import { createApiKey, expireApiKey } from "../fixtures/factories";
 import { loginAsAdmin } from "../utils/session";
 
 test.describe("API Keys list - smoke", () => {
@@ -177,5 +177,30 @@ test.describe("API Keys list - delete revoked", () => {
     await page.getByTestId("api-key-delete-confirm").click();
 
     await expect(rows).toHaveCount(0);
+  });
+});
+
+test.describe("API Keys list - expired status", () => {
+  test.beforeAll(async () => {
+    await loginAsAdmin();
+    await resetDatabase();
+    // factory で作成 → test_helpers で expires_at を過去日時に書き換える。
+    // `ApiKeyCreate.expires_in_days` は 1..365 の正の範囲しか許容しないため、
+    // 直接 SQL で expires_at を埋めるしか手段がない (AK-07 解説)。
+    const created = await createApiKey({ name: "expired-key" });
+    await expireApiKey({ keyId: created.id, minutesAgo: 60 });
+  });
+
+  test("AK-07 期限切れ key の status 表示", async ({ page }) => {
+    await page.goto("/api-keys");
+
+    const row = page.getByTestId("api-key-row").first();
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    // UI は `data-key-status` を使用する (AK-05 と同じ規約)。
+    // `is_expired` は ApiKeyResponse の computed field で、
+    // expires_at < now() のとき True (api/lib/models/api_key.py)。
+    await expect(row).toHaveAttribute("data-key-status", "expired", {
+      timeout: 5_000,
+    });
   });
 });

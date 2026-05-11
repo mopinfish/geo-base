@@ -40,6 +40,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -230,6 +231,18 @@ export default function TeamDetailPage() {
     }
   };
 
+  const handleChangeRole = async (userId: string, role: TeamRole) => {
+    try {
+      const updated = await api.updateTeamMember(teamId, userId, { role });
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === userId ? updated : m)),
+      );
+    } catch (err) {
+      console.error("Failed to change role:", err);
+      setError(err instanceof Error ? err.message : "役割の変更に失敗しました");
+    }
+  };
+
   const handleAddTileset = async () => {
     if (!selectedTilesetId) return;
     setIsAddingTileset(true);
@@ -416,6 +429,27 @@ export default function TeamDetailPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            data-testid="team-member-role-promote"
+                            disabled={member.role === "administrator"}
+                            onClick={() =>
+                              handleChangeRole(member.user_id, "administrator")
+                            }
+                          >
+                            <Shield className="w-4 h-4 mr-2" />
+                            管理者に変更
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            data-testid="team-member-role-demote"
+                            disabled={member.role === "member"}
+                            onClick={() =>
+                              handleChangeRole(member.user_id, "member")
+                            }
+                          >
+                            <User className="w-4 h-4 mr-2" />
+                            メンバーに変更
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => handleRemoveMember(member.user_id)}

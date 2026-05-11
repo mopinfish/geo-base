@@ -31,6 +31,25 @@ test.describe("Settings - password", () => {
     await loginAsAdmin();
   });
 
+  // ST-03 は失敗ケース (パスワードが変わらない) なので ST-02 より前に置く。
+  // ST-02 (UI 経由でパスワードを書き換える) の後ろに置くと admin session が
+  // 切れているタイミングがあるため、安定動作には先行配置が安全。
+  test("ST-03 旧パスワードを誤入力 → エラー表示、パスワード変更されず", async ({
+    page,
+  }) => {
+    await page.goto("/settings/password");
+    await page.getByTestId("password-current").fill("wrong-old-password!");
+    await page.getByTestId("password-next").fill("Whatever-new-pass-1!");
+    await page.getByTestId("password-submit").click();
+
+    // /api/auth/me/password が 4xx を返し、page.tsx の setError が発火する。
+    await expect(page.getByTestId("password-error")).toBeVisible({
+      timeout: 10_000,
+    });
+    // ナビゲーションは発生しない (/login?password_changed=1 へ飛ばない)。
+    await expect(page).toHaveURL(/\/settings\/password/);
+  });
+
   test("ST-02 パスワードを変更してから元に戻す", async ({ page }) => {
     // --- ステップ 1: UI 経由で TEMP_PASSWORD に変更 -----------------------
     await page.goto("/settings/password");

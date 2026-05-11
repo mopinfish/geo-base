@@ -5,7 +5,7 @@ Pydantic models for API Key operations.
 import hashlib
 import secrets
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -187,8 +187,20 @@ class ApiKeyResponse(BaseModel):
     
     @model_validator(mode='after')
     def compute_fields(self) -> 'ApiKeyResponse':
-        """Compute derived fields."""
-        self.is_expired = self.expires_at is not None and self.expires_at < datetime.utcnow()
+        """Compute derived fields.
+
+        `expires_at` は DB の TIMESTAMPTZ から tz-aware datetime として復元される
+        ケースと、create 経路で `datetime.utcnow()` (naive) として作られるケースが
+        混在するので、比較前にどちらか一方に揃える。`datetime.now(timezone.utc)` を
+        基準にし、naive 側は UTC として interpret する。
+        """
+        if self.expires_at is not None:
+            exp = self.expires_at
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            self.is_expired = exp < datetime.now(timezone.utc)
+        else:
+            self.is_expired = False
         self.is_revoked = self.revoked_at is not None
         self.masked_key = mask_api_key(self.prefix)
         return self

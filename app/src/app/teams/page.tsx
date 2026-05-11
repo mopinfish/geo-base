@@ -142,7 +142,7 @@ export default function TeamsPage() {
             <div className="text-muted-foreground">読み込み中...</div>
           </div>
         ) : teams.length === 0 ? (
-          <Card>
+          <Card data-testid="team-empty-state">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Users className="w-12 h-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">チームがありません</h3>

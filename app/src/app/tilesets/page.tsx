@@ -257,6 +257,7 @@ export default function TilesetsPage() {
                 <SelectTrigger
                   className="w-[150px]"
                   data-testid="tileset-filter-type"
+                  aria-label="タイプで絞り込み"
                 >
                   <SelectValue placeholder="タイプ" />
                 </SelectTrigger>
@@ -271,6 +272,7 @@ export default function TilesetsPage() {
                 <SelectTrigger
                   className="w-[150px]"
                   data-testid="tileset-filter-public"
+                  aria-label="公開状態で絞り込み"
                 >
                   <SelectValue placeholder="公開状態" />
                 </SelectTrigger>

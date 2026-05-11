@@ -55,6 +55,14 @@ jobs:
       AUTH_PROVIDER: local
       CORS_ORIGINS: '["http://localhost:3000"]'
       API_BACKEND_URL: http://localhost:8000
+      # PMTiles upload を moto S3 に向ける (Issue #112 TS-12)。
+      # boto3 は AWS_ENDPOINT_URL_S3 / S3_ENDPOINT_URL の両方を見るので
+      # config の s3_endpoint_url を上書きする目的で S3_ENDPOINT_URL を渡す。
+      S3_ENDPOINT_URL: http://localhost:5000
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+      AWS_DEFAULT_REGION: us-east-1
+      S3_BUCKET: geo-base-e2e
 
     steps:
       - name: Checkout
@@ -68,6 +76,19 @@ jobs:
         with:
           e2e-database-url: ${{ env.DATABASE_URL }}
           worker-count: "1"
+
+      - name: Start moto S3 in background
+        run: bash .github/workflows/scripts/start-moto.sh
+
+      - name: Create S3 bucket on moto
+        working-directory: api
+        run: |
+          uv run python -c "
+          import boto3
+          s3 = boto3.client('s3', endpoint_url='http://localhost:5000')
+          s3.create_bucket(Bucket='geo-base-e2e')
+          print('bucket created')
+          "
 
       - name: Start FastAPI in background
         working-directory: api
@@ -147,3 +168,4 @@ jobs:
         run: |
           [ -n "${FASTAPI_PID:-}" ] && kill "$FASTAPI_PID" || true
           [ -n "${NEXTJS_PID:-}" ] && kill "$NEXTJS_PID" || true
+          [ -n "${MOTO_PID:-}" ] && kill "$MOTO_PID" || true

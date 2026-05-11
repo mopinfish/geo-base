@@ -14,6 +14,7 @@ function PasswordResetConfirmForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +23,11 @@ function PasswordResetConfirmForm() {
     setLoading(true);
     try {
       await authClient.confirmPasswordReset(token, password);
-      router.push("/login?reset=success");
+      // 成功画面 (success card + 「ログインへ」ボタン) を表示する。
+      // 自動遷移はせず、ユーザーがボタンを押して `/login?reset=success` に
+      // 移動する形 (Phase 3 で auto-redirect から変更)。
+      // E2E (AUTH-08) は `password-reset-confirm-success` testid を観測する。
+      setSuccess(true);
     } catch (err) {
       setError(err instanceof AuthApiError ? err.detail : "Failed");
     } finally {
@@ -30,7 +35,36 @@ function PasswordResetConfirmForm() {
     }
   };
 
-  if (!token) return <div className="container py-12"><p>無効なリンクです。</p></div>;
+  if (!token) {
+    return (
+      <div className="container py-12">
+        <p className="text-red-600" data-testid="password-reset-error">
+          無効なリンクです。
+        </p>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div className="container max-w-md mx-auto py-12">
+        <p
+          className="text-green-700"
+          data-testid="password-reset-confirm-success"
+        >
+          パスワードを更新しました。
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/login?reset=success")}
+          className="mt-4 w-full p-2 bg-blue-600 text-white rounded"
+          data-testid="password-reset-confirm-success-login"
+        >
+          ログインへ
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="container max-w-md mx-auto py-12">
@@ -40,9 +74,19 @@ function PasswordResetConfirmForm() {
           type="password" required minLength={8}
           value={password} onChange={(e) => setPassword(e.target.value)}
           placeholder="新しいパスワード（8文字以上）" className="w-full p-2 border rounded"
+          data-testid="password-reset-confirm-password"
         />
-        {error && <p className="text-red-600">{error}</p>}
-        <button type="submit" disabled={loading} className="w-full p-2 bg-blue-600 text-white rounded">
+        {error && (
+          <p className="text-red-600" data-testid="password-reset-error">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full p-2 bg-blue-600 text-white rounded"
+          data-testid="password-reset-confirm-submit"
+        >
           {loading ? "..." : "更新"}
         </button>
       </form>
