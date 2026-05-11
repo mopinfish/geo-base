@@ -5,27 +5,27 @@
  * 形式は `dashboard.spec.ts` と同じく axe-core を WCAG 2.1 AA タグで走らせ、
  * serious / critical 違反のみを失敗扱いにする。
  *
- * fixture 不要 (ログイン済み user の profile 編集画面が表示されるだけ)。
+ * fixture 不要 (factory / api-client を使わないため `authenticated-test`
+ * fixture の per-test ログインだけで十分。Copilot PR #130 round 1 指摘で
+ * 冗長な `loginAsAdmin()` を除去)。
  */
-import { test } from "../fixtures/authenticated-test";
+import { expect, test } from "../fixtures/authenticated-test";
 
-import { loginAsAdmin } from "../utils/session";
 import { expectNoA11ySeriousViolations } from "./_helper";
 
 test.describe("a11y: /settings", () => {
-  test.beforeAll(async () => {
-    await loginAsAdmin();
-  });
-
   test("a11y: /settings/profile serious/critical 違反なし", async ({
     page,
   }) => {
     await page.goto("/settings/profile");
-    // useAuth() の user が hydrate されるまで待つため、name 入力欄に既存
-    // ユーザーの名前が入った状態を `awaitReady` の代わりに getByLabel で確認。
-    // SettingsNav は静的レンダー、ローディング placeholder は無いので
-    // 軽く同期するだけで axe スキャンに十分。
-    await page.waitForLoadState("networkidle");
+
+    // `useAuth()` 経由の user hydrate 完了を待つ。
+    // `profile-name` input は常時 render されるが、user が来るまで value が
+    // 空。空でなくなったタイミングをローディング完了の signal とする
+    // (Copilot PR #130 round 1 指摘 — networkidle だけだとローディング中
+    //  スキャンの可能性があった)。
+    await expect(page.getByTestId("profile-name")).not.toHaveValue("");
+
     await expectNoA11ySeriousViolations(page);
   });
 });
