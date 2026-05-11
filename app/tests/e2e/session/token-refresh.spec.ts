@@ -34,6 +34,17 @@ test.describe("Auth token refresh", () => {
       timeout: 10_000,
     });
 
+    // `/api/auth/refresh` への POST が実際に発行されたことを assert する
+    // (Copilot PR #122 指摘)。`page.clock.fastForward` 中に
+    // `authClient.scheduleRefresh()` の setTimeout が発火して refresh が
+    // 走ってしまう場合があるため、waitForRequest は時間進行の **前** に
+    // 仕掛けて取り逃しを防ぐ (Copilot PR #122 round 3 指摘)。
+    const refreshRequest = page.waitForRequest(
+      (req) =>
+        req.url().includes("/api/auth/refresh") && req.method() === "POST",
+      { timeout: 30_000 },
+    );
+
     // 時間を 16 分進めて access token を期限切れにする。
     // install() が既に動いている場合のフォールバックとして runFor も用意。
     try {
@@ -44,14 +55,6 @@ test.describe("Auth token refresh", () => {
     }
 
     // reload して認証必須の API を再 fetch → authClient が refresh → 続行。
-    // 単に「再描画できた」だけでは refresh が呼ばれなくても通ってしまう
-    // (Copilot PR #122 指摘) ので、`/api/auth/refresh` への POST が
-    // 実際に発行されたことを assert する。
-    const refreshRequest = page.waitForRequest(
-      (req) =>
-        req.url().includes("/api/auth/refresh") && req.method() === "POST",
-      { timeout: 15_000 },
-    );
     await page.reload();
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1, {
       timeout: 15_000,

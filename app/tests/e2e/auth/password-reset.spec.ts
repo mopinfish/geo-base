@@ -33,6 +33,15 @@ test.describe("Password reset round-trip (AUTH-08)", () => {
   test.afterAll(async () => {
     const apiBase =
       process.env.PLAYWRIGHT_API_BASE_URL || "http://localhost:8000";
+    // utils/reset-db.ts / token-fetch.ts / factories.ts:expireApiKey と同様に、
+    // 非認証で admin password を書き換える API を本番に向けて誤爆させない
+    // ための localhost / 127.0.0.1 guard (Copilot PR #122 round 3 指摘)。
+    const apiHost = new URL(apiBase).hostname;
+    if (!["localhost", "127.0.0.1"].includes(apiHost)) {
+      throw new Error(
+        `Refusing to call /api/auth/password-reset/* against non-local host: ${apiHost}`,
+      );
+    }
     const ctx = await request.newContext({ baseURL: apiBase });
     try {
       await ctx.post("/api/auth/password-reset/request", {
