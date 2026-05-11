@@ -1,19 +1,22 @@
-"""Issue #56 Phase 1: API キー rate limit backend 抽象化のテスト。
+"""Issue #56 Phase 1+2: API キー rate limit backend のテスト。
 
-`api/lib/auth/api_key_rate_limit.py` の `DbRateLimiter` と `make_rate_limiter` を
-ユニットレベルで検証する。`api_key_rate_limits` テーブル + SQL 関数
-(`get_api_key_rate_limit_status` / `increment_api_key_rate_limit`) の挙動を
-実 DB に対して確認する形。
+`api/lib/auth/api_key_rate_limit.py` の `DbRateLimiter` / `RedisRateLimiter` /
+`make_rate_limiter` を実 backend (PostgreSQL / Redis) に対してユニットテスト。
 
-Phase 2 で `RedisRateLimiter` を追加する際は本ファイルに parametrize して
-両 backend を同じテストケースで cover する予定。
+Phase 1 (refactor): DbRateLimiter の挙動が旧 inline 実装と一致する確認。
+Phase 2 (Redis): RedisRateLimiter の per-minute / per-day カウンタ + fail-open。
 """
 import uuid
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 
-from lib.auth.api_key_rate_limit import DbRateLimiter, make_rate_limiter
+from lib.auth.api_key_rate_limit import (
+    DbRateLimiter,
+    RedisRateLimiter,
+    make_rate_limiter,
+)
 from lib.auth.errors import RateLimited
 
 
@@ -165,24 +168,14 @@ class TestMakeRateLimiter:
         finally:
             get_settings.cache_clear()
 
-    def test_redis_backend_falls_back_to_db_in_phase1(
-        self, db_conn, monkeypatch, caplog
-    ):
-        """Phase 1 では `RATE_LIMIT_BACKEND=redis` 指定でも DbRateLimiter
-        にフォールバックし warn ログを出す。Phase 2 で RedisRateLimiter に
-        切替予定。"""
+    def test_redis_backend_returns_redis_rate_limiter(self, db_conn, monkeypatch):
+        """Phase 2: `RATE_LIMIT_BACKEND=redis` で RedisRateLimiter を返す。"""
         monkeypatch.setenv("RATE_LIMIT_BACKEND", "redis")
         from lib.config import get_settings
         get_settings.cache_clear()
         try:
-            import logging
-            with caplog.at_level(logging.WARNING, logger="lib.auth.api_key_rate_limit"):
-                limiter = make_rate_limiter(db_conn)
-            assert isinstance(limiter, DbRateLimiter)
-            assert any(
-                "RedisRateLimiter is not yet implemented" in r.message
-                for r in caplog.records
-            )
+            limiter = make_rate_limiter(db_conn)
+            assert isinstance(limiter, RedisRateLimiter)
         finally:
             get_settings.cache_clear()
 
@@ -200,3 +193,134 @@ class TestMakeRateLimiter:
             )
         finally:
             get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# RedisRateLimiter (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def redis_limiter():
+    """テスト用 RedisRateLimiter。テスト前後で関連キーを掃除して分離する。
+
+    docker-compose の redis (localhost:6379) に対して実通信する。Redis が
+    起動していない CI 環境では skip（`get_redis()` が None を返すケースは
+    fail-open のテスト側で別途 cover）。
+    """
+    from lib.redis_client import get_redis
+
+    client = get_redis()
+    if client is None:
+        pytest.skip("Redis is not available (docker-compose の redis を起動してください)")
+
+    # 独自 prefix で他のテストやアプリケーションキャッシュと混ざらないようにする
+    prefix = f"test:rate-limit:{uuid.uuid4().hex[:8]}"
+    limiter = RedisRateLimiter(key_prefix=prefix)
+    yield limiter
+    # cleanup
+    for key in client.scan_iter(f"{prefix}:*"):
+        client.delete(key)
+
+
+class TestRedisRateLimiter:
+    def test_under_limit_does_not_raise(self, redis_limiter):
+        key_id = str(uuid.uuid4())
+        # 制限 5/min 内なら raise しない
+        for _ in range(5):
+            redis_limiter.check_and_increment(key_id, rl_min=5, rl_day=1000)
+
+    def test_over_per_minute_raises(self, redis_limiter):
+        key_id = str(uuid.uuid4())
+        # 制限 3/min を 4 回目で超過
+        for _ in range(3):
+            redis_limiter.check_and_increment(key_id, rl_min=3, rl_day=1000)
+        with pytest.raises(RateLimited) as exc:
+            redis_limiter.check_and_increment(key_id, rl_min=3, rl_day=1000)
+        assert "per minute" in str(exc.value)
+
+    def test_over_per_day_raises(self, redis_limiter):
+        """per-minute 余裕、per-day だけ超過のシナリオ。"""
+        key_id = str(uuid.uuid4())
+        # 制限 100/min, 2/day。3 回目で per-day 超過
+        for _ in range(2):
+            redis_limiter.check_and_increment(key_id, rl_min=100, rl_day=2)
+        with pytest.raises(RateLimited) as exc:
+            redis_limiter.check_and_increment(key_id, rl_min=100, rl_day=2)
+        assert "per day" in str(exc.value)
+
+    def test_separate_keys_are_independent(self, redis_limiter):
+        """異なる api_key_id のカウンタは干渉しない。"""
+        key_a = str(uuid.uuid4())
+        key_b = str(uuid.uuid4())
+        for _ in range(2):
+            redis_limiter.check_and_increment(key_a, rl_min=2, rl_day=1000)
+        # A は上限到達でも B は影響なし
+        with pytest.raises(RateLimited):
+            redis_limiter.check_and_increment(key_a, rl_min=2, rl_day=1000)
+        redis_limiter.check_and_increment(key_b, rl_min=2, rl_day=1000)
+
+    def test_window_boundary_resets_counter(self, redis_limiter):
+        """次の minute 窓に切り替わるとカウンタがリセットされる。
+
+        実際に 60 秒待つのではなく、`_now()` をパッチして窓境界を跨ぐシミュレーション。
+        """
+        key_id = str(uuid.uuid4())
+        t0 = datetime(2026, 5, 11, 12, 30, 0, tzinfo=timezone.utc)
+        t1 = datetime(2026, 5, 11, 12, 31, 0, tzinfo=timezone.utc)
+
+        with patch.object(redis_limiter, "_now", return_value=t0):
+            for _ in range(3):
+                redis_limiter.check_and_increment(key_id, rl_min=3, rl_day=1000)
+            # 窓内 3 件目を超えると raise
+            with pytest.raises(RateLimited):
+                redis_limiter.check_and_increment(key_id, rl_min=3, rl_day=1000)
+
+        # 次の窓では再度 3 件まで通過
+        with patch.object(redis_limiter, "_now", return_value=t1):
+            for _ in range(3):
+                redis_limiter.check_and_increment(key_id, rl_min=3, rl_day=1000)
+
+    def test_fail_open_when_redis_unavailable(self, monkeypatch, caplog):
+        """`get_redis()` が None を返した場合、raise せず warn ログのみ。"""
+        import logging
+        # `RedisRateLimiter.check_and_increment` 内の `from lib.redis_client import get_redis`
+        # を None 返却にパッチ
+        monkeypatch.setattr("lib.redis_client.get_redis", lambda: None)
+        limiter = RedisRateLimiter()
+        with caplog.at_level(logging.WARNING, logger="lib.auth.api_key_rate_limit"):
+            limiter.check_and_increment(str(uuid.uuid4()), rl_min=5, rl_day=1000)
+        assert any("fail-open" in r.message for r in caplog.records)
+
+    def test_fail_open_when_redis_raises(self, monkeypatch, caplog):
+        """Redis コマンドが例外を投げた場合も fail-open。"""
+        import logging
+
+        class _BrokenClient:
+            def incr(self, key):
+                raise RuntimeError("connection reset by peer")
+
+        monkeypatch.setattr("lib.redis_client.get_redis", lambda: _BrokenClient())
+        limiter = RedisRateLimiter()
+        with caplog.at_level(logging.WARNING, logger="lib.auth.api_key_rate_limit"):
+            limiter.check_and_increment(str(uuid.uuid4()), rl_min=5, rl_day=1000)
+        assert any(
+            "Redis rate limit operation failed" in r.message for r in caplog.records
+        )
+
+    def test_expire_set_on_first_increment(self, redis_limiter):
+        """新規キー作成時のみ EXPIRE が設定される（INCR 戻り値 == 1）。"""
+        from lib.redis_client import get_redis
+
+        client = get_redis()
+        key_id = str(uuid.uuid4())
+        redis_limiter.check_and_increment(key_id, rl_min=10, rl_day=1000)
+
+        # _now() で生成されるキーと一致させる
+        now = redis_limiter._now()
+        minute_window = int(now.timestamp() // 60)
+        minute_key = f"{redis_limiter._key_prefix}:{key_id}:m:{minute_window}"
+
+        ttl = client.ttl(minute_key)
+        # TTL は 120 秒以下で正の値（ちょうど 120 とは限らないため >= 100 で確認）
+        assert 100 < ttl <= 120, f"Expected TTL ~120s, got {ttl}"
