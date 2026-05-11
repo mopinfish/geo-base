@@ -23,7 +23,9 @@ function PasswordResetConfirmForm() {
     setLoading(true);
     try {
       await authClient.confirmPasswordReset(token, password);
-      // 成功を一旦 UI に表示してから /login に遷移する。
+      // 成功画面 (success card + 「ログインへ」ボタン) を表示する。
+      // 自動遷移はせず、ユーザーがボタンを押して `/login?reset=success` に
+      // 移動する形 (Phase 3 で auto-redirect から変更)。
       // E2E (AUTH-08) は `password-reset-confirm-success` testid を観測する。
       setSuccess(true);
     } catch (err) {

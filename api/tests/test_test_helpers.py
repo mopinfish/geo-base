@@ -200,10 +200,9 @@ def test_tokens_endpoint_404_when_no_password_reset_token(monkeypatch):
     assert res.status_code == 404
 
 
-def test_console_backend_records_password_reset_url_token():
+def test_console_backend_records_password_reset_url_token(monkeypatch):
     """ConsoleEmailBackend.send 時に email 本文の URL から token を抽出する。"""
     import asyncio
-    import os
 
     from lib.auth.email_backends.console_backend import (
         _RECENT_PASSWORD_RESET_TOKENS,
@@ -211,9 +210,9 @@ def test_console_backend_records_password_reset_url_token():
         get_recent_password_reset_token,
     )
 
-    os.environ["E2E_MODE"] = "1"
+    monkeypatch.setenv("E2E_MODE", "1")
+    _RECENT_PASSWORD_RESET_TOKENS.clear()
     try:
-        _RECENT_PASSWORD_RESET_TOKENS.clear()
         body = (
             "パスワードリセット URL:\n"
             "http://localhost:3000/password-reset/confirm?token=abc123xyz\n"
@@ -225,14 +224,12 @@ def test_console_backend_records_password_reset_url_token():
         )
         assert get_recent_password_reset_token("user@example.com") == "abc123xyz"
     finally:
-        del os.environ["E2E_MODE"]
         _RECENT_PASSWORD_RESET_TOKENS.clear()
 
 
-def test_console_backend_does_not_record_when_e2e_mode_off():
+def test_console_backend_does_not_record_when_e2e_mode_off(monkeypatch):
     """E2E_MODE が unset のときは token を記録しない (production 隔離)。"""
     import asyncio
-    import os
 
     from lib.auth.email_backends.console_backend import (
         _RECENT_PASSWORD_RESET_TOKENS,
@@ -240,9 +237,9 @@ def test_console_backend_does_not_record_when_e2e_mode_off():
         get_recent_password_reset_token,
     )
 
-    os.environ.pop("E2E_MODE", None)
+    monkeypatch.delenv("E2E_MODE", raising=False)
+    _RECENT_PASSWORD_RESET_TOKENS.clear()
     try:
-        _RECENT_PASSWORD_RESET_TOKENS.clear()
         body = (
             "http://localhost:3000/password-reset/confirm?token=should-not-record\n"
         )
