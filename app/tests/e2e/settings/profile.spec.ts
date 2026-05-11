@@ -13,7 +13,9 @@ test.describe("Settings - profile", () => {
   test.beforeAll(async () => {
     await loginAsAdmin();
     await resetDatabase();
-    // resetDatabase は admin user を再作成するため再ログインしておく。
+    // resetDatabase は users を truncate しないので admin は残るが、
+    // 直前のテストで refresh token rotation が走った可能性があるため、
+    // fresh な session を作り直しておく。
     await loginAsAdmin();
   });
 

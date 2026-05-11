@@ -47,7 +47,7 @@ test.describe("Datasources create - URL form", () => {
     // type は pmtiles がデフォルト。tileset を選択する。
     // shadcn/ui の Select (Radix) は role=combobox なのでクリック → option を選ぶ。
     await page.getByTestId("datasource-form-tileset").click();
-    await page.getByRole("option", { name: /Parent PMTiles tileset/ }).click();
+    await page.getByRole("option", { name: pmtilesTileset.name }).click();
 
     await page
       .getByTestId("datasource-form-url")
@@ -65,12 +65,8 @@ test.describe("Datasources create - URL form", () => {
   });
 
   test("DS-06 COG URL でデータソースを作成できる", async ({ page }) => {
-    // pmtilesTileset は使い回し可能だが、各テスト独立に DB をリセットしない
-    // (beforeAll の setup を共有する) ため、前のテストの残骸を踏まないよう
-    // 新規 cog tileset 1 件で作成 → 一覧に増えていることを確認する形で進める。
-    void pmtilesTileset; // unused in this test (lint silencer)
-    void cogTileset;
-
+    // 各テスト独立に DB をリセットしない (beforeAll の setup を共有する) ため、
+    // 前のテストの残骸が一覧に残っている前提で「+1 増える」を assert する。
     const beforeCount = await page
       .goto("/datasources")
       .then(() => page.getByTestId("datasource-list-row").count());
@@ -85,7 +81,7 @@ test.describe("Datasources create - URL form", () => {
 
     // cog tileset を選択。
     await page.getByTestId("datasource-form-tileset").click();
-    await page.getByRole("option", { name: /Parent COG tileset/ }).click();
+    await page.getByRole("option", { name: cogTileset.name }).click();
 
     await page
       .getByTestId("datasource-form-url")

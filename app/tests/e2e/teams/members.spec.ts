@@ -3,7 +3,7 @@ import { request } from "@playwright/test";
 
 import { resetDatabase } from "../utils/reset-db";
 import { createTeam, inviteMember } from "../fixtures/factories";
-import { loginAsAdmin, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "../utils/session";
+import { loginAsAdmin } from "../utils/session";
 import { fetchRecentToken } from "../utils/token-fetch";
 
 const APP_BASE = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -135,7 +135,3 @@ test.describe("Teams members - delete team", () => {
     await expect(page.getByText("TM-07 Team")).toHaveCount(0);
   });
 });
-
-// 未使用 export を防ぐ lint silencer (E2E_ADMIN_* は将来の re-login 用に import している)
-void E2E_ADMIN_EMAIL;
-void E2E_ADMIN_PASSWORD;

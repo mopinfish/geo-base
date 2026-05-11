@@ -60,6 +60,9 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
   const [tilesetStats, setTilesetStats] = useState<TilesetStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // アクション系の一時的な失敗（公開トグル等）。fetch 用の `error` とは分離して
+  // 「アクションが失敗しても詳細ページの内容は維持」する。
+  const [actionError, setActionError] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [showMapPreview, setShowMapPreview] = useState(true);
   // マップリフレッシュ用のキー（更新ボタン押下時にインクリメント）
@@ -134,6 +137,7 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
    */
   const handleTogglePublic = async () => {
     if (!tileset) return;
+    setActionError(null);
     try {
       const updated = await api.updateTileset(id, {
         is_public: !tileset.is_public,
@@ -141,7 +145,11 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
       setTileset(updated);
     } catch (err) {
       console.error("Toggle public failed:", err);
-      setError(err instanceof Error ? err.message : "公開設定の切り替えに失敗しました");
+      // fetch 用の `error` を汚すと「タイルセットが見つかりません」分岐に入って
+      // 詳細ページ全体が消えてしまうため、アクション専用の state を使う。
+      setActionError(
+        err instanceof Error ? err.message : "公開設定の切り替えに失敗しました",
+      );
     }
   };
 
@@ -358,6 +366,14 @@ export default function TilesetDetailPage({ params }: TilesetDetailPageProps) {
               tilesetName={tileset.name}
               onConfirm={handleDelete}
             />
+            {actionError && (
+              <p
+                className="ml-2 self-center text-xs text-destructive"
+                data-testid="tileset-action-error"
+              >
+                {actionError}
+              </p>
+            )}
             {tileset.type === "vector" && (
               <ExportFeaturesButton tilesetId={id} tilesetName={tileset.name} />
             )}
