@@ -1,111 +1,120 @@
 # geo-base
 
-モノレポ構成の地理空間タイルサーバーシステム
+> 🌐 **English**: this page ・ **日本語**: [README.ja.md](./README.ja.md)
 
-## 概要
+A monorepo geospatial tile server system.
 
-geo-baseは、地理空間データ（ラスタ/ベクタタイル）を配信するタイルサーバーシステムです。
+## Overview
 
-### 主要機能
+`geo-base` is a tile server system that serves geospatial data (raster and vector tiles).
 
-1. **タイルサーバー**: ラスタ/ベクタタイルの配信API
-2. **MCPサーバー**: Claude等のAIクライアント向けツール提供
-3. **管理画面**: タイルセットのアップロード・管理・プレビュー
+### Key components
 
-## 技術スタック
+1. **Tile server (`api/`)** — REST API that serves raster and vector tiles dynamically from PostGIS or pre-built archives (PMTiles, COG).
+2. **MCP server (`mcp/`)** — Model Context Protocol server that exposes the project's geospatial tools to AI clients such as Claude Desktop.
+3. **Admin UI (`app/`)** — Web console for uploading, managing, and previewing tilesets.
 
-### バックエンド
-- **タイルサーバー**: Python FastAPI (Fly.io)
-- **MCPサーバー**: Python FastMCP (Fly.io / ローカル)
-- **データベース**: PostgreSQL + PostGIS (Fly.io `geo-base-pg`)
-- **ストレージ**: Fly Tigris (S3 互換、Issue #72 で 2026-05-10 に Supabase Storage から完全移行）。private bucket 運用で、新規 upload は `s3://bucket/path` 形式の内部 URL として保存される（Issue #101）。
-- **キャッシュ**: Redis (Upstash、Issue #119 で 2026-05-11 に Python 依存追加。稼働状況は `GET /api/health/redis` で確認可能)
+## Tech stack
 
-### フロントエンド
-- **管理画面**: Next.js + TypeScript (Vercel)
-- **地図ライブラリ**: MapLibre GL JS
-- **認証**: 自前の local provider（JWT 発行 + bcrypt、`AUTH_PROVIDER=local`）
+### Backend
 
-## ディレクトリ構成
+- **Tile server**: Python FastAPI (deployed to Fly.io as `geo-base-api`)
+- **MCP server**: Python FastMCP (Fly.io / runnable locally)
+- **Database**: PostgreSQL + PostGIS (Fly.io app `geo-base-pg`)
+- **Storage**: Fly Tigris (S3-compatible). Direct uploads are persisted as internal `s3://bucket/path` URLs in a private bucket.
+- **Cache**: Redis (Upstash). Health endpoint: `GET /api/health/redis`.
+
+### Frontend
+
+- **Admin UI**: Next.js 16 (App Router) + React 19 + TypeScript + Tailwind v4 + shadcn/ui, deployed to Vercel
+- **Map library**: MapLibre GL JS
+- **Authentication**: Self-hosted local provider (JWT + bcrypt, `AUTH_PROVIDER=local`)
+
+## Repository layout
 
 ```
 geo-base/
-├── api/                 # FastAPI タイルサーバー
-├── app/                 # Next.js 管理画面
-├── mcp/                 # MCP Server
-├── docker/              # ローカル開発用Docker
-├── scripts/             # ユーティリティスクリプト
-└── packages/            # 共有パッケージ
+├── api/                 # FastAPI tile server
+├── app/                 # Next.js admin UI
+├── mcp/                 # MCP server
+├── docker/              # Local-development Docker stack (PostGIS + Redis)
+├── scripts/             # Utility scripts (seeding, fixtures, etc.)
+└── packages/            # Shared packages
 ```
 
-## ローカル開発環境セットアップ
+## Local development setup
 
-### 前提条件
+### Prerequisites
 
 - Python 3.11+
 - Node.js 20+
 - Docker & Docker Compose
-- uv（Pythonパッケージマネージャー）
+- [`uv`](https://docs.astral.sh/uv/) — Python package manager
 
-### uvのインストール
+### Installing `uv`
 
 ```bash
 # macOS / Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# または pip
+# or via pip
 pip install uv
 ```
 
-### セットアップ手順
+### Bring up the stack
 
 ```bash
-# リポジトリクローン
-git clone https://github.com/your-org/geo-base.git
+# Clone the repository
+git clone https://github.com/mopinfish/geo-base.git
 cd geo-base
 
-# ローカルPostGIS起動
+# Start PostGIS + Redis locally
 cd docker
 docker compose up -d
 cd ..
 
-# APIサーバー環境構築
+# Tile server (FastAPI) — runs on :8000
 cd api
 uv sync
-uv run uvicorn lib.main:app --reload --port 3000
+uv run uvicorn lib.main:app --reload --port 8000
 cd ..
 
-# MCPサーバー環境構築
+# MCP server — stdio mode by default
 cd mcp
 uv sync
 uv run python server.py
 cd ..
 
-# 管理画面環境構築
+# Admin UI (Next.js) — runs on :3000
 cd app
 npm install
 npm run dev
 cd ..
 ```
 
-### 環境変数
+### Environment variables
 
-各ディレクトリに`.env`ファイルを作成してください。テンプレートは`.env.example`を参照してください。
+Each subdirectory has an `.env.example`. Copy it to `.env` and fill in the values that fit your environment.
 
-## サポートフォーマット
+## Supported formats
 
-### ラスタタイル
+### Raster tiles
+
 - GeoTIFF / Cloud Optimized GeoTIFF (COG)
-- PNG
-- データPNG（標高データ等）
+- PNG (including data-PNG such as elevation tiles)
 - JPG
 
-### ベクタタイル
+### Vector tiles
+
 - GeoJSON
-- Mapbox Vector Tile (MVT / .pbf)
+- Mapbox Vector Tile (MVT / `.pbf`)
 - MBTiles
 - PMTiles
 
-## ライセンス
+## Contributing
 
-MIT License
+We welcome contributions. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request. For security issues, see [SECURITY.md](./SECURITY.md).
+
+## License
+
+MIT License — see [LICENSE](./LICENSE).
