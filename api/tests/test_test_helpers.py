@@ -254,3 +254,81 @@ def test_console_backend_does_not_record_when_e2e_mode_off():
         assert get_recent_password_reset_token("user2@example.com") is None
     finally:
         _RECENT_PASSWORD_RESET_TOKENS.clear()
+
+
+def test_api_keys_expire_updates_existing_key(monkeypatch):
+    """正常系: 既存 api_key の expires_at が過去日時に更新され 200 を返す
+    (Copilot PR #122 指摘で追加)。
+
+    DB を mock し、UPDATE の rowcount が 1 で commit() が呼ばれるパスを検証。
+    """
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/geo_base_e2e",
+    )
+    app = _make_app(monkeypatch, "1")
+    client = TestClient(app)
+
+    mock_cursor = MagicMock()
+    mock_cursor.rowcount = 1
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=None)
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+
+    mock_cm = MagicMock()
+    mock_cm.__enter__ = MagicMock(return_value=mock_conn)
+    mock_cm.__exit__ = MagicMock(return_value=None)
+
+    with patch(
+        "lib.routers.test_helpers.get_db_connection", return_value=mock_cm
+    ):
+        res = client.post(
+            "/api/test/api-keys/expire",
+            json={"key_id": "some-uuid", "minutes_ago": 60},
+        )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["key_id"] == "some-uuid"
+    assert "expires_at" in body
+    # UPDATE と commit() が確実に呼ばれていること。
+    assert mock_cursor.execute.called
+    assert mock_conn.commit.called
+
+
+def test_api_keys_expire_returns_404_for_unknown_key(monkeypatch):
+    """未知の key_id (rowcount=0) なら 404 を返し commit() しない
+    (Copilot PR #122 指摘で追加)。"""
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/geo_base_e2e",
+    )
+    app = _make_app(monkeypatch, "1")
+    client = TestClient(app)
+
+    mock_cursor = MagicMock()
+    mock_cursor.rowcount = 0
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=None)
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+
+    mock_cm = MagicMock()
+    mock_cm.__enter__ = MagicMock(return_value=mock_conn)
+    mock_cm.__exit__ = MagicMock(return_value=None)
+
+    with patch(
+        "lib.routers.test_helpers.get_db_connection", return_value=mock_cm
+    ):
+        res = client.post(
+            "/api/test/api-keys/expire",
+            json={"key_id": "nonexistent", "minutes_ago": 60},
+        )
+
+    assert res.status_code == 404, res.text
+    assert "not found" in res.json()["detail"].lower()
+    # 失敗時に commit() を呼ばないこと。
+    assert not mock_conn.commit.called

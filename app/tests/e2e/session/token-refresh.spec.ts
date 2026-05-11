@@ -44,9 +44,18 @@ test.describe("Auth token refresh", () => {
     }
 
     // reload して認証必須の API を再 fetch → authClient が refresh → 続行。
+    // 単に「再描画できた」だけでは refresh が呼ばれなくても通ってしまう
+    // (Copilot PR #122 指摘) ので、`/api/auth/refresh` への POST が
+    // 実際に発行されたことを assert する。
+    const refreshRequest = page.waitForRequest(
+      (req) =>
+        req.url().includes("/api/auth/refresh") && req.method() === "POST",
+      { timeout: 15_000 },
+    );
     await page.reload();
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1, {
       timeout: 15_000,
     });
+    await refreshRequest;
   });
 });

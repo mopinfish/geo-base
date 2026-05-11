@@ -239,6 +239,14 @@ export async function expireApiKey(input: {
   // resetDatabase と同じく認証不要の request context で直接叩く。
   const { request } = await import("@playwright/test");
   const apiBase = process.env.PLAYWRIGHT_API_BASE_URL || "http://localhost:8000";
+  // utils/reset-db.ts と utils/token-fetch.ts と同じく、非認証 test endpoint を
+  // 本番に向けて叩かないよう localhost guard を入れる (Copilot PR #122 指摘)。
+  const apiHost = new URL(apiBase).hostname;
+  if (!["localhost", "127.0.0.1"].includes(apiHost)) {
+    throw new Error(
+      `Refusing to call /api/test/api-keys/expire against non-local host: ${apiHost}`,
+    );
+  }
   const ctx = await request.newContext({ baseURL: apiBase });
   try {
     const res = await ctx.post("/api/test/api-keys/expire", {

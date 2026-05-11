@@ -137,31 +137,40 @@ export function FeatureForm({
 
   // GeoJSON 文字列を既存の geometryType / coordinates state に流し込む。
   // 簡易バリデーションのみで、座標の数値検査は既存の isGeometryValid に委ねる。
+  //
+  // 空文字 / parse 失敗 / 形式違反のときは coordinates を null にして
+  // isGeometryValid を false に倒す。これをしないと、一度有効な GeoJSON を
+  // 入れて空に戻したり破壊したりしても古い geometry state が残って submit
+  // できてしまう (Copilot PR #122 指摘)。
   const applyGeojsonText = (text: string) => {
     setGeojsonText(text);
     if (!text.trim()) {
       setGeojsonError(null);
+      setCoordinates(null);
       return;
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch {
-      // 入力途中で parse できないのは UX 上問題ないので、state は触らない。
       setGeojsonError("JSON として解釈できません");
+      setCoordinates(null);
       return;
     }
     if (!parsed || typeof parsed !== "object") {
       setGeojsonError("オブジェクトを入力してください");
+      setCoordinates(null);
       return;
     }
     const obj = parsed as { type?: unknown; coordinates?: unknown };
     if (typeof obj.type !== "string" || !Array.isArray(obj.coordinates)) {
       setGeojsonError("type と coordinates が必要です");
+      setCoordinates(null);
       return;
     }
     if (obj.type !== "Point" && obj.type !== "LineString" && obj.type !== "Polygon") {
       setGeojsonError("Point / LineString / Polygon のみ対応しています");
+      setCoordinates(null);
       return;
     }
     // 既存の geometryType / coordinates 形式に変換 (Polygon は外環のみ)。
@@ -625,7 +634,12 @@ export function FeatureForm({
         <Button
           data-testid="feature-form-submit"
           type="submit"
-          disabled={isSubmitting || !isGeometryValid}
+          disabled={
+            isSubmitting ||
+            !isGeometryValid ||
+            (inputMode === "geojson" &&
+              (geojsonError !== null || !geojsonText.trim()))
+          }
         >
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isEditMode ? "更新" : "作成"}
