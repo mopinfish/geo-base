@@ -1,5 +1,29 @@
 {
   "app": {
-    "title": "geo-base Admin"
+    "title": "geo-base Admin",
+    "brand": "geo-base",
+    "version": "geo-base Admin v0.2.0"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "tilesets": "Tilesets",
+    "features": "Features",
+    "datasources": "Data sources",
+    "teams": "Teams",
+    "apiKeys": "API keys",
+    "settings": "Settings"
+  },
+  "user": {
+    "logout": "Sign out",
+    "loggingOut": "Signing out..."
+  },
+  "language": {
+    "switch": "Switch language",
+    "label_en": "English",
+    "label_ja": "日本語"
+  },
+  "nav_mobile": {
+    "open": "Open menu",
+    "close": "Close menu"
   }
 }

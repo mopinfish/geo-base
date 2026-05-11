@@ -1,5 +1,29 @@
 {
   "app": {
-    "title": "geo-base 管理画面"
+    "title": "geo-base 管理画面",
+    "brand": "geo-base",
+    "version": "geo-base Admin v0.2.0"
+  },
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "tilesets": "タイルセット",
+    "features": "フィーチャー",
+    "datasources": "データソース",
+    "teams": "チーム",
+    "apiKeys": "API キー",
+    "settings": "設定"
+  },
+  "user": {
+    "logout": "ログアウト",
+    "loggingOut": "ログアウト中..."
+  },
+  "language": {
+    "switch": "言語を切り替える",
+    "label_en": "English",
+    "label_ja": "日本語"
+  },
+  "nav_mobile": {
+    "open": "メニューを開く",
+    "close": "メニューを閉じる"
   }
 }
