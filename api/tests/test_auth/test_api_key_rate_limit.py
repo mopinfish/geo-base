@@ -6,8 +6,10 @@
 Phase 1 (refactor): DbRateLimiter の挙動が旧 inline 実装と一致する確認。
 Phase 2 (Redis): RedisRateLimiter の per-minute / per-day カウンタ + fail-open。
 """
+import concurrent.futures
+import threading
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -215,13 +217,12 @@ def redis_limiter(monkeypatch):
     """
     monkeypatch.setenv("REDIS_MAX_CONNECTIONS", "200")
 
-    # singleton をリセットして新しい pool size で再作成させる
-    import lib.redis_client as rc
-    rc._redis_client = None
-    rc._redis_available = None
-    rc.get_redis_config.cache_clear()
-
-    from lib.redis_client import get_redis
+    # singleton を公開 API でリセットして、新しい pool size で再作成させる。
+    # `reset_redis()` は内部実装変更に追従するため、private な
+    # `_redis_client` / `_redis_available` を直接触らない。
+    from lib.redis_client import get_redis, get_redis_config, reset_redis
+    reset_redis()
+    get_redis_config.cache_clear()
 
     client = get_redis()
     if client is None:
@@ -237,9 +238,8 @@ def redis_limiter(monkeypatch):
         client.delete(key)
 
     # singleton を再度リセットして他のテストへの影響を絶つ
-    rc._redis_client = None
-    rc._redis_available = None
-    rc.get_redis_config.cache_clear()
+    reset_redis()
+    get_redis_config.cache_clear()
 
 
 class TestRedisRateLimiter:
@@ -445,58 +445,71 @@ class TestRedisRateLimiter:
 
 
 class TestConcurrency:
-    @pytest.mark.asyncio
-    async def test_redis_100_concurrent_under_limit(self, redis_limiter):
-        """rl_min=100 で 100 並行リクエストが全て通過し、101 件目が拒否される。"""
-        import asyncio
+    """`ThreadPoolExecutor(max_workers=N)` + `threading.Barrier(N)` で、N 個の
+    thread を **実際に同時** に走らせる。`asyncio.to_thread` のデフォルト pool
+    (`min(32, cpu+4)`) で直列化されたままだと atomic 性を本当に検証していない
+    （直列でも結果が一致してしまう）ため、明示的に worker 数を確保 + Barrier で
+    開始タイミングを揃える。
+    """
 
-        key_id = str(uuid.uuid4())
+    NUM_CONCURRENT = 100
 
-        async def call() -> bool:
+    @staticmethod
+    def _run_concurrent_calls(
+        limiter: RedisRateLimiter,
+        key_id: str,
+        rl_min: int,
+        rl_day: int,
+        n: int,
+    ) -> list[bool]:
+        """N 個の thread を Barrier で同期させてから一斉に check_and_increment。
+
+        Returns 各 thread の結果 (True=pass, False=RateLimited)。
+        """
+        barrier = threading.Barrier(n)
+
+        def call() -> bool:
+            # 全 thread がここで合流するまで待ち、揃ったら一斉に解放される
+            barrier.wait(timeout=10.0)
             try:
-                await asyncio.to_thread(
-                    redis_limiter.check_and_increment,
-                    key_id,
-                    100,  # rl_min
-                    10000,  # rl_day
-                )
+                limiter.check_and_increment(key_id, rl_min, rl_day)
                 return True
             except RateLimited:
                 return False
 
-        # 100 並行
-        results = await asyncio.gather(*[call() for _ in range(100)])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n) as executor:
+            futures = [executor.submit(call) for _ in range(n)]
+            return [f.result(timeout=15.0) for f in futures]
+
+    def test_redis_100_concurrent_under_limit(self, redis_limiter):
+        """rl_min=100 で 100 並行リクエストが全て通過し、101 件目が拒否される。"""
+        key_id = str(uuid.uuid4())
+
+        results = self._run_concurrent_calls(
+            redis_limiter, key_id, rl_min=100, rl_day=10000, n=self.NUM_CONCURRENT,
+        )
         assert all(results), "All 100 requests within limit should pass"
         assert sum(results) == 100
 
-        # 101 件目
-        result = await call()
-        assert result is False, "101st request should be rejected"
+        # 101 件目 (single call, not concurrent)
+        try:
+            redis_limiter.check_and_increment(key_id, rl_min=100, rl_day=10000)
+            assert False, "101st request should be rejected"
+        except RateLimited:
+            pass
 
-    @pytest.mark.asyncio
-    async def test_redis_concurrent_over_limit_count_is_accurate(self, redis_limiter):
+    def test_redis_concurrent_over_limit_count_is_accurate(self, redis_limiter):
         """rl_min=50 で 100 並行 → 正確に 50 通過 / 50 拒否。
 
-        INCR は atomic なので、並行下でも counter は 100 になり、戻り値で
-        50 件目までが pass、51-100 件目が rate limited で reject される。
+        INCR は atomic なので、Barrier で本当に同時に発射されても counter は
+        正確に 100 になり、戻り値で 50 件目までが pass、51-100 件目が
+        rate limited で reject される。
         """
-        import asyncio
-
         key_id = str(uuid.uuid4())
 
-        async def call() -> bool:
-            try:
-                await asyncio.to_thread(
-                    redis_limiter.check_and_increment,
-                    key_id,
-                    50,  # rl_min
-                    10000,  # rl_day
-                )
-                return True
-            except RateLimited:
-                return False
-
-        results = await asyncio.gather(*[call() for _ in range(100)])
+        results = self._run_concurrent_calls(
+            redis_limiter, key_id, rl_min=50, rl_day=10000, n=self.NUM_CONCURRENT,
+        )
         passed = sum(results)
         # ちょうど 50 通過 (INCR atomic なので race condition はない)
         assert passed == 50, f"Expected exactly 50 to pass, got {passed}"

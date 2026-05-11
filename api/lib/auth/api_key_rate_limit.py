@@ -18,14 +18,21 @@
 設計:
 - `check_and_increment(key_id, rl_min, rl_day)` を呼ぶと、現在のカウントが limit を
   超過していれば `RateLimited` を raise し、超過していなければカウンタを +1 する
-- 「先 check 後 increment」の TOCTOU は許容範囲。fixed-window 自体が境界で 2x の
-  バーストを許容する設計なので、厳密な逐次性は不要
+- fixed-window 自体が境界で 2x のバーストを許容する設計なので、厳密な逐次性は不要
+
+backend ごとのアルゴリズム差:
+- `DbRateLimiter`: **check → increment 順** (旧 inline 実装を踏襲)。SQL 関数で
+  `get_api_key_rate_limit_status` を読み、超過していなければ
+  `increment_api_key_rate_limit` を呼ぶ。raise 時はカウンタを +1 しない。
+- `RedisRateLimiter`: **INCR → check 順** (Redis の atomic INCR を活かす)。INCR で
+  カウンタを +1 してから戻り値が limit 超過かを判定し、超過なら raise。raise した
+  場合もカウンタは +1 されたまま残る (TOCTOU を避けるためのトレードオフ)。窓が
+  短い (60s) ため次窓で自動リセットされる。
 
 実装側の責務:
 - `DbRateLimiter` は呼び出し側が用意した `conn` を使う（既存挙動のまま、commit は
   呼び出し側で行う）。**per-minute のみチェック** し、per-day は increment するだけ
-  （これは旧 `api_key_auth.py` の inline 挙動と一致 — 後方互換のため Phase 1 では
-  維持）
+  （これは旧 `api_key_auth.py` の inline 挙動と一致 — 後方互換のため維持）
 - `RedisRateLimiter` は `conn` を使わず `lib.redis_client.get_redis()` を利用。
   Issue 仕様に従い **per-minute / per-day 両方をチェック** する（DB との挙動差
   — DB 側も将来揃える余地あり）
