@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from lib.config import get_settings
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.auth import User, get_current_user, require_auth
 from lib.models.api_key import (
     ApiKeyCreate,
@@ -53,24 +54,39 @@ def get_api_key_or_404(conn, key_id: str, user_id: str) -> dict:
         row = cur.fetchone()
     
     if not row:
-        raise HTTPException(status_code=404, detail=f"API key not found: {key_id}")
-    
+        raise api_error(
+            404,
+            ErrorCode.API_KEY_NOT_FOUND,
+            f"API key not found: {key_id}",
+            details={"key_id": key_id},
+        )
+
     key_data = dict(zip(columns, row))
-    
+
     # Check ownership (user must own the key or be team admin)
     if str(key_data['user_id']) != user_id:
         # Check if user is team admin
         if key_data['team_id']:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT role FROM team_members 
+                    """SELECT role FROM team_members
                        WHERE team_id = %s AND user_id = %s AND role IN ('owner', 'administrator')""",
                     (key_data['team_id'], user_id)
                 )
                 if not cur.fetchone():
-                    raise HTTPException(status_code=403, detail="You don't have permission to access this API key")
+                    raise api_error(
+                        403,
+                        ErrorCode.API_KEY_FORBIDDEN,
+                        "You don't have permission to access this API key",
+                        details={"key_id": key_id},
+                    )
         else:
-            raise HTTPException(status_code=403, detail="You don't have permission to access this API key")
+            raise api_error(
+                403,
+                ErrorCode.API_KEY_FORBIDDEN,
+                "You don't have permission to access this API key",
+                details={"key_id": key_id},
+            )
     
     return key_data
 
@@ -118,7 +134,12 @@ def create_api_key(
                     (key_data.team_id, user.id)
                 )
                 if not cur.fetchone():
-                    raise HTTPException(status_code=403, detail="You are not a member of this team")
+                    raise api_error(
+                        403,
+                        ErrorCode.TEAM_FORBIDDEN,
+                        "You are not a member of this team",
+                        details={"team_id": str(key_data.team_id)},
+                    )
         
         # Generate the API key
         full_key, prefix, key_hash = generate_api_key(key_data.environment)
@@ -175,7 +196,11 @@ def create_api_key(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error creating API key: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating API key: {str(e)}",
+        )
 
 
 @router.get("", response_model=ApiKeyListResponse)
@@ -242,7 +267,11 @@ def list_api_keys(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing API keys: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing API keys: {str(e)}",
+        )
 
 
 @router.get("/{key_id}", response_model=ApiKeyResponse)
@@ -268,7 +297,11 @@ def get_api_key(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching API key: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching API key: {str(e)}",
+        )
 
 
 @router.put("/{key_id}", response_model=ApiKeyResponse)
@@ -316,7 +349,11 @@ def update_api_key(
             params.append(json.dumps(update_data.metadata))
         
         if not updates:
-            raise HTTPException(status_code=400, detail="No fields to update")
+            raise api_error(
+                400,
+                ErrorCode.VALIDATION_FIELD_REQUIRED,
+                "No fields to update",
+            )
         
         params.append(key_id)
         
@@ -341,7 +378,11 @@ def update_api_key(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error updating API key: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error updating API key: {str(e)}",
+        )
 
 
 @router.post("/{key_id}/revoke", response_model=ApiKeyResponse)
@@ -356,7 +397,12 @@ def revoke_api_key(
         key_data = get_api_key_or_404(conn, key_id, user.id)
         
         if key_data.get('revoked_at'):
-            raise HTTPException(status_code=400, detail="API key is already revoked")
+            raise api_error(
+                400,
+                ErrorCode.API_KEY_REVOKED,
+                "API key is already revoked",
+                details={"key_id": key_id},
+            )
         
         with conn.cursor() as cur:
             cur.execute(
@@ -381,7 +427,11 @@ def revoke_api_key(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error revoking API key: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error revoking API key: {str(e)}",
+        )
 
 
 @router.delete("/{key_id}", status_code=204)
@@ -398,15 +448,24 @@ def delete_api_key(
         with conn.cursor() as cur:
             cur.execute("DELETE FROM api_keys WHERE id = %s", (key_id,))
             if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail="API key not found")
-        
+                raise api_error(
+                    404,
+                    ErrorCode.API_KEY_NOT_FOUND,
+                    "API key not found",
+                    details={"key_id": key_id},
+                )
+
         conn.commit()
-        
+
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error deleting API key: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error deleting API key: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -467,7 +526,11 @@ def get_api_key_usage(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching usage stats: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching usage stats: {str(e)}",
+        )
 
 
 @router.get("/{key_id}/logs", response_model=ApiKeyUsageLogResponse)
@@ -528,7 +591,11 @@ def get_api_key_logs(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching usage logs: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching usage logs: {str(e)}",
+        )
 
 
 @router.get("/{key_id}/rate-limit", response_model=RateLimitStatus)
@@ -574,7 +641,11 @@ def get_rate_limit_status(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching rate limit status: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching rate limit status: {str(e)}",
+        )
 
 
 # =============================================================================
