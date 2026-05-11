@@ -30,9 +30,10 @@ export const FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE: Locale = "ja";
  * - `common`: 横断的 (app title / nav / button labels 等)
  * - `api-errors`: API code → user-facing message のマップ。Phase 2b の
  *   `app/src/lib/api-errors.ts:JA_MESSAGES` を JSON 化したもの。
+ * - `auth`: 認証系画面 (login / password-reset / invitation) の UI 文言
+ *   (Phase 3c / Issue #107)。
  *
- * PR-C 以降 (auth / tilesets / features / ...) で domain 別に namespace を
- * 追加していく。
+ * PR-D 以降 (tilesets / features / ...) で domain 別に namespace を追加していく。
  */
-export const NAMESPACES = ["common", "api-errors"] as const;
+export const NAMESPACES = ["common", "api-errors", "auth"] as const;
 export type Namespace = (typeof NAMESPACES)[number];
