@@ -69,14 +69,18 @@ class TestDbRateLimiter:
         limiter.check_and_increment(key_id, rl_min=60, rl_day=1000)
 
     def test_increment_persists(self, db_conn, make_api_key):
-        """check_and_increment を 3 回呼ぶと counter が 3 になる。"""
+        """check_and_increment を 3 回呼ぶと counter が累計 3 になる。
+
+        実行が分境界を跨ぐと窓ごとに行が分かれるため、`SUM(request_count)` で
+        合算してアサート (flaky 防止)。
+        """
         key_id = make_api_key(rl_min=60, rl_day=1000)
         limiter = DbRateLimiter(db_conn)
         for _ in range(3):
             limiter.check_and_increment(key_id, rl_min=60, rl_day=1000)
         with db_conn.cursor() as cur:
             cur.execute(
-                """SELECT request_count FROM api_key_rate_limits
+                """SELECT COALESCE(SUM(request_count), 0) FROM api_key_rate_limits
                    WHERE api_key_id = %s AND window_type = 'minute'""",
                 (key_id,),
             )
@@ -84,16 +88,20 @@ class TestDbRateLimiter:
         assert count == 3
 
     def test_over_limit_raises(self, db_conn, make_api_key):
-        """rate_limit_per_minute=2 にして 3 回目で RateLimited を raise する。"""
+        """rate_limit_per_minute=2 にして 3 回目で RateLimited を raise する。
+
+        Python の `datetime.now()` で window_start を作ると INSERT 〜 SQL 関数
+        呼び出しの間に minute 境界を跨いだ際に SQL 側が別窓を見て flaky になる
+        ため、DB 関数と同じ `date_trunc('minute', NOW())` を使う。
+        """
         key_id = make_api_key(rl_min=2, rl_day=1000)
         # api_key_rate_limits に直接 2 件カウントを投入して上限到達状態にする
-        window_start = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         with db_conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO api_key_rate_limits
                        (api_key_id, window_type, window_start, request_count)
-                   VALUES (%s, 'minute', %s, 2)""",
-                (key_id, window_start),
+                   VALUES (%s, 'minute', date_trunc('minute', NOW()), 2)""",
+                (key_id,),
             )
 
         limiter = DbRateLimiter(db_conn)
@@ -102,22 +110,27 @@ class TestDbRateLimiter:
         assert "per minute" in str(exc.value)
 
     def test_check_then_raise_does_not_increment(self, db_conn, make_api_key):
-        """raise した場合は counter は増えない（check が先、increment は後）。"""
+        """raise した場合は counter は増えない（check が先、increment は後）。
+
+        `date_trunc('minute', NOW())` で DB と同じ window 基準を使う (flaky 防止)。
+        """
         key_id = make_api_key(rl_min=1, rl_day=1000)
-        window_start = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         with db_conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO api_key_rate_limits
                        (api_key_id, window_type, window_start, request_count)
-                   VALUES (%s, 'minute', %s, 1)""",
-                (key_id, window_start),
+                   VALUES (%s, 'minute', date_trunc('minute', NOW()), 1)
+                   RETURNING window_start""",
+                (key_id,),
             )
+            window_start = cur.fetchone()[0]
 
         limiter = DbRateLimiter(db_conn)
         with pytest.raises(RateLimited):
             limiter.check_and_increment(key_id, rl_min=1, rl_day=1000)
 
-        # counter は 1 のまま（increment されていない）
+        # counter は 1 のまま（increment されていない）。挿入時の window_start で
+        # 厳密に絞ることで、テスト実行が境界をまたいでも該当行のみを検証する。
         with db_conn.cursor() as cur:
             cur.execute(
                 """SELECT request_count FROM api_key_rate_limits
@@ -129,13 +142,17 @@ class TestDbRateLimiter:
         assert count == 1
 
     def test_day_window_also_increments(self, db_conn, make_api_key):
-        """per-day カウンタも同時に +1 される。"""
+        """per-day カウンタも同時に +1 される。
+
+        per-day 窓は日次なので分境界を跨ぐ可能性は per-minute より低いが、
+        `SUM` で安全に合算 (テスト実行が UTC 日付境界をまたぐ場合への配慮)。
+        """
         key_id = make_api_key(rl_min=60, rl_day=1000)
         limiter = DbRateLimiter(db_conn)
         limiter.check_and_increment(key_id, rl_min=60, rl_day=1000)
         with db_conn.cursor() as cur:
             cur.execute(
-                """SELECT request_count FROM api_key_rate_limits
+                """SELECT COALESCE(SUM(request_count), 0) FROM api_key_rate_limits
                    WHERE api_key_id = %s AND window_type = 'day'""",
                 (key_id,),
             )
@@ -149,7 +166,12 @@ class TestDbRateLimiter:
 
 
 class TestMakeRateLimiter:
-    def test_default_returns_db_rate_limiter(self, db_conn, monkeypatch):
+    """`local_auth_settings` fixture を依存に取って Settings バリデーション
+    (`AUTH_PROVIDER=local` の場合 `JWT_SECRET` 必須等) で落ちないようにする。
+    環境に依存せずどのマシンでも安定実行できる。
+    """
+
+    def test_default_returns_db_rate_limiter(self, db_conn, monkeypatch, local_auth_settings):
         """既定 (`RATE_LIMIT_BACKEND` 未設定) は DbRateLimiter。"""
         monkeypatch.delenv("RATE_LIMIT_BACKEND", raising=False)
         from lib.config import get_settings
@@ -160,7 +182,7 @@ class TestMakeRateLimiter:
         finally:
             get_settings.cache_clear()
 
-    def test_explicit_db_backend(self, db_conn, monkeypatch):
+    def test_explicit_db_backend(self, db_conn, monkeypatch, local_auth_settings):
         monkeypatch.setenv("RATE_LIMIT_BACKEND", "db")
         from lib.config import get_settings
         get_settings.cache_clear()
@@ -170,7 +192,7 @@ class TestMakeRateLimiter:
         finally:
             get_settings.cache_clear()
 
-    def test_redis_backend_returns_redis_rate_limiter(self, db_conn, monkeypatch):
+    def test_redis_backend_returns_redis_rate_limiter(self, db_conn, monkeypatch, local_auth_settings):
         """Phase 2: `RATE_LIMIT_BACKEND=redis` で RedisRateLimiter を返す。"""
         monkeypatch.setenv("RATE_LIMIT_BACKEND", "redis")
         from lib.config import get_settings
@@ -181,7 +203,7 @@ class TestMakeRateLimiter:
         finally:
             get_settings.cache_clear()
 
-    def test_unknown_backend_falls_back_to_db(self, db_conn, monkeypatch, caplog):
+    def test_unknown_backend_falls_back_to_db(self, db_conn, monkeypatch, caplog, local_auth_settings):
         monkeypatch.setenv("RATE_LIMIT_BACKEND", "memcached")
         from lib.config import get_settings
         get_settings.cache_clear()
