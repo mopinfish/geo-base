@@ -129,3 +129,18 @@ class AuthProvider(ABC):
             InvalidToken: トークン不正
             WeakPassword: ポリシー違反
         """
+
+    @abstractmethod
+    async def update_preferred_locale(
+        self,
+        user_id: str,
+        preferred_locale: Optional[str],
+    ) -> User:
+        """ユーザーの UI locale を永続化 (i18n Phase 3 / Issue #107)。
+
+        `preferred_locale=None` を渡すと `users.preferred_locale` を NULL に
+        戻し、cookie / Accept-Language フォールバックに戻る。
+
+        Raises:
+            UserNotFound: 該当ユーザーが存在しない
+        """

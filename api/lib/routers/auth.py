@@ -212,6 +212,50 @@ async def update_me(body: UpdateMeRequest, user: User = Depends(require_auth)):
 
 
 # ===========================================================================
+# 5.5 PATCH /me/locale  (i18n Phase 3 / Issue #107)
+# ===========================================================================
+
+# Allowed locales — keep in sync with `app/src/i18n/config.ts:LOCALES`.
+# 将来 3 言語目以降を追加するときはここと app/src/i18n/config.ts を同時に
+# 更新する。CI で同期検証はしない (DB 列は varchar、API のみで gate)。
+_ALLOWED_LOCALES = {"en", "ja"}
+
+
+class UpdateLocaleRequest(BaseModel):
+    """Body of PATCH /api/auth/me/locale.
+
+    `preferred_locale` を null に設定すると `users.preferred_locale` も NULL に
+    なり、cookie / Accept-Language フォールバックに戻る。
+    """
+
+    preferred_locale: Optional[str] = Field(None, max_length=8)
+
+
+@router.patch("/me/locale", response_model=User)
+async def update_my_locale(
+    body: UpdateLocaleRequest,
+    user: User = Depends(require_auth),
+):
+    """ログイン中ユーザーの preferred_locale を更新する。"""
+    if body.preferred_locale is not None and body.preferred_locale not in _ALLOWED_LOCALES:
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_INVALID_VALUE,
+            "Unsupported locale",
+            details={
+                "preferred_locale": body.preferred_locale,
+                "allowed": sorted(_ALLOWED_LOCALES),
+            },
+        )
+    try:
+        return await get_auth_provider().update_preferred_locale(
+            user.id, body.preferred_locale,
+        )
+    except AuthError as e:
+        raise _translate(e)
+
+
+# ===========================================================================
 # 6. POST /me/password
 # ===========================================================================
 
