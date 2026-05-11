@@ -92,10 +92,19 @@ runs:
           exit 1
         fi
         # 共通の init 対象: メイン DB + (worker 数 > 1 のとき) ワーカー DB。
-        DBS=("$DB_NAME")
+        # e2e-database-url 側がすでに `geo_base_e2e_w0` のような worker 名を
+        # 指していると重複が起きるので、associative-array で dedupe する。
+        declare -A SEEN
+        DBS=()
+        SEEN["$DB_NAME"]=1
+        DBS+=("$DB_NAME")
         if [ "$E2E_WORKER_COUNT" -gt 1 ]; then
           for i in $(seq 0 $((E2E_WORKER_COUNT - 1))); do
-            DBS+=("geo_base_e2e_w${i}")
+            WORKER_DB="geo_base_e2e_w${i}"
+            if [ -z "${SEEN[$WORKER_DB]:-}" ]; then
+              SEEN["$WORKER_DB"]=1
+              DBS+=("$WORKER_DB")
+            fi
           done
         fi
         for DB in "${DBS[@]}"; do

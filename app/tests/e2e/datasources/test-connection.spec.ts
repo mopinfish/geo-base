@@ -40,8 +40,10 @@ test.describe("Datasources test-connection", () => {
     // 結果 (成功 or エラー) のいずれかが出ればよい。
     const result = page.getByTestId("datasource-test-connection-result");
     await expect(result).toBeVisible({ timeout: 30_000 });
-    // status 属性で 'ok' または 'error' が付与される。
+    // data-status は UI の testResult.status をそのまま流したもの。
+    // API は成功時 "success"、失敗時 "error" を返す
+    // (api/lib/routers/datasources.py の test_datasource_connection)。
     const status = await result.getAttribute("data-status");
-    expect(["ok", "error"]).toContain(status);
+    expect(["success", "error"]).toContain(status);
   });
 });
