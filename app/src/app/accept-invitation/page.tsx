@@ -22,10 +22,8 @@ function AcceptInvitationForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!token) {
-      setError(t("error_invalid_link"));
-      return;
-    }
+    // token 不在は下の render guard で同期的にハンドルする (effect は呼ばれない)。
+    if (!token) return;
     authClient.getInvitationInfo(token)
       .then(setInfo)
       .catch((err) =>
@@ -47,6 +45,20 @@ function AcceptInvitationForm() {
       setLoading(false);
     }
   };
+
+  // token が URL に無いケースは初回 render で即エラー表示する。
+  // useEffect 経由で setError → 再 render する旧実装だと、最初の 1 paint
+  // だけ "Loading..." が見えるフラッシュが発生していた
+  // (Copilot PR #131 round 1 指摘)。
+  if (!token) {
+    return (
+      <div className="container py-12">
+        <p className="text-red-600" data-testid="invitation-error">
+          {t("error_invalid_link")}
+        </p>
+      </div>
+    );
+  }
 
   if (error && !info)
     return (
