@@ -201,13 +201,26 @@ class TestMakeRateLimiter:
 
 
 @pytest.fixture
-def redis_limiter():
+def redis_limiter(monkeypatch):
     """テスト用 RedisRateLimiter。テスト前後で関連キーを掃除して分離する。
 
     docker-compose の redis (localhost:6379) に対して実通信する。Redis が
     起動していない CI 環境では skip（`get_redis()` が None を返すケースは
     fail-open のテスト側で別途 cover）。
+
+    並行性テスト (TestConcurrency) では 100 並行 thread が同時に接続要求するため、
+    既定の `REDIS_MAX_CONNECTIONS=10` ではプール枯渇で fail-open が誤発火する。
+    本フィクスチャでテスト中だけ pool size を 200 に拡張し、singleton も
+    リセットする。
     """
+    monkeypatch.setenv("REDIS_MAX_CONNECTIONS", "200")
+
+    # singleton をリセットして新しい pool size で再作成させる
+    import lib.redis_client as rc
+    rc._redis_client = None
+    rc._redis_available = None
+    rc.get_redis_config.cache_clear()
+
     from lib.redis_client import get_redis
 
     client = get_redis()
@@ -218,9 +231,15 @@ def redis_limiter():
     prefix = f"test:rate-limit:{uuid.uuid4().hex[:8]}"
     limiter = RedisRateLimiter(key_prefix=prefix)
     yield limiter
-    # cleanup
+
+    # cleanup keys
     for key in client.scan_iter(f"{prefix}:*"):
         client.delete(key)
+
+    # singleton を再度リセットして他のテストへの影響を絶つ
+    rc._redis_client = None
+    rc._redis_available = None
+    rc.get_redis_config.cache_clear()
 
 
 class TestRedisRateLimiter:
@@ -324,3 +343,73 @@ class TestRedisRateLimiter:
         ttl = client.ttl(minute_key)
         # TTL は 120 秒以下で正の値（ちょうど 120 とは限らないため >= 100 で確認）
         assert 100 < ttl <= 120, f"Expected TTL ~120s, got {ttl}"
+
+
+# ---------------------------------------------------------------------------
+# Concurrency (Phase 3) — 100 並行リクエストで Redis backend が正確に counter を
+# 管理することを確認。Issue #56 受け入れ基準「100 並行リクエスト時に DB 同期実装
+# より明確にスループット改善」のうち、Redis 側の正当性を deterministic に検証する。
+#
+# DB backend の並行性ベンチは contention で遅くなるが、_CommitNoOpConn を使う
+# テストでは real commit が走らないため正確な並行比較ができない。Issue 受け入れ
+# 基準の「ベンチ取得」はマージ後にステージング/本番で wrk / ab 等で別途取得する想定
+# （PR description に手順を記載）。
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrency:
+    @pytest.mark.asyncio
+    async def test_redis_100_concurrent_under_limit(self, redis_limiter):
+        """rl_min=100 で 100 並行リクエストが全て通過し、101 件目が拒否される。"""
+        import asyncio
+
+        key_id = str(uuid.uuid4())
+
+        async def call() -> bool:
+            try:
+                await asyncio.to_thread(
+                    redis_limiter.check_and_increment,
+                    key_id,
+                    100,  # rl_min
+                    10000,  # rl_day
+                )
+                return True
+            except RateLimited:
+                return False
+
+        # 100 並行
+        results = await asyncio.gather(*[call() for _ in range(100)])
+        assert all(results), "All 100 requests within limit should pass"
+        assert sum(results) == 100
+
+        # 101 件目
+        result = await call()
+        assert result is False, "101st request should be rejected"
+
+    @pytest.mark.asyncio
+    async def test_redis_concurrent_over_limit_count_is_accurate(self, redis_limiter):
+        """rl_min=50 で 100 並行 → 正確に 50 通過 / 50 拒否。
+
+        INCR は atomic なので、並行下でも counter は 100 になり、戻り値で
+        50 件目までが pass、51-100 件目が rate limited で reject される。
+        """
+        import asyncio
+
+        key_id = str(uuid.uuid4())
+
+        async def call() -> bool:
+            try:
+                await asyncio.to_thread(
+                    redis_limiter.check_and_increment,
+                    key_id,
+                    50,  # rl_min
+                    10000,  # rl_day
+                )
+                return True
+            except RateLimited:
+                return False
+
+        results = await asyncio.gather(*[call() for _ in range(100)])
+        passed = sum(results)
+        # ちょうど 50 通過 (INCR atomic なので race condition はない)
+        assert passed == 50, f"Expected exactly 50 to pass, got {passed}"
