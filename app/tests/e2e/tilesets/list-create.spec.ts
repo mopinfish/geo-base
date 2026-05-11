@@ -163,7 +163,8 @@ test.describe("Tilesets list filtering and bulk operations", () => {
     await submit.click({ force: true }).catch(() => {
       // disabled な要素クリックは reject されることがあるが、その場合も /new に留まるので OK。
     });
-    await page.waitForTimeout(500);
-    await expect(page).toHaveURL(/\/tilesets\/new$/);
+    // 固定 sleep は遅く・不安定なので使わない。`toHaveURL` の polling timeout が
+    // 「クリック後に遅延ナビゲーションが発生しないこと」を実質的に保証する。
+    await expect(page).toHaveURL(/\/tilesets\/new$/, { timeout: 3_000 });
   });
 });

@@ -67,9 +67,15 @@ test.describe("Datasources create - URL form", () => {
   test("DS-06 COG URL でデータソースを作成できる", async ({ page }) => {
     // 各テスト独立に DB をリセットしない (beforeAll の setup を共有する) ため、
     // 前のテストの残骸が一覧に残っている前提で「+1 増える」を assert する。
-    const beforeCount = await page
-      .goto("/datasources")
-      .then(() => page.getByTestId("datasource-list-row").count());
+    // `.count()` は描画/ hydrate を待たないので、先に最初の row が visible に
+    // なるまで or 0 件確定するまで待ってから数える。
+    await page.goto("/datasources");
+    const rows = page.getByTestId("datasource-list-row");
+    // hydrate 完了の合図として「table 自体」が描画されるのを待つ。
+    await expect(page.getByTestId("datasource-list-row").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    const beforeCount = await rows.count();
 
     await page.goto("/datasources/new");
 

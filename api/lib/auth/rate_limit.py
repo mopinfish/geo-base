@@ -5,10 +5,30 @@ email または IP の **どちらか** が閾値超過でロック。
 import os
 from typing import Optional
 
+from lib.config import get_settings
+
 from .errors import RateLimited
 
 MAX_FAILED_ATTEMPTS = 5
 WINDOW_MINUTES = 15
+
+
+def _e2e_bypass_enabled() -> bool:
+    """E2E モードでレート制限をスキップしてよい状態か判定。
+
+    fail-closed 設計: `E2E_MODE=1` **かつ** 非 production のときだけ True。
+    production (settings.is_production) では E2E_MODE が誤って残っていても
+    brute-force 防御を維持する。
+    """
+    if os.getenv("E2E_MODE") != "1":
+        return False
+    try:
+        if get_settings().is_production:
+            return False
+    except Exception:
+        # settings 取得に失敗するなら安全側に倒して制限を継続する。
+        return False
+    return True
 
 
 def check_login_rate_limit(
@@ -19,13 +39,13 @@ def check_login_rate_limit(
 ) -> None:
     """直近 WINDOW_MINUTES 分間の失敗回数を確認し、閾値超過なら RateLimited を raise。
 
-    E2E_MODE=1 のときはレート制限をスキップする (issue #111)。
-    E2E テストで意図的に wrong password を試すケース (AUTH-02) や、
-    50+ テストが連続で login する fixture 構成だと、production 設定の閾値
-    (5 attempts / 15 min) では容易に lock されてしまう。本番には E2E_MODE が
-    届かないので開発・テスト環境専用の安全弁。
+    `_e2e_bypass_enabled()` が True (= `E2E_MODE=1` かつ 非 production) の
+    ときはレート制限をスキップする (issue #111)。E2E テストで意図的に wrong
+    password を試すケース (AUTH-02) や、50+ テストが連続で login する fixture
+    構成だと production 設定の閾値 (5 attempts / 15 min) で簡単に lock される
+    ため。本番では `is_production` で fail-closed。
     """
-    if os.getenv("E2E_MODE") == "1":
+    if _e2e_bypass_enabled():
         return
 
     if email is None and ip is None:
