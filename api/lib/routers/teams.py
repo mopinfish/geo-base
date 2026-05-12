@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from lib.config import get_settings
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.auth import User, get_current_user, require_auth
 from lib.models.team import (
     TeamRole,
@@ -91,8 +92,13 @@ def get_team_or_404(conn, team_id: str) -> dict:
         row = cur.fetchone()
     
     if not row:
-        raise HTTPException(status_code=404, detail=f"Team not found: {team_id}")
-    
+        raise api_error(
+            404,
+            ErrorCode.TEAM_NOT_FOUND,
+            f"Team not found: {team_id}",
+            details={"team_id": team_id},
+        )
+
     return dict(zip(columns, row))
 
 
@@ -166,7 +172,11 @@ def create_team(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error creating team: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating team: {str(e)}",
+        )
 
 
 @router.get("", response_model=TeamListResponse)
@@ -216,7 +226,11 @@ def list_teams(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing teams: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing teams: {str(e)}",
+        )
 
 
 @router.get("/{team_id}", response_model=TeamResponse)
@@ -230,9 +244,14 @@ def get_team(
         team = get_team_or_404(conn, team_id)
         
         # Check if user is a member
-        if not check_team_permission(conn, team_id, user.id, 
+        if not check_team_permission(conn, team_id, user.id,
                                      [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
-            raise HTTPException(status_code=403, detail="You are not a member of this team")
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "You are not a member of this team",
+                details={"team_id": team_id},
+            )
         
         # Get counts
         with conn.cursor() as cur:
@@ -250,7 +269,11 @@ def get_team(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching team: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching team: {str(e)}",
+        )
 
 
 @router.put("/{team_id}", response_model=TeamResponse)
@@ -267,7 +290,12 @@ def update_team(
         get_team_or_404(conn, team_id)
         
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="Only owners and administrators can update team settings")
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "Only owners and administrators can update team settings",
+                details={"team_id": team_id},
+            )
         
         updates = []
         params = []
@@ -285,10 +313,14 @@ def update_team(
             params.append(json.dumps(update_data.settings))
         
         if not updates:
-            raise HTTPException(status_code=400, detail="No fields to update")
-        
+            raise api_error(
+                400,
+                ErrorCode.VALIDATION_FIELD_REQUIRED,
+                "No fields to update",
+            )
+
         params.append(team_id)
-        
+
         with conn.cursor() as cur:
             cur.execute(
                 f"""UPDATE teams SET {', '.join(updates)}, updated_at = NOW()
@@ -307,7 +339,11 @@ def update_team(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error updating team: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error updating team: {str(e)}",
+        )
 
 
 @router.delete("/{team_id}", status_code=204)
@@ -321,18 +357,27 @@ def delete_team(
         team = get_team_or_404(conn, team_id)
         
         if str(team['owner_id']) != user.id:
-            raise HTTPException(status_code=403, detail="Only the team owner can delete the team")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_OWNER_REQUIRED,
+                "Only the team owner can delete the team",
+                details={"team_id": team_id},
+            )
+
         with conn.cursor() as cur:
             cur.execute("DELETE FROM teams WHERE id = %s", (team_id,))
-        
+
         conn.commit()
-        
+
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error deleting team: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error deleting team: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -351,20 +396,29 @@ def list_team_members(
         
         if not check_team_permission(conn, team_id, user.id,
                                      [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
-            raise HTTPException(status_code=403, detail="You are not a member of this team")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "You are not a member of this team",
+                details={"team_id": team_id},
+            )
+
         with conn.cursor() as cur:
+            # E2E (TM-05/TM-06) や UI 表示で member.user_email を必要とするため、
+            # users テーブルを LEFT JOIN して email/name を一緒に返す。
             cur.execute(
                 """SELECT tm.id, tm.team_id, tm.user_id, tm.role, tm.notification_enabled,
-                          tm.joined_at, tm.updated_at
+                          tm.joined_at, tm.updated_at,
+                          u.email AS user_email, u.name AS user_name
                    FROM team_members tm
+                   LEFT JOIN users u ON u.id = tm.user_id
                    WHERE tm.team_id = %s
                    ORDER BY tm.joined_at""",
                 (team_id,)
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         members = []
         for row in rows:
             member = dict(zip(columns, row))
@@ -376,6 +430,8 @@ def list_team_members(
                 "notification_enabled": member['notification_enabled'],
                 "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
                 "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
+                "user_email": member.get('user_email'),
+                "user_name": member.get('user_name'),
             })
         
         return {
@@ -387,7 +443,11 @@ def list_team_members(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing members: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing members: {str(e)}",
+        )
 
 
 @router.post("/{team_id}/members", response_model=TeamMemberResponse, status_code=201)
@@ -402,8 +462,13 @@ def add_team_member(
         get_team_or_404(conn, team_id)
         
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="Only owners and administrators can add members")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "Only owners and administrators can add members",
+                details={"team_id": team_id},
+            )
+
         with conn.cursor() as cur:
             # Check if already a member
             cur.execute(
@@ -411,7 +476,12 @@ def add_team_member(
                 (team_id, member_data.user_id)
             )
             if cur.fetchone():
-                raise HTTPException(status_code=400, detail="User is already a member of this team")
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_MEMBER_EXISTS,
+                    "User is already a member of this team",
+                    details={"team_id": team_id, "user_id": str(member_data.user_id)},
+                )
             
             # Add member
             cur.execute(
@@ -441,7 +511,11 @@ def add_team_member(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error adding member: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error adding member: {str(e)}",
+        )
 
 
 @router.put("/{team_id}/members/{user_id}", response_model=TeamMemberResponse)
@@ -457,8 +531,13 @@ def update_team_member(
         get_team_or_404(conn, team_id)
         
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="Only owners and administrators can update members")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "Only owners and administrators can update members",
+                details={"team_id": team_id},
+            )
+
         # Cannot change owner's role
         with conn.cursor() as cur:
             cur.execute(
@@ -467,9 +546,19 @@ def update_team_member(
             )
             row = cur.fetchone()
             if not row:
-                raise HTTPException(status_code=404, detail="Member not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TEAM_MEMBER_NOT_FOUND,
+                    "Member not found",
+                    details={"team_id": team_id, "user_id": user_id},
+                )
             if row[0] == 'owner' and update_data.role and update_data.role != TeamRole.OWNER:
-                raise HTTPException(status_code=400, detail="Cannot change owner's role. Transfer ownership first.")
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_OWNER_REQUIRED,
+                    "Cannot change owner's role. Transfer ownership first.",
+                    details={"team_id": team_id, "user_id": user_id},
+                )
         
         updates = []
         params = []
@@ -483,11 +572,17 @@ def update_team_member(
             params.append(update_data.notification_enabled)
         
         if not updates:
-            raise HTTPException(status_code=400, detail="No fields to update")
-        
+            raise api_error(
+                400,
+                ErrorCode.VALIDATION_FIELD_REQUIRED,
+                "No fields to update",
+            )
+
         params.extend([team_id, user_id])
         
         with conn.cursor() as cur:
+            # list_team_members と同じく user_email / user_name を返して
+            # クライアント側の state 更新で member.user_email が失われないようにする。
             cur.execute(
                 f"""UPDATE team_members SET {', '.join(updates)}, updated_at = NOW()
                     WHERE team_id = %s AND user_id = %s
@@ -496,10 +591,15 @@ def update_team_member(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+            member = dict(zip(columns, row))
+            cur.execute(
+                "SELECT email, name FROM users WHERE id = %s",
+                (member['user_id'],)
+            )
+            user_row = cur.fetchone()
+
         conn.commit()
-        
-        member = dict(zip(columns, row))
+
         return {
             "id": str(member['id']),
             "team_id": str(member['team_id']),
@@ -508,13 +608,19 @@ def update_team_member(
             "notification_enabled": member['notification_enabled'],
             "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
             "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
+            "user_email": user_row[0] if user_row else None,
+            "user_name": user_row[1] if user_row else None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error updating member: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error updating member: {str(e)}",
+        )
 
 
 @router.delete("/{team_id}/members/{user_id}", status_code=204)
@@ -533,8 +639,13 @@ def remove_team_member(
         is_admin = check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR])
         
         if not is_self and not is_admin:
-            raise HTTPException(status_code=403, detail="You don't have permission to remove this member")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "You don't have permission to remove this member",
+                details={"team_id": team_id, "user_id": user_id},
+            )
+
         # Cannot remove owner
         with conn.cursor() as cur:
             cur.execute(
@@ -543,9 +654,19 @@ def remove_team_member(
             )
             row = cur.fetchone()
             if not row:
-                raise HTTPException(status_code=404, detail="Member not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TEAM_MEMBER_NOT_FOUND,
+                    "Member not found",
+                    details={"team_id": team_id, "user_id": user_id},
+                )
             if row[0] == 'owner':
-                raise HTTPException(status_code=400, detail="Cannot remove team owner. Transfer ownership first.")
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_OWNER_REQUIRED,
+                    "Cannot remove team owner. Transfer ownership first.",
+                    details={"team_id": team_id, "user_id": user_id},
+                )
             
             cur.execute(
                 "DELETE FROM team_members WHERE team_id = %s AND user_id = %s",
@@ -558,7 +679,11 @@ def remove_team_member(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error removing member: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error removing member: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -577,7 +702,12 @@ def list_team_invitations(
         get_team_or_404(conn, team_id)
         
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="Only owners and administrators can view invitations")
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "Only owners and administrators can view invitations",
+                details={"team_id": team_id},
+            )
         
         query = """SELECT id, team_id, email, role, invited_by, message, token, status,
                           expires_at, accepted_at, created_at
@@ -622,7 +752,11 @@ def list_team_invitations(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing invitations: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing invitations: {str(e)}",
+        )
 
 
 @router.post("/{team_id}/invitations", response_model=TeamInvitationResponse, status_code=201)
@@ -637,7 +771,12 @@ async def create_team_invitation(
         team = get_team_or_404(conn, team_id)
 
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="Only owners and administrators can create invitations")
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "Only owners and administrators can create invitations",
+                details={"team_id": team_id},
+            )
 
         token = generate_invitation_token()
         expires_in_days = invitation_data.expires_in_days or 7
@@ -651,7 +790,12 @@ async def create_team_invitation(
                 (team_id, invitation_data.email)
             )
             if cur.fetchone():
-                raise HTTPException(status_code=400, detail="A pending invitation already exists for this email")
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_INVITATION_ALREADY_EXISTS,
+                    "A pending invitation already exists for this email",
+                    details={"team_id": team_id, "email": invitation_data.email},
+                )
 
             cur.execute(
                 """INSERT INTO team_invitations (team_id, email, role, invited_by, message, token, expires_at)
@@ -702,7 +846,11 @@ async def create_team_invitation(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error creating invitation: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating invitation: {str(e)}",
+        )
 
 
 @router.post("/invitations/accept", response_model=TeamMemberResponse)
@@ -727,12 +875,21 @@ def accept_team_invitation(
             row = cur.fetchone()
             
             if not row:
-                raise HTTPException(status_code=404, detail="Invitation not found")
-            
+                raise api_error(
+                    404,
+                    ErrorCode.TEAM_INVITATION_NOT_FOUND,
+                    "Invitation not found",
+                )
+
             inv_id, team_id, email, role, status, expires_at = row
 
             if status != 'pending':
-                raise HTTPException(status_code=400, detail=f"Invitation is {status}")
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_INVITATION_INVALID_STATUS,
+                    f"Invitation is {status}",
+                    details={"status": status},
+                )
 
             if expires_at:
                 # psycopg2 が TIMESTAMPTZ を tz-aware で返すケースに合わせて
@@ -751,11 +908,19 @@ def accept_team_invitation(
                         (inv_id,)
                     )
                     conn.commit()
-                    raise HTTPException(status_code=400, detail="Invitation has expired")
+                    raise api_error(
+                        400,
+                        ErrorCode.TEAM_INVITATION_EXPIRED,
+                        "Invitation has expired",
+                    )
 
             # Email 一致検証: invitation.email と user.email が一致しないと受諾不可
             if user.email and user.email.lower() != email.lower():
-                raise HTTPException(status_code=403, detail="Invitation email does not match your account email")
+                raise api_error(
+                    403,
+                    ErrorCode.TEAM_INVITATION_EMAIL_MISMATCH,
+                    "Invitation email does not match your account email",
+                )
 
             # Check if already a member
             cur.execute(
@@ -763,7 +928,12 @@ def accept_team_invitation(
                 (team_id, user.id)
             )
             if cur.fetchone():
-                raise HTTPException(status_code=400, detail="You are already a member of this team")
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_MEMBER_EXISTS,
+                    "You are already a member of this team",
+                    details={"team_id": str(team_id)},
+                )
             
             # Add as member
             cur.execute(
@@ -798,7 +968,11 @@ def accept_team_invitation(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error accepting invitation: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error accepting invitation: {str(e)}",
+        )
 
 
 @router.delete("/{team_id}/invitations/{invitation_id}", status_code=204)
@@ -813,8 +987,13 @@ def cancel_team_invitation(
         get_team_or_404(conn, team_id)
         
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="Only owners and administrators can cancel invitations")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "Only owners and administrators can cancel invitations",
+                details={"team_id": team_id},
+            )
+
         with conn.cursor() as cur:
             # token も NULL にしてキャンセル後の再利用を防ぐ (#55)
             cur.execute(
@@ -825,15 +1004,24 @@ def cancel_team_invitation(
                 (invitation_id, team_id)
             )
             if not cur.fetchone():
-                raise HTTPException(status_code=404, detail="Pending invitation not found")
-        
+                raise api_error(
+                    404,
+                    ErrorCode.TEAM_INVITATION_NOT_FOUND,
+                    "Pending invitation not found",
+                    details={"team_id": team_id, "invitation_id": invitation_id},
+                )
+
         conn.commit()
-        
+
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error cancelling invitation: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error cancelling invitation: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -852,8 +1040,13 @@ def list_team_tilesets(
         
         if not check_team_permission(conn, team_id, user.id,
                                      [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
-            raise HTTPException(status_code=403, detail="You are not a member of this team")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "You are not a member of this team",
+                details={"team_id": team_id},
+            )
+
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT tt.id, tt.team_id, tt.tileset_id, tt.added_by, tt.permission_level, tt.created_at,
@@ -890,7 +1083,11 @@ def list_team_tilesets(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing tilesets: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing tilesets: {str(e)}",
+        )
 
 
 @router.post("/{team_id}/tilesets", response_model=TeamTilesetResponse, status_code=201)
@@ -909,8 +1106,13 @@ def add_team_tileset(
         get_team_or_404(conn, team_id)
 
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="You don't have permission to add tilesets")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "You don't have permission to add tilesets",
+                details={"team_id": team_id},
+            )
+
         with conn.cursor() as cur:
             # Check if already added
             cur.execute(
@@ -918,13 +1120,23 @@ def add_team_tileset(
                 (team_id, tileset_data.tileset_id)
             )
             if cur.fetchone():
-                raise HTTPException(status_code=400, detail="Tileset is already shared with this team")
-            
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_TILESET_ALREADY_SHARED,
+                    "Tileset is already shared with this team",
+                    details={"team_id": team_id, "tileset_id": str(tileset_data.tileset_id)},
+                )
+
             # Verify tileset exists
             cur.execute("SELECT id, name, type FROM tilesets WHERE id = %s", (tileset_data.tileset_id,))
             tileset = cur.fetchone()
             if not tileset:
-                raise HTTPException(status_code=404, detail="Tileset not found")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": str(tileset_data.tileset_id)},
+                )
             
             tileset_name, tileset_type = tileset[1], tileset[2]
             
@@ -955,7 +1167,11 @@ def add_team_tileset(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error adding tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error adding tileset: {str(e)}",
+        )
 
 
 @router.delete("/{team_id}/tilesets/{tileset_id}", status_code=204)
@@ -970,23 +1186,37 @@ def remove_team_tileset(
         get_team_or_404(conn, team_id)
         
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
-            raise HTTPException(status_code=403, detail="Only owners and administrators can remove tilesets")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_FORBIDDEN,
+                "Only owners and administrators can remove tilesets",
+                details={"team_id": team_id},
+            )
+
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM team_tilesets WHERE team_id = %s AND tileset_id = %s RETURNING id",
                 (team_id, tileset_id)
             )
             if not cur.fetchone():
-                raise HTTPException(status_code=404, detail="Tileset not found in team")
-        
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found in team",
+                    details={"team_id": team_id, "tileset_id": tileset_id},
+                )
+
         conn.commit()
-        
+
     except HTTPException:
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error removing tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error removing tileset: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -1005,10 +1235,15 @@ def transfer_team_ownership(
         team = get_team_or_404(conn, team_id)
         
         if str(team['owner_id']) != user.id:
-            raise HTTPException(status_code=403, detail="Only the team owner can transfer ownership")
-        
+            raise api_error(
+                403,
+                ErrorCode.TEAM_OWNER_REQUIRED,
+                "Only the team owner can transfer ownership",
+                details={"team_id": team_id},
+            )
+
         new_owner_id = transfer_data.new_owner_id
-        
+
         with conn.cursor() as cur:
             # Verify new owner is a member
             cur.execute(
@@ -1016,7 +1251,12 @@ def transfer_team_ownership(
                 (team_id, new_owner_id)
             )
             if not cur.fetchone():
-                raise HTTPException(status_code=400, detail="New owner must be a team member")
+                raise api_error(
+                    400,
+                    ErrorCode.TEAM_MEMBER_NOT_FOUND,
+                    "New owner must be a team member",
+                    details={"team_id": team_id, "user_id": str(new_owner_id)},
+                )
             
             # Update team owner
             cur.execute(
@@ -1051,4 +1291,8 @@ def transfer_team_ownership(
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error transferring ownership: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error transferring ownership: {str(e)}",
+        )

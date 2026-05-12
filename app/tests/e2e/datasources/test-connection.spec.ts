@@ -46,4 +46,25 @@ test.describe("Datasources test-connection", () => {
     const status = await result.getAttribute("data-status");
     expect(["success", "error"]).toContain(status);
   });
+
+  test("DS-08 存在しない URL に接続テスト → エラー応答", async ({ page }) => {
+    // DNS が引けない `.invalid` TLD を指定。実際には backend 側で
+    // requests/aiohttp が DNS or connection error を投げ、API は
+    // `{ status: "error", ... }` を返す (datasources.py)。
+    const ds = await createDatasource({
+      name: "ds-test-connection-error",
+      url: "https://no-such-host.invalid/missing.pmtiles",
+      type: "pmtiles",
+    });
+
+    await page.goto(`/datasources/${ds.id}`);
+    await page.getByTestId("datasource-test-connection-button").click();
+
+    const result = page.getByTestId("datasource-test-connection-result");
+    await expect(result).toBeVisible({ timeout: 30_000 });
+    // 必ず "error" が出ることを期待する (DS-07 は緩い OR 判定だが、こちらは強い)。
+    await expect(result).toHaveAttribute("data-status", "error", {
+      timeout: 5_000,
+    });
+  });
 });

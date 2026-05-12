@@ -110,7 +110,11 @@ runs:
         for DB in "${DBS[@]}"; do
           echo "Creating $DB"
           psql -d postgres -c "CREATE DATABASE \"$DB\";"
-          for f in docker/postgis-init/0[1-6]_*.sql; do
+          # 0[1-8]_*.sql で 01..08 をカバー。`09_rls_policies.sql` はローカル
+          # 開発用 allow-all RLS なので CI では適用しない (既存の挙動を維持)。
+          # 新規 schema migration を追加した場合は本 glob (または対象の
+          # ファイル番号) を必ず更新すること。
+          for f in docker/postgis-init/0[1-8]_*.sql; do
             echo "Applying $f to $DB"
             psql -d "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

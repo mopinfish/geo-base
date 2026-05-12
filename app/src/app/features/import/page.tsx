@@ -248,7 +248,7 @@ export default function GeoJSONImportPage() {
 
         {/* エラー表示 */}
         {error && (
-          <Card className="border-destructive">
+          <Card className="border-destructive" data-testid="import-error-message">
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-5 w-5" />

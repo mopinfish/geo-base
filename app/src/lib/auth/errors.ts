@@ -34,13 +34,43 @@ function normalizeDetail(raw: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function parseAuthError(response: Response): Promise<AuthApiError> {
-  let detail = "Authentication error";
+/**
+ * i18n Phase 2b (#106): API レスポンスが envelope `{error: {code, message}}`
+ * 形式の場合、`code` をキーに `api-errors.ts` の日本語 map で訳出してから
+ * AuthApiError に詰める。ない場合は従来の `{detail: ...}` パスにフォールバック。
+ *
+ * これにより login / signup / password reset / accept invitation 等の
+ * 既存 catch (`err instanceof AuthApiError ? err.detail : ...`) はそのまま
+ * 日本語表示される。
+ */
+async function readErrorBody(response: Response): Promise<unknown> {
   try {
-    const data = await response.json();
-    detail = normalizeDetail(data?.detail, detail);
+    return await response.json();
   } catch {
-    // ignore
+    return null;
+  }
+}
+
+export async function parseAuthError(response: Response): Promise<AuthApiError> {
+  // dynamic import で循環依存を避ける (api-errors.ts 側はこのファイルに
+  // 依存しない予定なので実害はないが、bundle 単位の独立性を保つ意味で)。
+  const { extractApiError, translateApiError } = await import(
+    "../api-errors"
+  );
+
+  const body = await readErrorBody(response);
+  const extracted = extractApiError(body);
+
+  let detail: string;
+  if (extracted) {
+    // envelope or legacy detail string — どちらも translateApiError で
+    // 日本語に変換される (legacy は `err.message` がそのまま使われる)
+    detail = translateApiError(extracted);
+  } else {
+    detail = normalizeDetail(
+      (body as { detail?: unknown } | null)?.detail,
+      "Authentication error",
+    );
   }
 
   switch (response.status) {

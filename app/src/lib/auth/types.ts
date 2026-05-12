@@ -6,6 +6,11 @@ export interface User {
   email_verified: boolean;
   app_metadata?: Record<string, unknown> | null;
   user_metadata?: Record<string, unknown> | null;
+  /**
+   * Phase 3 (#107): null = 未設定 (cookie / Accept-Language フォールバック)。
+   * Admin UI の言語切替 dropdown (PR-B) で更新される。
+   */
+  preferred_locale?: string | null;
 }
 
 export interface TokenPair {

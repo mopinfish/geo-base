@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 from lib.pmtiles import (
     is_pmtiles_available,
     get_pmtiles_tile,
@@ -90,11 +91,12 @@ async def get_pmtiles_tile_endpoint(
         tile_format: Tile format (pbf, png, jpg, webp)
     """
     if not is_pmtiles_available():
-        raise HTTPException(
-            status_code=501,
-            detail="PMTiles service is not available. Install aiopmtiles: pip install aiopmtiles"
+        raise api_error(
+            501,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "PMTiles service is not available. Install aiopmtiles: pip install aiopmtiles",
         )
-    
+
     # Try to get tileset info from cache first
     cache_key = f"pmtiles:{tileset_id}"
     cached_info = get_cached_tileset_info(cache_key)
@@ -131,7 +133,12 @@ async def get_pmtiles_tile_endpoint(
             row = await asyncio.to_thread(_fetch_pmtiles_info)
 
             if not row:
-                raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    f"PMTiles tileset not found: {tileset_id}",
+                    details={"tileset_id": tileset_id},
+                )
 
             pmtiles_url, tile_type, compression, min_zoom, max_zoom, is_public, owner_user_id = row
             owner_user_id = str(owner_user_id) if owner_user_id else None
@@ -156,7 +163,11 @@ async def get_pmtiles_tile_endpoint(
                 conn.rollback()
             except Exception:
                 pass
-            raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+            raise api_error(
+                500,
+                ErrorCode.INTERNAL_DB_ERROR,
+                f"Error fetching tileset: {str(e)}",
+            )
 
     # Check access
     tileset_for_access = {
@@ -166,30 +177,54 @@ async def get_pmtiles_tile_endpoint(
     }
     if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
         if auth is None:
+            # NOTE: Phase 2b では envelope 化を見送り。
+            # api_error() は headers= を受けないため、
+            # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
             raise HTTPException(
                 status_code=401,
                 detail="Authentication required to access this tileset",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to access this tileset"
+        raise api_error(
+            403,
+            ErrorCode.TILESET_FORBIDDEN,
+            "You do not have permission to access this tileset",
+            details={"tileset_id": tileset_id},
         )
 
     # Validate zoom level
     if min_zoom is not None and z < min_zoom:
-        raise HTTPException(status_code=404, detail=f"Zoom level {z} below minimum {min_zoom}")
+        raise api_error(
+            404,
+            ErrorCode.TILE_INVALID_COORDINATE,
+            f"Zoom level {z} below minimum {min_zoom}",
+            details={"z": z, "min_zoom": min_zoom},
+        )
     if max_zoom is not None and z > max_zoom:
-        raise HTTPException(status_code=404, detail=f"Zoom level {z} above maximum {max_zoom}")
-    
+        raise api_error(
+            404,
+            ErrorCode.TILE_INVALID_COORDINATE,
+            f"Zoom level {z} above maximum {max_zoom}",
+            details={"z": z, "max_zoom": max_zoom},
+        )
+
     # Get tile from PMTiles
     try:
         tile_data = await get_pmtiles_tile(pmtiles_url, z, x, y)
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+        raise api_error(
+            500,
+            ErrorCode.TILE_RENDER_FAILED,
+            str(e),
+        )
+
     if tile_data is None:
-        raise HTTPException(status_code=404, detail="Tile not found")
+        raise api_error(
+            404,
+            ErrorCode.TILE_NOT_FOUND,
+            "Tile not found",
+            details={"tileset_id": tileset_id, "z": z, "x": x, "y": y},
+        )
     
     # Determine media type
     media_type = get_pmtiles_media_type(tile_type or "mvt")
@@ -219,11 +254,12 @@ def get_pmtiles_tilejson_endpoint(
         tileset_id: Tileset ID
     """
     if not is_pmtiles_available():
-        raise HTTPException(
-            status_code=501,
-            detail="PMTiles service is not available."
+        raise api_error(
+            501,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "PMTiles service is not available.",
         )
-    
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -238,14 +274,19 @@ def get_pmtiles_tilejson_endpoint(
                 (tileset_id,),
             )
             row = cur.fetchone()
-        
+
         if not row:
-            raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
-        
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"PMTiles tileset not found: {tileset_id}",
+                details={"tileset_id": tileset_id},
+            )
+
         (name, description, attribution, is_public, owner_user_id,
          pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers) = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
-        
+
         # Check access
         tileset_for_access = {
             "id": tileset_id,
@@ -254,14 +295,19 @@ def get_pmtiles_tilejson_endpoint(
         }
         if not check_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "You do not have permission to access this tileset",
+                details={"tileset_id": tileset_id},
             )
 
         base_url = get_base_url(request)
@@ -283,7 +329,11 @@ def get_pmtiles_tilejson_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating TileJSON: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error generating TileJSON: {str(e)}",
+        )
 
 
 @router.get("/{tileset_id}/metadata")
@@ -301,11 +351,12 @@ async def get_pmtiles_metadata_endpoint(
         tileset_id: Tileset ID
     """
     if not is_pmtiles_available():
-        raise HTTPException(
-            status_code=501,
-            detail="PMTiles service is not available."
+        raise api_error(
+            501,
+            ErrorCode.TILE_SERVICE_UNAVAILABLE,
+            "PMTiles service is not available.",
         )
-    
+
     # async handler 内なので sync DB I/O は asyncio.to_thread で
     # threadpool にオフロード（issue #66 / Option A）
     def _fetch_pmtiles_metadata_info():
@@ -326,7 +377,12 @@ async def get_pmtiles_metadata_endpoint(
         row = await asyncio.to_thread(_fetch_pmtiles_metadata_info)
 
         if not row:
-            raise HTTPException(status_code=404, detail=f"PMTiles tileset not found: {tileset_id}")
+            raise api_error(
+                404,
+                ErrorCode.TILESET_NOT_FOUND,
+                f"PMTiles tileset not found: {tileset_id}",
+                details={"tileset_id": tileset_id},
+            )
 
         pmtiles_url, name, description, is_public, owner_user_id = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
@@ -339,14 +395,19 @@ async def get_pmtiles_metadata_endpoint(
         }
         if not await acheck_tileset_access_v2(conn, tileset_for_access, auth):
             if auth is None:
+                # NOTE: Phase 2b では envelope 化を見送り。
+                # api_error() は headers= を受けないため、
+                # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required to access this tileset",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            raise HTTPException(
-                status_code=403,
-                detail="You do not have permission to access this tileset"
+            raise api_error(
+                403,
+                ErrorCode.TILESET_FORBIDDEN,
+                "You do not have permission to access this tileset",
+                details={"tileset_id": tileset_id},
             )
 
     except HTTPException:
@@ -358,7 +419,11 @@ async def get_pmtiles_metadata_endpoint(
             conn.rollback()
         except Exception:
             pass
-        raise HTTPException(status_code=500, detail=f"Error fetching tileset: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching tileset: {str(e)}",
+        )
 
     # Get metadata from PMTiles file
     try:
@@ -371,4 +436,8 @@ async def get_pmtiles_metadata_endpoint(
             **metadata,
         }
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(
+            500,
+            ErrorCode.TILE_RENDER_FAILED,
+            str(e),
+        )

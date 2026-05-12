@@ -355,7 +355,7 @@ export default function NewDatasourcePage() {
                     onValueChange={(v) => handleModeChange(v as InputMode)}
                     disabled={isSubmitting}
                   >
-                    <SelectTrigger id="mode">
+                    <SelectTrigger id="mode" data-testid="datasource-form-mode">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -469,6 +469,7 @@ export default function NewDatasourcePage() {
                     <Input
                       key={`file-${datasourceType}-${inputMode}`}
                       id="file"
+                      data-testid="datasource-form-file"
                       type="file"
                       accept={acceptHint}
                       disabled={isSubmitting}

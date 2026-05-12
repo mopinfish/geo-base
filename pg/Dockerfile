@@ -19,9 +19,10 @@
 
 FROM postgis/postgis:16-3.4
 
-COPY docker/postgis-init/01_init.sql            /docker-entrypoint-initdb.d/
-COPY docker/postgis-init/02_raster_schema.sql   /docker-entrypoint-initdb.d/
-COPY docker/postgis-init/03_pmtiles_schema.sql  /docker-entrypoint-initdb.d/
-COPY docker/postgis-init/04_auth_schema.sql     /docker-entrypoint-initdb.d/
-COPY docker/postgis-init/05_teams_schema.sql    /docker-entrypoint-initdb.d/
-COPY docker/postgis-init/06_api_keys_schema.sql /docker-entrypoint-initdb.d/
+COPY docker/postgis-init/01_init.sql              /docker-entrypoint-initdb.d/
+COPY docker/postgis-init/02_raster_schema.sql     /docker-entrypoint-initdb.d/
+COPY docker/postgis-init/03_pmtiles_schema.sql    /docker-entrypoint-initdb.d/
+COPY docker/postgis-init/04_auth_schema.sql       /docker-entrypoint-initdb.d/
+COPY docker/postgis-init/05_teams_schema.sql      /docker-entrypoint-initdb.d/
+COPY docker/postgis-init/06_api_keys_schema.sql   /docker-entrypoint-initdb.d/
+COPY docker/postgis-init/07_preferred_locale.sql  /docker-entrypoint-initdb.d/

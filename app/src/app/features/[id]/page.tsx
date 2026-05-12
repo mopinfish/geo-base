@@ -385,10 +385,15 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
                   <div
                     key={key}
                     className="flex items-start justify-between rounded-md border p-3"
+                    data-testid="feature-property-row"
+                    data-property-key={key}
                   >
                     <div className="space-y-1">
                       <p className="text-sm font-medium">{key}</p>
-                      <p className="text-sm text-muted-foreground break-all">
+                      <p
+                        className="text-sm text-muted-foreground break-all"
+                        data-testid="feature-property-value"
+                      >
                         {typeof value === "object"
                           ? JSON.stringify(value, null, 2)
                           : String(value)}

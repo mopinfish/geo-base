@@ -4,6 +4,7 @@ Colormap endpoints for raster visualization.
 
 from fastapi import APIRouter, HTTPException
 
+from lib.errors import ErrorCode, api_error
 from lib.raster_tiles import list_colormaps, is_rasterio_available
 
 
@@ -49,7 +50,11 @@ def get_colormaps():
             "count": len(colormaps),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing colormaps: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_UNEXPECTED,
+            f"Error listing colormaps: {str(e)}",
+        )
 
 
 @router.get("/{name}")
@@ -68,7 +73,12 @@ def get_colormap_info(name: str):
         
         cmap = get_colormap(name)
         if not cmap:
-            raise HTTPException(status_code=404, detail=f"Colormap '{name}' not found")
+            raise api_error(
+                404,
+                ErrorCode.COLORMAP_NOT_FOUND,
+                f"Colormap '{name}' not found",
+                details={"colormap": name},
+            )
         
         # Extract color stops
         color_stops = []
@@ -87,4 +97,8 @@ def get_colormap_info(name: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting colormap: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_UNEXPECTED,
+            f"Error getting colormap: {str(e)}",
+        )

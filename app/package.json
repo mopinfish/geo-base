@@ -35,6 +35,7 @@
     "lucide-react": "^0.560.0",
     "maplibre-gl": "^4.7.1",
     "next": "16.0.10",
+    "next-intl": "^4.11.2",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-hook-form": "^7.68.0",
@@ -42,6 +43,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

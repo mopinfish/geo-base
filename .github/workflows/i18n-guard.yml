@@ -1,0 +1,38 @@
+name: i18n guard
+
+# Issue #106 (i18n Phase 2): PR ごとに API レスポンス相当箇所と MCP の
+# 公開コード表面に日本語混入が発生していないことを fail-fast で検証する。
+# Phase 1 完了後の英語ベースラインをリグレッションさせない目的。
+
+on:
+  pull_request:
+    # paths は i18n_guard.py が実際にスキャンするファイル群と一致させる。
+    # mcp/config.py や mcp/logger.py 等の内部ユーティリティはスキャン対象外
+    # のため、ここで trigger しない。
+    paths:
+      - "api/lib/routers/**"
+      - "api/lib/models/**"
+      - "mcp/server.py"
+      - "mcp/errors.py"
+      - "mcp/tools/**"
+      - ".github/workflows/i18n-guard.yml"
+      - ".github/workflows/scripts/i18n_guard.py"
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Run i18n guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run i18n guard
+        run: python3 .github/workflows/scripts/i18n_guard.py

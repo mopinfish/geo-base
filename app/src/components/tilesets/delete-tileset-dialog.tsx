@@ -1,6 +1,9 @@
 "use client";
 
+import { Loader2, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +16,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2 } from "lucide-react";
 
 interface DeleteTilesetDialogProps {
   tilesetName: string;
@@ -28,6 +30,7 @@ export function DeleteTilesetDialog({
 }: DeleteTilesetDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const t = useTranslations("tilesets.deleteDialog");
 
   const handleConfirm = async () => {
     setIsDeleting(true);
@@ -51,20 +54,21 @@ export function DeleteTilesetDialog({
             data-testid="tileset-delete-button"
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            削除
+            {t("trigger")}
           </Button>
         )}
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>タイルセットを削除しますか？</AlertDialogTitle>
+          <AlertDialogTitle>{t("title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            <strong className="text-foreground">{tilesetName}</strong> を削除します。
-            この操作は取り消せません。関連するすべてのフィーチャーも削除されます。
+            {t("description_template", { name: tilesetName })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+          <AlertDialogCancel disabled={isDeleting}>
+            {t("cancel")}
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleConfirm}
             disabled={isDeleting}
@@ -73,12 +77,12 @@ export function DeleteTilesetDialog({
             {isDeleting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                削除中...
+                {t("deleting")}
               </>
             ) : (
               <>
                 <Trash2 className="mr-2 h-4 w-4" />
-                削除する
+                {t("confirm")}
               </>
             )}
           </AlertDialogAction>

@@ -45,7 +45,9 @@ dev = [
     "ruff>=0.1.0",
     "respx>=0.21.0",
     "freezegun>=1.4.0",
-    "moto[s3]>=5.0.0",
+    # `[s3]` は @mock_aws デコレータ用、`[server]` は moto.server (CI sidecar)
+    # 用の flask + werkzeug を入れる。TS-12 (Issue #112) で必要。
+    "moto[s3,server]>=5.0.0",
 ]
 
 [build-system]

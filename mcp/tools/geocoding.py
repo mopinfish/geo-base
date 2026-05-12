@@ -52,8 +52,9 @@ async def geocode(
     Uses OpenStreetMap Nominatim API for geocoding.
 
     Args:
-        query: Address or place name to search
-               Examples: "東京駅", "渋谷区神宮1-1-1", "Tokyo Tower"
+        query: Address or place name to search. The underlying provider also
+               accepts non-Latin queries (e.g. Japanese addresses).
+               Example: "Tokyo Tower".
         limit: Maximum number of results (1-50, default: 5)
         country_codes: Limit search to specific countries (comma-separated ISO 3166-1 codes)
                       Examples: "jp" for Japan, "jp,us" for Japan and US
