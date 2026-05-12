@@ -13,7 +13,6 @@ api_dir = Path(__file__).parent
 if str(api_dir) not in sys.path:
     sys.path.insert(0, str(api_dir))
 
-from lib.main import app
 
 # Vercel requires the app to be exported as 'app'
 # The handler is automatically provided by Vercel Python runtime

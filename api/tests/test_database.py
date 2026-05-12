@@ -5,6 +5,7 @@
 6PN/WireGuard で既にネットワーク層暗号化されており、postgis/postgis 公式 image は
 SSL 設定なしで起動するため、`sslmode=require` を付けてはならない。
 """
+
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -92,15 +93,10 @@ class TestSSLAutoAppend:
 
     def test_explicit_sslmode_in_url_is_preserved(self, force_production):
         """ユーザーが明示的に sslmode を指定している場合は上書きしない。"""
-        url = (
-            "postgresql://postgres:pass@geo-base-pg.internal:5432/geo_base"
-            "?sslmode=disable"
-        )
+        url = "postgresql://postgres:pass@geo-base-pg.internal:5432/geo_base" "?sslmode=disable"
         assert _sslmode(_prepare_connection_string(url)) == "disable"
 
-    def test_non_fly_production_internal_host_still_gets_sslmode(
-        self, force_non_fly_production
-    ):
+    def test_non_fly_production_internal_host_still_gets_sslmode(self, force_non_fly_production):
         """非 Fly な本番環境では `.internal` ホストでも SSL 自動付与する (defense-in-depth)。"""
         url = "postgresql://user:pass@some-other.internal:5432/db"
         assert _sslmode(_prepare_connection_string(url)) == "require"

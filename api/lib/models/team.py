@@ -4,13 +4,13 @@ Pydantic models for Team operations.
 
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator, model_validator, EmailStr
 
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-SLUG_PATTERN = re.compile(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+SLUG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 DEFAULT_INVITATION_EXPIRY_DAYS = 7
 INVITATION_TOKEN_LENGTH = 64
 
@@ -20,23 +20,23 @@ class TeamRole(str, Enum):
     ADMINISTRATOR = "administrator"
     MEMBER = "member"
     GUEST = "guest"
-    
+
     @property
     def can_delete(self) -> bool:
         return self in (TeamRole.OWNER, TeamRole.ADMINISTRATOR)
-    
+
     @property
     def can_write(self) -> bool:
         return self in (TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER)
-    
+
     @property
     def can_manage_team(self) -> bool:
         return self in (TeamRole.OWNER, TeamRole.ADMINISTRATOR)
-    
+
     @property
     def can_delete_team(self) -> bool:
         return self == TeamRole.OWNER
-    
+
     @classmethod
     def from_string(cls, value: str) -> "TeamRole":
         try:
@@ -58,7 +58,7 @@ class PermissionLevel(str, Enum):
     READ = "read"
     WRITE = "write"
     ADMIN = "admin"
-    
+
     @classmethod
     def from_role(cls, role: TeamRole) -> "PermissionLevel":
         if role in (TeamRole.OWNER, TeamRole.ADMINISTRATOR):
@@ -75,10 +75,10 @@ def generate_invitation_token() -> str:
 
 def generate_slug(name: str) -> str:
     slug = name.lower()
-    slug = re.sub(r'[\s_]+', '-', slug)
-    slug = re.sub(r'[^a-z0-9-]', '', slug)
-    slug = re.sub(r'-+', '-', slug)
-    slug = slug.strip('-')
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"[^a-z0-9-]", "", slug)
+    slug = re.sub(r"-+", "-", slug)
+    slug = slug.strip("-")
     return slug
 
 
@@ -93,8 +93,8 @@ class TeamCreate(BaseModel):
     slug: Optional[str] = Field(None, min_length=2, max_length=100)
     description: Optional[str] = Field(None, max_length=2000)
     settings: Optional[Dict[str, Any]] = None
-    
-    @field_validator('slug')
+
+    @field_validator("slug")
     @classmethod
     def validate_slug_format(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
@@ -103,13 +103,13 @@ class TeamCreate(BaseModel):
         if not validate_slug(v_lower):
             raise ValueError("Invalid slug format")
         return v_lower
-    
-    @model_validator(mode='after')
-    def generate_slug_if_not_provided(self) -> 'TeamCreate':
+
+    @model_validator(mode="after")
+    def generate_slug_if_not_provided(self) -> "TeamCreate":
         if self.slug is None:
             self.slug = generate_slug(self.name)
             if not validate_slug(self.slug):
-                self.slug = re.sub(r'[^a-z0-9]', '', self.name.lower())[:50]
+                self.slug = re.sub(r"[^a-z0-9]", "", self.name.lower())[:50]
         return self
 
 
@@ -117,9 +117,9 @@ class TeamUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=2000)
     settings: Optional[Dict[str, Any]] = None
-    
-    @model_validator(mode='after')
-    def check_at_least_one_field(self) -> 'TeamUpdate':
+
+    @model_validator(mode="after")
+    def check_at_least_one_field(self) -> "TeamUpdate":
         if self.name is None and self.description is None and self.settings is None:
             raise ValueError("At least one field must be provided for update")
         return self
@@ -136,7 +136,7 @@ class TeamResponse(BaseModel):
     tileset_count: Optional[int] = None
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -152,8 +152,8 @@ class TeamMemberAdd(BaseModel):
     user_id: str
     role: TeamRole = TeamRole.MEMBER
     notification_enabled: bool = True
-    
-    @field_validator('role')
+
+    @field_validator("role")
     @classmethod
     def validate_role(cls, v: TeamRole) -> TeamRole:
         if v == TeamRole.OWNER:
@@ -164,16 +164,16 @@ class TeamMemberAdd(BaseModel):
 class TeamMemberUpdate(BaseModel):
     role: Optional[TeamRole] = None
     notification_enabled: Optional[bool] = None
-    
-    @field_validator('role')
+
+    @field_validator("role")
     @classmethod
     def validate_role(cls, v: Optional[TeamRole]) -> Optional[TeamRole]:
         if v == TeamRole.OWNER:
             raise ValueError("Cannot change role to 'owner'")
         return v
-    
-    @model_validator(mode='after')
-    def check_at_least_one_field(self) -> 'TeamMemberUpdate':
+
+    @model_validator(mode="after")
+    def check_at_least_one_field(self) -> "TeamMemberUpdate":
         if self.role is None and self.notification_enabled is None:
             raise ValueError("At least one field must be provided for update")
         return self
@@ -189,7 +189,7 @@ class TeamMemberResponse(BaseModel):
     updated_at: datetime
     user_email: Optional[str] = None
     user_name: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -205,8 +205,8 @@ class TeamInvitationCreate(BaseModel):
     role: TeamRole = TeamRole.MEMBER
     message: Optional[str] = Field(None, max_length=500)
     expires_in_days: int = Field(DEFAULT_INVITATION_EXPIRY_DAYS, ge=1, le=30)
-    
-    @field_validator('role')
+
+    @field_validator("role")
     @classmethod
     def validate_role(cls, v: TeamRole) -> TeamRole:
         if v == TeamRole.OWNER:
@@ -261,7 +261,7 @@ class TeamTilesetResponse(BaseModel):
     created_at: datetime
     tileset_name: Optional[str] = None
     tileset_type: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -276,14 +276,16 @@ class PermissionCheckRequest(BaseModel):
     user_id: str
     tileset_id: str
     action: str
-    
-    @field_validator('action')
+
+    @field_validator("action")
     @classmethod
     def validate_action(cls, v: str) -> str:
         valid_actions = {"read", "create", "update", "delete"}
         v_lower = v.lower()
         if v_lower not in valid_actions:
-            raise ValueError(f"Invalid action '{v}'. Must be one of: {', '.join(sorted(valid_actions))}")
+            raise ValueError(
+                f"Invalid action '{v}'. Must be one of: {', '.join(sorted(valid_actions))}"
+            )
         return v_lower
 
 
@@ -305,7 +307,7 @@ class UserTeamResponse(BaseModel):
     role: TeamRole
     joined_at: datetime
     member_count: int = 0
-    
+
     class Config:
         from_attributes = True
 
@@ -318,8 +320,8 @@ class UserTeamsListResponse(BaseModel):
 
 class TeamOwnershipTransfer(BaseModel):
     new_owner_id: str
-    
-    @field_validator('new_owner_id')
+
+    @field_validator("new_owner_id")
     @classmethod
     def validate_new_owner(cls, v: str) -> str:
         if not v or len(v) < 10:

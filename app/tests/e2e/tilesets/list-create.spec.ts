@@ -87,13 +87,14 @@ test.describe("Tilesets list filtering and bulk operations", () => {
     });
 
     // shadcn の Select は trigger を click すると listbox が開き、option を role で取得できる。
+    // i18n catalog (PR #132) で "ベクター" / "ラスター" (長音記号あり) に統一済み。
     await page.getByTestId("tileset-filter-type").click();
-    await page.getByRole("option", { name: "ベクタ" }).click();
+    await page.getByRole("option", { name: "ベクター" }).click();
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("v1", { exact: true })).toBeVisible();
 
     await page.getByTestId("tileset-filter-type").click();
-    await page.getByRole("option", { name: "ラスタ" }).click();
+    await page.getByRole("option", { name: "ラスター" }).click();
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("r1", { exact: true })).toBeVisible();
   });

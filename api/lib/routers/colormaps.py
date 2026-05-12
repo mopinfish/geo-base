@@ -5,8 +5,7 @@ Colormap endpoints for raster visualization.
 from fastapi import APIRouter, HTTPException
 
 from lib.errors import ErrorCode, api_error
-from lib.raster_tiles import list_colormaps, is_rasterio_available
-
+from lib.raster_tiles import list_colormaps
 
 router = APIRouter(prefix="/api/colormaps", tags=["colormaps"])
 
@@ -15,13 +14,13 @@ router = APIRouter(prefix="/api/colormaps", tags=["colormaps"])
 def get_colormaps():
     """
     List all available colormaps for raster visualization.
-    
+
     Returns:
         List of colormap names with descriptions
     """
     try:
         colormaps = list_colormaps()
-        
+
         descriptions = {
             "ndvi": "Vegetation index - red to yellow to green",
             "vegetation": "Alias for NDVI colormap",
@@ -38,7 +37,7 @@ def get_colormaps():
             "hillshade": "Alias for grayscale colormap",
             "viridis": "Perceptually uniform - purple to green to yellow",
         }
-        
+
         return {
             "colormaps": [
                 {
@@ -61,16 +60,16 @@ def get_colormaps():
 def get_colormap_info(name: str):
     """
     Get information about a specific colormap.
-    
+
     Args:
         name: Colormap name
-        
+
     Returns:
         Colormap details including color stops
     """
     try:
-        from lib.raster_tiles import get_colormap, COLORMAP_PRESETS
-        
+        from lib.raster_tiles import COLORMAP_PRESETS, get_colormap
+
         cmap = get_colormap(name)
         if not cmap:
             raise api_error(
@@ -79,16 +78,18 @@ def get_colormap_info(name: str):
                 f"Colormap '{name}' not found",
                 details={"colormap": name},
             )
-        
+
         # Extract color stops
         color_stops = []
         for value, rgba in sorted(cmap.items()):
-            color_stops.append({
-                "value": value,
-                "color": f"rgba({rgba[0]}, {rgba[1]}, {rgba[2]}, {rgba[3] / 255:.2f})",
-                "hex": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}",
-            })
-        
+            color_stops.append(
+                {
+                    "value": value,
+                    "color": f"rgba({rgba[0]}, {rgba[1]}, {rgba[2]}, {rgba[3] / 255:.2f})",
+                    "hex": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}",
+                }
+            )
+
         return {
             "name": name,
             "color_stops": color_stops,

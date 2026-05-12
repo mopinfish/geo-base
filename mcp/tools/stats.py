@@ -14,17 +14,17 @@ Features:
 """
 
 import math
-from typing import Any
 from collections import Counter
+from typing import Any
 
 import httpx
 from tenacity import RetryError
 
 from config import get_settings
-from errors import handle_api_error, create_error_response, ErrorCode
-from logger import get_logger, ToolCallLogger
+from errors import ErrorCode, create_error_response, handle_api_error
+from logger import ToolCallLogger, get_logger
 from retry import fetch_with_retry
-from validators import validate_uuid, validate_bbox
+from validators import validate_bbox, validate_uuid
 
 # Initialize logger and settings
 logger = get_logger(__name__)
@@ -191,9 +191,7 @@ async def get_tileset_stats(tileset_id: str) -> dict[str, Any]:
 
             # Convert Counter to dict for JSON serialization
             for layer in layer_stats:
-                layer_stats[layer]["geometry_types"] = dict(
-                    layer_stats[layer]["geometry_types"]
-                )
+                layer_stats[layer]["geometry_types"] = dict(layer_stats[layer]["geometry_types"])
 
             # Build result
             result = {
@@ -277,8 +275,7 @@ async def get_feature_distribution(
         - percentages: Percentage per geometry type
     """
     with ToolCallLogger(
-        logger, "get_feature_distribution",
-        tileset_id=tileset_id, bbox=bbox
+        logger, "get_feature_distribution", tileset_id=tileset_id, bbox=bbox
     ) as log:
         # Validate tileset_id if provided
         if tileset_id:
@@ -452,9 +449,7 @@ async def get_layer_stats(tileset_id: str) -> dict[str, Any]:
 
                 # Calculate percentage
                 if total > 0:
-                    layer_data["percentage"] = round(
-                        layer_data["feature_count"] / total * 100, 2
-                    )
+                    layer_data["percentage"] = round(layer_data["feature_count"] / total * 100, 2)
 
                 # Extract unique property keys from samples
                 all_keys = set()
@@ -532,10 +527,7 @@ async def get_area_stats(
         - geometry_types: Distribution of geometry types
         - layers: Layers present in the area
     """
-    with ToolCallLogger(
-        logger, "get_area_stats",
-        bbox=bbox, tileset_id=tileset_id
-    ) as log:
+    with ToolCallLogger(logger, "get_area_stats", bbox=bbox, tileset_id=tileset_id) as log:
         # Validate bbox using validators.py
         bbox_result = validate_bbox(bbox)
         if not bbox_result.valid:

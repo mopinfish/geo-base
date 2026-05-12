@@ -1,12 +1,14 @@
 """Tests for auth.password module."""
+
 import pytest
+
+from lib.auth.errors import WeakPassword
 from lib.auth.password import (
+    MIN_PASSWORD_LENGTH,
+    check_password_policy,
     hash_password,
     verify_password,
-    check_password_policy,
-    MIN_PASSWORD_LENGTH,
 )
-from lib.auth.errors import WeakPassword
 
 
 class TestHashPassword:

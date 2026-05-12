@@ -1,4 +1,5 @@
 """本番用 SMTP バックエンド。標準ライブラリのみ使用。"""
+
 import smtplib
 from email.message import EmailMessage
 from typing import Optional

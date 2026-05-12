@@ -26,17 +26,12 @@ Usage:
     result = execute_transaction(conn, my_transaction)
 """
 
-import functools
 import logging
 from typing import Any, Callable, List, Optional, Tuple, TypeVar
-
-import psycopg2
 
 from lib.retry import (
     RetryConfig,
     execute_db_operation,
-    is_retryable_error,
-    calculate_delay,
 )
 
 # Configure logging
@@ -243,7 +238,7 @@ def execute_transaction(
             if auto_commit:
                 conn.commit()
             return result
-        except Exception as e:
+        except Exception:
             if rollback_on_error:
                 try:
                     conn.rollback()
@@ -489,7 +484,9 @@ def execute_values(
 # =============================================================================
 
 
-def get_tileset_by_id(conn, tileset_id: str, config: Optional[RetryConfig] = None) -> Optional[dict]:
+def get_tileset_by_id(
+    conn, tileset_id: str, config: Optional[RetryConfig] = None
+) -> Optional[dict]:
     """
     Get a tileset by ID with retry support.
 
@@ -514,10 +511,10 @@ def get_tileset_by_id(conn, tileset_id: str, config: Optional[RetryConfig] = Non
         config=config,
         fetch_one=True,
     )
-    
+
     if not rows:
         return None
-    
+
     return dict(zip(columns, rows[0]))
 
 
@@ -548,10 +545,10 @@ def check_tileset_owner(
         config=config,
         fetch_one=True,
     )
-    
+
     if not result:
         return False, None
-    
+
     return True, str(result[1]) if result[1] else None
 
 
@@ -579,7 +576,7 @@ def count_features(
     else:
         query = "SELECT COUNT(*) FROM features WHERE tileset_id = %s"
         params = (tileset_id,)
-    
+
     result = execute_query(conn, query, params, config=config, fetch_one=True)
     return result[0] if result else 0
 

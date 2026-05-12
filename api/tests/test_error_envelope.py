@@ -33,9 +33,7 @@ def test_api_error_with_details():
         "Bad credentials",
         details={"hint": "check password length"},
     )
-    assert err.detail[ENVELOPE_MARKER_KEY]["details"] == {
-        "hint": "check password length"
-    }
+    assert err.detail[ENVELOPE_MARKER_KEY]["details"] == {"hint": "check password length"}
 
 
 def test_api_error_without_details_omits_key():
@@ -49,12 +47,8 @@ def test_api_error_rejects_non_enum_code():
 
 
 def test_is_envelope_detail_positive():
-    assert is_envelope_detail(
-        {"error": {"code": "x", "message": "y"}}
-    )
-    assert is_envelope_detail(
-        {"error": {"code": "x", "message": "y", "details": {"a": 1}}}
-    )
+    assert is_envelope_detail({"error": {"code": "x", "message": "y"}})
+    assert is_envelope_detail({"error": {"code": "x", "message": "y", "details": {"a": 1}}})
 
 
 def test_is_envelope_detail_negative_cases():
@@ -80,17 +74,11 @@ def test_is_envelope_detail_rejects_non_string_code_or_message():
 
 def test_is_envelope_detail_rejects_non_dict_details():
     """details が ある場合は dict であることを要求 (Copilot PR #126 round 2)。"""
-    assert not is_envelope_detail(
-        {"error": {"code": "x", "message": "y", "details": "not a dict"}}
-    )
-    assert not is_envelope_detail(
-        {"error": {"code": "x", "message": "y", "details": [1, 2]}}
-    )
+    assert not is_envelope_detail({"error": {"code": "x", "message": "y", "details": "not a dict"}})
+    assert not is_envelope_detail({"error": {"code": "x", "message": "y", "details": [1, 2]}})
     # details が None でも reject (実用上不要なら is_envelope_detail を呼ぶ前に
     # del すべき。本 guard では invalid 扱い)
-    assert not is_envelope_detail(
-        {"error": {"code": "x", "message": "y", "details": None}}
-    )
+    assert not is_envelope_detail({"error": {"code": "x", "message": "y", "details": None}})
 
 
 # --- exception handler integration ---
@@ -180,6 +168,7 @@ def test_main_module_registers_envelope_handler(monkeypatch):
     """
     monkeypatch.setenv("E2E_MODE", "0")
     import lib.main as main_module
+
     importlib.reload(main_module)
     from starlette.exceptions import HTTPException as StarletteHTTPException
 

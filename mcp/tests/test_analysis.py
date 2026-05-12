@@ -11,20 +11,18 @@ This module tests:
 
 import asyncio
 import math
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 from tools.analysis import (
+    _bearing_to_direction,
+    _expand_bbox,
+    _get_feature_centroid,
+    _haversine_distance,
     analyze_area,
     calculate_distance,
     find_nearest_features,
     get_buffer_zone_features,
-    _haversine_distance,
-    _get_feature_centroid,
-    _expand_bbox,
-    _bearing_to_direction,
 )
-
 
 # Test UUID for consistent use across tests
 TEST_UUID = "550e8400-e29b-41d4-a716-446655440123"
@@ -53,12 +51,7 @@ class TestHelperFunctions:
 
     def test_get_feature_centroid_point(self):
         """Centroid of Point should return its coordinates."""
-        feature = {
-            "geometry": {
-                "type": "Point",
-                "coordinates": [139.7671, 35.6812]
-            }
-        }
+        feature = {"geometry": {"type": "Point", "coordinates": [139.7671, 35.6812]}}
         result = _get_feature_centroid(feature)
         assert result == (35.6812, 139.7671)
 
@@ -67,7 +60,7 @@ class TestHelperFunctions:
         feature = {
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]
+                "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
             }
         }
         result = _get_feature_centroid(feature)
@@ -87,7 +80,7 @@ class TestHelperFunctions:
         """expand_bbox should expand by buffer distance."""
         result = _expand_bbox(139.7, 35.6, 139.8, 35.7, 10)
         min_lng, min_lat, max_lng, max_lat = result
-        
+
         # Should be expanded
         assert min_lng < 139.7
         assert min_lat < 35.6
@@ -116,6 +109,7 @@ class TestAnalyzeArea:
 
     def test_successful_analysis(self):
         """analyze_area should return comprehensive analysis."""
+
         async def run_test():
             features_data = {
                 "features": [
@@ -147,6 +141,7 @@ class TestAnalyzeArea:
 
     def test_invalid_bbox(self):
         """analyze_area should return error for invalid bbox."""
+
         async def run_test():
             result = await analyze_area("invalid")
             assert "error" in result
@@ -155,6 +150,7 @@ class TestAnalyzeArea:
 
     def test_without_density(self):
         """analyze_area should skip density when disabled."""
+
         async def run_test():
             features_data = {"features": []}
 
@@ -172,6 +168,7 @@ class TestAnalyzeArea:
 
     def test_without_clustering(self):
         """analyze_area should skip clustering when disabled."""
+
         async def run_test():
             features_data = {"features": []}
 
@@ -193,6 +190,7 @@ class TestCalculateDistance:
 
     def test_same_point_distance(self):
         """Distance between same points should be 0."""
+
         async def run_test():
             result = await calculate_distance(35.6812, 139.7671, 35.6812, 139.7671)
 
@@ -203,6 +201,7 @@ class TestCalculateDistance:
 
     def test_distance_with_bearing(self):
         """Should return distance and bearing."""
+
         async def run_test():
             # North of Tokyo Station
             result = await calculate_distance(35.6812, 139.7671, 35.7812, 139.7671)
@@ -217,6 +216,7 @@ class TestCalculateDistance:
 
     def test_invalid_latitude(self):
         """Should return error for invalid latitude."""
+
         async def run_test():
             result = await calculate_distance(91, 139.7671, 35.6812, 139.7671)
             assert "error" in result
@@ -225,6 +225,7 @@ class TestCalculateDistance:
 
     def test_invalid_longitude(self):
         """Should return error for invalid longitude."""
+
         async def run_test():
             result = await calculate_distance(35.6812, 181, 35.6812, 139.7671)
             assert "error" in result
@@ -233,6 +234,7 @@ class TestCalculateDistance:
 
     def test_distance_units(self):
         """Should return distance in multiple units."""
+
         async def run_test():
             result = await calculate_distance(35.6812, 139.7671, 35.7812, 139.7671)
 
@@ -250,6 +252,7 @@ class TestFindNearestFeatures:
 
     def test_successful_search(self):
         """find_nearest_features should return sorted features."""
+
         async def run_test():
             features_data = {
                 "features": [
@@ -271,20 +274,21 @@ class TestFindNearestFeatures:
             with patch("tools.analysis.fetch_with_retry", new_callable=AsyncMock) as mock_fetch:
                 mock_fetch.return_value = features_data
 
-                result = await find_nearest_features(
-                    lat=35.6812, lng=139.7671, radius_km=1.0
-                )
+                result = await find_nearest_features(lat=35.6812, lng=139.7671, radius_km=1.0)
 
                 assert "features" in result
                 assert "count" in result
                 # Should be sorted by distance
                 if len(result["features"]) >= 2:
-                    assert result["features"][0]["distance_km"] <= result["features"][1]["distance_km"]
+                    assert (
+                        result["features"][0]["distance_km"] <= result["features"][1]["distance_km"]
+                    )
 
         asyncio.run(run_test())
 
     def test_invalid_coordinates(self):
         """Should return error for invalid coordinates."""
+
         async def run_test():
             result = await find_nearest_features(lat=91, lng=139.7671)
             assert "error" in result
@@ -293,6 +297,7 @@ class TestFindNearestFeatures:
 
     def test_with_tileset_filter(self):
         """Should pass tileset_id to query."""
+
         async def run_test():
             features_data = {"features": []}
 
@@ -312,6 +317,7 @@ class TestFindNearestFeatures:
 
     def test_with_invalid_tileset_id(self):
         """Should return error for invalid tileset_id format."""
+
         async def run_test():
             # Test with invalid UUID format
             result = await find_nearest_features(
@@ -330,6 +336,7 @@ class TestGetBufferZoneFeatures:
 
     def test_successful_buffer_search(self):
         """get_buffer_zone_features should return features in ring."""
+
         async def run_test():
             features_data = {
                 "features": [
@@ -345,8 +352,7 @@ class TestGetBufferZoneFeatures:
                 mock_fetch.return_value = features_data
 
                 result = await get_buffer_zone_features(
-                    lat=35.6812, lng=139.7671,
-                    inner_radius_km=0.5, outer_radius_km=2.0
+                    lat=35.6812, lng=139.7671, inner_radius_km=0.5, outer_radius_km=2.0
                 )
 
                 assert "ring_area_km2" in result
@@ -357,10 +363,10 @@ class TestGetBufferZoneFeatures:
 
     def test_invalid_radius_order(self):
         """Should return error when inner >= outer."""
+
         async def run_test():
             result = await get_buffer_zone_features(
-                lat=35.6812, lng=139.7671,
-                inner_radius_km=2.0, outer_radius_km=1.0
+                lat=35.6812, lng=139.7671, inner_radius_km=2.0, outer_radius_km=1.0
             )
             assert "error" in result
 
@@ -368,6 +374,7 @@ class TestGetBufferZoneFeatures:
 
     def test_ring_area_calculation(self):
         """Should calculate ring area correctly."""
+
         async def run_test():
             features_data = {"features": []}
 
@@ -375,8 +382,7 @@ class TestGetBufferZoneFeatures:
                 mock_fetch.return_value = features_data
 
                 result = await get_buffer_zone_features(
-                    lat=35.6812, lng=139.7671,
-                    inner_radius_km=1.0, outer_radius_km=2.0
+                    lat=35.6812, lng=139.7671, inner_radius_km=1.0, outer_radius_km=2.0
                 )
 
                 # Ring area should be pi * (2^2 - 1^2) = 3*pi ≈ 9.42 km²

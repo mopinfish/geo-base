@@ -2,6 +2,7 @@
 
 bcrypt（passlib 経由）使用。NIST SP 800-63B 準拠で過度な複雑性は要求しない。
 """
+
 from passlib.hash import bcrypt
 
 from .errors import WeakPassword
@@ -32,9 +33,7 @@ def check_password_policy(plaintext: str) -> None:
     - 数字または記号を 1 つ以上含む
     """
     if len(plaintext) < MIN_PASSWORD_LENGTH:
-        raise WeakPassword(
-            f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
-        )
+        raise WeakPassword(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
 
     has_letter = any(c.isalpha() for c in plaintext)
     has_digit_or_symbol = any(c.isdigit() or not c.isalnum() for c in plaintext)

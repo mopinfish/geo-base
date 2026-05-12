@@ -16,14 +16,14 @@ from typing import Optional
 import httpx
 from tenacity import RetryError
 
-from errors import create_error_response, ErrorCode
-from logger import get_logger, ToolCallLogger
+from errors import ErrorCode, create_error_response
+from logger import ToolCallLogger, get_logger
 from retry import fetch_with_retry
 from validators import (
     validate_latitude,
+    validate_limit,
     validate_longitude,
     validate_non_empty_string,
-    validate_limit,
     validate_zoom,
 )
 
@@ -67,8 +67,7 @@ async def geocode(
         - query: Original search query
     """
     with ToolCallLogger(
-        logger, "geocode",
-        query=query, limit=limit, country_codes=country_codes, language=language
+        logger, "geocode", query=query, limit=limit, country_codes=country_codes, language=language
     ) as log:
         # Validate query
         query_result = validate_non_empty_string(query, "query")
@@ -247,8 +246,12 @@ async def reverse_geocode(
         - bounds: Bounding box of the location
     """
     with ToolCallLogger(
-        logger, "reverse_geocode",
-        latitude=latitude, longitude=longitude, zoom=zoom, language=language
+        logger,
+        "reverse_geocode",
+        latitude=latitude,
+        longitude=longitude,
+        zoom=zoom,
+        language=language,
     ) as log:
         # Validate latitude
         lat_result = validate_latitude(latitude, "latitude")

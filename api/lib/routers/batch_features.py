@@ -9,7 +9,6 @@ Provides endpoints for:
 These endpoints are separate from the main features router for clarity.
 """
 
-import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -17,21 +16,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from lib.database import get_connection
-from lib.errors import ErrorCode, api_error
 from lib.auth import User, require_auth
-from lib.cache import invalidate_tileset_cache
 from lib.batch import (
+    BatchResult,
+    batch_delete_by_filter,
+    batch_delete_features,
+    batch_update_by_filter,
+    batch_update_features,
+    export_features_csv,
     export_features_geojson,
     export_features_geojson_streaming,
-    export_features_csv,
-    batch_update_features,
-    batch_update_by_filter,
-    batch_delete_features,
-    batch_delete_by_filter,
-    BatchResult,
 )
-
+from lib.cache import invalidate_tileset_cache
+from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/features", tags=["features-batch"])
@@ -44,6 +42,7 @@ router = APIRouter(prefix="/api/features", tags=["features-batch"])
 
 class ExportRequest(BaseModel):
     """Request model for export endpoint."""
+
     tileset_id: Optional[str] = Field(None, description="Tileset UUID to export")
     feature_ids: Optional[List[str]] = Field(
         None,
@@ -58,8 +57,7 @@ class ExportRequest(BaseModel):
         max_length=4,
     )
     properties_filter: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Property key-value filters"
+        None, description="Property key-value filters"
     )
     limit: Optional[int] = Field(None, ge=1, le=100000, description="Maximum features")
     format: str = Field("geojson", description="Export format: geojson or csv")
@@ -68,64 +66,46 @@ class ExportRequest(BaseModel):
 
 class BatchUpdateRequest(BaseModel):
     """Request model for batch update."""
+
     feature_ids: Optional[List[str]] = Field(
         None,
         description="List of feature UUIDs to update (max 10000)",
         max_length=10000,
     )
-    tileset_id: Optional[str] = Field(
-        None,
-        description="Tileset UUID for filter-based update"
-    )
+    tileset_id: Optional[str] = Field(None, description="Tileset UUID for filter-based update")
     filter: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Filter conditions (layer_name, bbox, properties)"
+        None, description="Filter conditions (layer_name, bbox, properties)"
     )
     updates: Dict[str, Any] = Field(
-        ...,
-        description="Fields to update (layer_name, properties, geometry)"
+        ..., description="Fields to update (layer_name, properties, geometry)"
     )
-    merge_properties: bool = Field(
-        True,
-        description="Merge properties instead of replacing"
-    )
+    merge_properties: bool = Field(True, description="Merge properties instead of replacing")
     limit: Optional[int] = Field(
-        None,
-        ge=1,
-        le=100000,
-        description="Maximum features to update (filter mode only)"
+        None, ge=1, le=100000, description="Maximum features to update (filter mode only)"
     )
 
 
 class BatchDeleteRequest(BaseModel):
     """Request model for batch delete."""
+
     feature_ids: Optional[List[str]] = Field(
         None,
         description="List of feature UUIDs to delete (max 10000)",
         max_length=10000,
     )
-    tileset_id: Optional[str] = Field(
-        None,
-        description="Tileset UUID for filter-based delete"
-    )
+    tileset_id: Optional[str] = Field(None, description="Tileset UUID for filter-based delete")
     filter: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Filter conditions (layer_name, bbox, properties)"
+        None, description="Filter conditions (layer_name, bbox, properties)"
     )
     limit: Optional[int] = Field(
-        None,
-        ge=1,
-        le=100000,
-        description="Maximum features to delete (filter mode only)"
+        None, ge=1, le=100000, description="Maximum features to delete (filter mode only)"
     )
-    dry_run: bool = Field(
-        False,
-        description="Preview delete without executing"
-    )
+    dry_run: bool = Field(False, description="Preview delete without executing")
 
 
 class BatchOperationResponse(BaseModel):
     """Response model for batch operations."""
+
     success_count: int = Field(..., description="Number of successful operations")
     failed_count: int = Field(..., description="Number of failed operations")
     total_count: int = Field(..., description="Total items processed")
@@ -188,10 +168,10 @@ def export_features(
 ):
     """
     Export features from a tileset or by specific feature IDs.
-    
+
     Supports GeoJSON and CSV formats.
     Requires authentication and ownership of the tileset(s).
-    
+
     Either tileset_id or feature_ids must be provided.
     """
     # Validate request
@@ -201,7 +181,7 @@ def export_features(
             ErrorCode.VALIDATION_FIELD_REQUIRED,
             "Either tileset_id or feature_ids must be provided",
         )
-    
+
     try:
         with conn.cursor() as cur:
             # Check ownership
@@ -212,12 +192,12 @@ def export_features(
                 tileset_ids = _get_tileset_ids_for_features(cur, request.feature_ids)
                 for tileset_id in tileset_ids:
                     _check_tileset_ownership(cur, tileset_id, user.id)
-        
+
         # Parse bbox if provided
         bbox = None
         if request.bbox:
             bbox = tuple(request.bbox)
-        
+
         if request.format.lower() == "csv":
             # Export as CSV
             csv_content = export_features_csv(
@@ -227,16 +207,14 @@ def export_features(
                 layer_name=request.layer_name,
                 bbox=bbox,
             )
-            
+
             filename = request.tileset_id or "selected_features"
             return Response(
                 content=csv_content,
                 media_type="text/csv",
-                headers={
-                    "Content-Disposition": f"attachment; filename={filename}.csv"
-                },
+                headers={"Content-Disposition": f"attachment; filename={filename}.csv"},
             )
-        
+
         else:
             # Export as GeoJSON
             geojson = export_features_geojson(
@@ -249,9 +227,9 @@ def export_features(
                 limit=request.limit,
                 include_metadata=request.include_metadata,
             )
-            
+
             return geojson
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -275,13 +253,13 @@ def export_features_get(
 ):
     """
     Export features from a tileset (GET method).
-    
+
     Alternative to POST for simple exports.
     """
     try:
         with conn.cursor() as cur:
             _check_tileset_ownership(cur, tileset_id, user.id)
-        
+
         # Parse bbox
         bbox_tuple = None
         if bbox:
@@ -304,15 +282,13 @@ def export_features_get(
                 layer_name=layer,
                 bbox=bbox_tuple,
             )
-            
+
             return Response(
                 content=csv_content,
                 media_type="text/csv",
-                headers={
-                    "Content-Disposition": f"attachment; filename={tileset_id}.csv"
-                },
+                headers={"Content-Disposition": f"attachment; filename={tileset_id}.csv"},
             )
-        
+
         else:
             geojson = export_features_geojson(
                 conn,
@@ -321,9 +297,9 @@ def export_features_get(
                 bbox=bbox_tuple,
                 limit=limit,
             )
-            
+
             return geojson
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -345,14 +321,14 @@ def export_features_streaming(
 ):
     """
     Export features as streaming GeoJSON.
-    
+
     Use this for large exports to avoid memory issues.
     Returns a streaming response with chunked transfer encoding.
     """
     try:
         with conn.cursor() as cur:
             _check_tileset_ownership(cur, tileset_id, user.id)
-        
+
         # Parse bbox
         bbox_tuple = None
         if bbox:
@@ -376,15 +352,13 @@ def export_features_streaming(
                 bbox=bbox_tuple,
             ):
                 yield chunk
-        
+
         return StreamingResponse(
             generate(),
             media_type="application/geo+json",
-            headers={
-                "Content-Disposition": f"attachment; filename={tileset_id}.geojson"
-            },
+            headers={"Content-Disposition": f"attachment; filename={tileset_id}.geojson"},
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -409,42 +383,42 @@ def batch_update(
 ):
     """
     Update multiple features at once.
-    
+
     Two modes:
     1. By feature IDs: Provide feature_ids list
     2. By filter: Provide tileset_id and filter conditions
-    
+
     Requires authentication and ownership of affected tilesets.
     """
     try:
         with conn.cursor() as cur:
             result: BatchResult
             affected_tilesets = set()
-            
+
             if request.feature_ids:
                 # Mode 1: Update by feature IDs
-                
+
                 # Check ownership of all affected tilesets
                 tileset_ids = _get_tileset_ids_for_features(cur, request.feature_ids)
-                
+
                 for tid in tileset_ids:
                     _check_tileset_ownership(cur, tid, user.id)
-                
+
                 affected_tilesets = tileset_ids
-                
+
                 result = batch_update_features(
                     conn,
                     feature_ids=request.feature_ids,
                     updates=request.updates,
                     merge_properties=request.merge_properties,
                 )
-                
+
             elif request.tileset_id:
                 # Mode 2: Update by filter
                 _check_tileset_ownership(cur, request.tileset_id, user.id)
-                
+
                 affected_tilesets.add(request.tileset_id)
-                
+
                 result = batch_update_by_filter(
                     conn,
                     tileset_id=request.tileset_id,
@@ -453,7 +427,7 @@ def batch_update(
                     merge_properties=request.merge_properties,
                     limit=request.limit,
                 )
-                
+
             else:
                 raise api_error(
                     400,
@@ -499,11 +473,11 @@ def batch_delete(
 ):
     """
     Delete multiple features at once.
-    
+
     Two modes:
     1. By feature IDs: Provide feature_ids list
     2. By filter: Provide tileset_id and filter conditions
-    
+
     Use dry_run=true to preview without deleting.
     Requires authentication and ownership of affected tilesets.
     """
@@ -511,18 +485,18 @@ def batch_delete(
         with conn.cursor() as cur:
             result: BatchResult
             affected_tilesets = set()
-            
+
             if request.feature_ids:
                 # Mode 1: Delete by feature IDs
-                
+
                 # Check ownership of all affected tilesets
                 tileset_ids = _get_tileset_ids_for_features(cur, request.feature_ids)
-                
+
                 for tid in tileset_ids:
                     _check_tileset_ownership(cur, tid, user.id)
-                
+
                 affected_tilesets = tileset_ids
-                
+
                 if request.dry_run:
                     # Dry run - just count
                     result = BatchResult(
@@ -538,13 +512,13 @@ def batch_delete(
                         conn,
                         feature_ids=request.feature_ids,
                     )
-                
+
             elif request.tileset_id:
                 # Mode 2: Delete by filter
                 _check_tileset_ownership(cur, request.tileset_id, user.id)
-                
+
                 affected_tilesets.add(request.tileset_id)
-                
+
                 result = batch_delete_by_filter(
                     conn,
                     tileset_id=request.tileset_id,
@@ -552,7 +526,7 @@ def batch_delete(
                     limit=request.limit,
                     dry_run=request.dry_run,
                 )
-                
+
             else:
                 raise api_error(
                     400,
@@ -564,7 +538,7 @@ def batch_delete(
             if not request.dry_run:
                 for tid in affected_tilesets:
                     invalidate_tileset_cache(f"vector:{tid}")
-            
+
             return BatchOperationResponse(
                 success_count=result.success_count,
                 failed_count=result.failed_count,
@@ -574,7 +548,7 @@ def batch_delete(
                 status=result.status.value,
                 duration_seconds=result.duration_seconds,
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -594,7 +568,7 @@ def batch_delete_simple(
 ):
     """
     Delete multiple features (simple DELETE method).
-    
+
     Alternative to POST for simple batch deletes.
     """
     if len(feature_ids) > 10000:
@@ -604,27 +578,27 @@ def batch_delete_simple(
             "Maximum 10000 features per request",
             details={"feature_count": len(feature_ids), "max_allowed": 10000},
         )
-    
+
     try:
         with conn.cursor() as cur:
             # Check ownership
             tileset_ids = _get_tileset_ids_for_features(cur, feature_ids)
-            
+
             for tid in tileset_ids:
                 _check_tileset_ownership(cur, tid, user.id)
-            
+
             result = batch_delete_features(conn, feature_ids)
-            
+
             # Invalidate cache
             for tid in tileset_ids:
                 invalidate_tileset_cache(f"vector:{tid}")
-            
+
             return {
                 "success_count": result.success_count,
                 "failed_count": result.failed_count,
                 "errors": result.errors,
             }
-            
+
     except HTTPException:
         raise
     except Exception as e:

@@ -1,14 +1,14 @@
 """Tests for auth.rate_limit module."""
+
 import pytest
 
-from lib.auth.rate_limit import (
-    check_login_rate_limit,
-    record_login_attempt,
-    cleanup_old_attempts,
-    MAX_FAILED_ATTEMPTS,
-    WINDOW_MINUTES,
-)
 from lib.auth.errors import RateLimited
+from lib.auth.rate_limit import (
+    MAX_FAILED_ATTEMPTS,
+    check_login_rate_limit,
+    cleanup_old_attempts,
+    record_login_attempt,
+)
 
 
 class TestCheckLoginRateLimit:
@@ -60,7 +60,9 @@ class TestRecordLoginAttempt:
             assert cur.fetchone()[0] == "upper@example.com"
 
     def test_includes_user_agent(self, db_conn, clean_auth_tables):
-        record_login_attempt(db_conn, email="x@y.com", success=False, ip="1.1.1.1", user_agent="pytest/1.0")
+        record_login_attempt(
+            db_conn, email="x@y.com", success=False, ip="1.1.1.1", user_agent="pytest/1.0"
+        )
         with db_conn.cursor() as cur:
             cur.execute("SELECT user_agent FROM auth_login_attempts")
             assert cur.fetchone()[0] == "pytest/1.0"

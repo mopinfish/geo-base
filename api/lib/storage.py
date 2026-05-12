@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 # URL normalization helpers (Issue #101)
 # =============================================================================
 
+
 def s3_uri_to_gdal_path(url: str) -> str:
     """`s3://bucket/key` を rasterio/GDAL が認識する `/vsis3/bucket/key` に変換する。
 
@@ -65,9 +66,7 @@ def _setup_gdal_s3_env() -> None:
     """
     if os.environ.get("AWS_S3_ENDPOINT"):
         return
-    boto3_endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get(
-        "S3_ENDPOINT_URL"
-    )
+    boto3_endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get("S3_ENDPOINT_URL")
     if not boto3_endpoint:
         return
 

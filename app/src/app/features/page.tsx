@@ -518,6 +518,7 @@ export default function FeaturesPage() {
               <div className="relative">
                 <select
                   data-testid="feature-filter-tileset"
+                  aria-label="タイルセットで絞り込み"
                   value={selectedTileset}
                   onChange={(e) => setSelectedTileset(e.target.value)}
                   className="h-9 w-[200px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -534,6 +535,7 @@ export default function FeaturesPage() {
               <div className="relative">
                 <select
                   data-testid="feature-limit-select"
+                  aria-label="表示件数"
                   value={String(limit)}
                   onChange={(e) => setLimit(Number(e.target.value))}
                   className="h-9 w-[120px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -668,6 +670,7 @@ export default function FeaturesPage() {
                       <input
                         data-testid="feature-select-all"
                         type="checkbox"
+                        aria-label="すべてのフィーチャーを選択"
                         checked={selectedIds.size === filteredFeatures.length && filteredFeatures.length > 0}
                         onChange={toggleAllSelection}
                         className="h-4 w-4 rounded border-gray-300"
@@ -693,6 +696,7 @@ export default function FeaturesPage() {
                         <input
                           data-testid="feature-row-checkbox"
                           type="checkbox"
+                          aria-label="このフィーチャーを選択"
                           checked={selectedIds.has(feature.id)}
                           onChange={() => toggleSelection(feature.id)}
                           className="h-4 w-4 rounded border-gray-300"
@@ -738,16 +742,18 @@ export default function FeaturesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="icon"
+                            aria-label="フィーチャー詳細を表示"
                             onClick={() => router.push(`/features/${feature.id}`)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="icon"
+                            aria-label="フィーチャーを編集"
                             onClick={() => router.push(`/features/${feature.id}/edit`)}
                           >
                             <Pencil className="h-4 w-4" />

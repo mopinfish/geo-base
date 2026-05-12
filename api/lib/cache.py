@@ -8,14 +8,15 @@ access for frequently requested data like tileset information.
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, TypeVar, Generic
+from typing import Dict, Generic, Optional, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class CacheEntry(Generic[T]):
     """A cache entry with value and expiration time."""
+
     value: T
     expires_at: float
 
@@ -23,23 +24,23 @@ class CacheEntry(Generic[T]):
 class TTLCache(Generic[T]):
     """
     A simple thread-safe TTL (Time-To-Live) cache.
-    
+
     Features:
     - Automatic expiration of entries
     - Thread-safe operations
     - Optional size limit with LRU eviction
     - Lazy cleanup of expired entries
-    
+
     Usage:
         cache = TTLCache[dict](ttl=60, max_size=1000)
         cache.set("key1", {"data": "value"})
         result = cache.get("key1")  # Returns cached value or None
     """
-    
+
     def __init__(self, ttl: float = 60.0, max_size: int = 1000):
         """
         Initialize the cache.
-        
+
         Args:
             ttl: Time-to-live in seconds for cache entries (default: 60)
             max_size: Maximum number of entries (default: 1000)
@@ -49,14 +50,14 @@ class TTLCache(Generic[T]):
         self._max_size = max_size
         self._lock = threading.RLock()
         self._access_order: list[str] = []  # For LRU eviction
-    
+
     def get(self, key: str) -> Optional[T]:
         """
         Get a value from the cache.
-        
+
         Args:
             key: Cache key
-            
+
         Returns:
             Cached value if found and not expired, None otherwise
         """
@@ -64,25 +65,25 @@ class TTLCache(Generic[T]):
             entry = self._cache.get(key)
             if entry is None:
                 return None
-            
+
             # Check if expired
             if time.time() > entry.expires_at:
                 del self._cache[key]
                 if key in self._access_order:
                     self._access_order.remove(key)
                 return None
-            
+
             # Update access order for LRU
             if key in self._access_order:
                 self._access_order.remove(key)
             self._access_order.append(key)
-            
+
             return entry.value
-    
+
     def set(self, key: str, value: T, ttl: Optional[float] = None) -> None:
         """
         Set a value in the cache.
-        
+
         Args:
             key: Cache key
             value: Value to cache
@@ -94,25 +95,22 @@ class TTLCache(Generic[T]):
                 oldest_key = self._access_order.pop(0)
                 if oldest_key in self._cache:
                     del self._cache[oldest_key]
-            
+
             entry_ttl = ttl if ttl is not None else self._ttl
-            self._cache[key] = CacheEntry(
-                value=value,
-                expires_at=time.time() + entry_ttl
-            )
-            
+            self._cache[key] = CacheEntry(value=value, expires_at=time.time() + entry_ttl)
+
             # Update access order
             if key in self._access_order:
                 self._access_order.remove(key)
             self._access_order.append(key)
-    
+
     def delete(self, key: str) -> bool:
         """
         Delete a value from the cache.
-        
+
         Args:
             key: Cache key
-            
+
         Returns:
             True if the key was found and deleted, False otherwise
         """
@@ -123,45 +121,39 @@ class TTLCache(Generic[T]):
                     self._access_order.remove(key)
                 return True
             return False
-    
+
     def clear(self) -> None:
         """Clear all entries from the cache."""
         with self._lock:
             self._cache.clear()
             self._access_order.clear()
-    
+
     def cleanup(self) -> int:
         """
         Remove all expired entries from the cache.
-        
+
         Returns:
             Number of entries removed
         """
         with self._lock:
             now = time.time()
-            expired_keys = [
-                key for key, entry in self._cache.items()
-                if now > entry.expires_at
-            ]
+            expired_keys = [key for key, entry in self._cache.items() if now > entry.expires_at]
             for key in expired_keys:
                 del self._cache[key]
                 if key in self._access_order:
                     self._access_order.remove(key)
             return len(expired_keys)
-    
+
     def size(self) -> int:
         """Return the current number of entries in the cache."""
         with self._lock:
             return len(self._cache)
-    
+
     def stats(self) -> dict:
         """Return cache statistics."""
         with self._lock:
             now = time.time()
-            expired_count = sum(
-                1 for entry in self._cache.values()
-                if now > entry.expires_at
-            )
+            expired_count = sum(1 for entry in self._cache.values() if now > entry.expires_at)
             return {
                 "size": len(self._cache),
                 "max_size": self._max_size,
@@ -186,10 +178,10 @@ pmtiles_metadata_cache: TTLCache[dict] = TTLCache(ttl=300.0, max_size=100)
 def get_cached_tileset_info(tileset_id: str) -> Optional[dict]:
     """
     Get cached tileset information.
-    
+
     Args:
         tileset_id: Tileset ID
-        
+
     Returns:
         Cached tileset info dict or None
     """
@@ -199,7 +191,7 @@ def get_cached_tileset_info(tileset_id: str) -> Optional[dict]:
 def cache_tileset_info(tileset_id: str, info: dict) -> None:
     """
     Cache tileset information.
-    
+
     Args:
         tileset_id: Tileset ID
         info: Tileset info dict to cache
@@ -210,9 +202,9 @@ def cache_tileset_info(tileset_id: str, info: dict) -> None:
 def invalidate_tileset_cache(tileset_id: str) -> None:
     """
     Invalidate cached tileset information.
-    
+
     Call this when a tileset is updated or deleted.
-    
+
     Args:
         tileset_id: Tileset ID to invalidate
     """
@@ -222,10 +214,10 @@ def invalidate_tileset_cache(tileset_id: str) -> None:
 def get_cached_pmtiles_metadata(url: str) -> Optional[dict]:
     """
     Get cached PMTiles metadata.
-    
+
     Args:
         url: PMTiles URL
-        
+
     Returns:
         Cached metadata dict or None
     """
@@ -235,7 +227,7 @@ def get_cached_pmtiles_metadata(url: str) -> Optional[dict]:
 def cache_pmtiles_metadata(url: str, metadata: dict) -> None:
     """
     Cache PMTiles metadata.
-    
+
     Args:
         url: PMTiles URL
         metadata: Metadata dict to cache
@@ -246,7 +238,7 @@ def cache_pmtiles_metadata(url: str, metadata: dict) -> None:
 def get_cache_stats() -> dict:
     """
     Get statistics for all caches.
-    
+
     Returns:
         Dict with stats for each cache
     """

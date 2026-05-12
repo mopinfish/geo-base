@@ -1,6 +1,9 @@
 """Tests for check_tileset_access_v2 (sync) and acheck_tileset_access_v2 (async wrapper)."""
-import pytest
+
 import uuid
+
+import pytest
+
 from lib.auth import (
     AuthContext,
     acheck_tileset_access_v2,

@@ -15,14 +15,14 @@ Usage:
     )
 """
 
+import csv
+import io
 import json
 import logging
-import io
-import csv
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 from enum import Enum
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 class BatchStatus(str, Enum):
     """Status of a batch operation."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -44,6 +45,7 @@ class BatchStatus(str, Enum):
 @dataclass
 class BatchResult:
     """Result of a batch operation."""
+
     success_count: int = 0
     failed_count: int = 0
     total_count: int = 0
@@ -52,14 +54,14 @@ class BatchResult:
     status: BatchStatus = BatchStatus.COMPLETED
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    
+
     @property
     def duration_seconds(self) -> Optional[float]:
         """Calculate operation duration in seconds."""
         if self.started_at and self.completed_at:
             return (self.completed_at - self.started_at).total_seconds()
         return None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON response."""
         return {
@@ -92,7 +94,7 @@ def export_features_geojson(
 ) -> Dict[str, Any]:
     """
     Export features as GeoJSON FeatureCollection.
-    
+
     Args:
         conn: Database connection
         tileset_id: Tileset UUID to export (optional if feature_ids provided)
@@ -102,7 +104,7 @@ def export_features_geojson(
         properties_filter: Filter by properties (key=value) (optional)
         limit: Maximum number of features (optional)
         include_metadata: Include export metadata (default: True)
-        
+
     Returns:
         GeoJSON FeatureCollection dict
     """
@@ -111,7 +113,7 @@ def export_features_geojson(
             # Build query
             conditions: List[str] = []
             params: List[Any] = []
-            
+
             if feature_ids:
                 # Export specific features by ID
                 conditions.append("f.id = ANY(%s::uuid[])")
@@ -122,36 +124,34 @@ def export_features_geojson(
                 params.append(tileset_id)
             else:
                 raise ValueError("Either tileset_id or feature_ids must be provided")
-            
+
             if layer_name:
                 conditions.append("f.layer_name = %s")
                 params.append(layer_name)
-            
+
             if bbox:
                 minx, miny, maxx, maxy = bbox
-                conditions.append(
-                    "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend([minx, miny, maxx, maxy])
-            
+
             if properties_filter:
                 for key, value in properties_filter.items():
                     # Use JSONB containment operator
                     conditions.append("f.properties @> %s::jsonb")
                     params.append(json.dumps({key: value}))
-            
+
             where_clause = " AND ".join(conditions) if conditions else "TRUE"
-            
+
             # Get total count
             cur.execute(
                 f"SELECT COUNT(*) FROM features f WHERE {where_clause}",
                 params,
             )
             total_count = cur.fetchone()[0]
-            
+
             # Build main query
             query = f"""
-                SELECT 
+                SELECT
                     f.id,
                     f.tileset_id,
                     f.layer_name,
@@ -163,41 +163,45 @@ def export_features_geojson(
                 WHERE {where_clause}
                 ORDER BY f.created_at
             """
-            
+
             if limit:
                 query += f" LIMIT {int(limit)}"
-            
+
             cur.execute(query, params)
             rows = cur.fetchall()
-            
+
             # Build features
             features = []
             tileset_ids_found = set()
             for row in rows:
-                feature_id, feat_tileset_id, layer, geometry, properties, created_at, updated_at = row
+                feature_id, feat_tileset_id, layer, geometry, properties, created_at, updated_at = (
+                    row
+                )
                 tileset_ids_found.add(str(feat_tileset_id))
-                
+
                 feature_props = properties.copy() if properties else {}
                 feature_props["_layer"] = layer
-                
+
                 if include_metadata:
                     feature_props["_id"] = str(feature_id)
                     feature_props["_tileset_id"] = str(feat_tileset_id)
                     feature_props["_created_at"] = created_at.isoformat() if created_at else None
                     feature_props["_updated_at"] = updated_at.isoformat() if updated_at else None
-                
-                features.append({
-                    "type": "Feature",
-                    "id": str(feature_id),
-                    "geometry": geometry,
-                    "properties": feature_props,
-                })
-            
+
+                features.append(
+                    {
+                        "type": "Feature",
+                        "id": str(feature_id),
+                        "geometry": geometry,
+                        "properties": feature_props,
+                    }
+                )
+
             result = {
                 "type": "FeatureCollection",
                 "features": features,
             }
-            
+
             if include_metadata:
                 result["metadata"] = {
                     "tileset_id": tileset_id,
@@ -213,9 +217,9 @@ def export_features_geojson(
                         "limit": limit,
                     },
                 }
-            
+
             return result
-            
+
     except Exception as e:
         logger.error(f"Error exporting features: {e}")
         raise
@@ -230,17 +234,17 @@ def export_features_geojson_streaming(
 ) -> Generator[str, None, None]:
     """
     Export features as streaming GeoJSON.
-    
+
     Yields JSON strings that can be concatenated to form a valid GeoJSON.
     Useful for large exports to avoid memory issues.
-    
+
     Args:
         conn: Database connection
         tileset_id: Tileset UUID to export
         layer_name: Filter by layer name (optional)
         bbox: Bounding box filter (optional)
         batch_size: Number of features per batch
-        
+
     Yields:
         JSON string chunks
     """
@@ -249,22 +253,20 @@ def export_features_geojson_streaming(
             # Build query
             conditions = ["f.tileset_id = %s"]
             params: List[Any] = [tileset_id]
-            
+
             if layer_name:
                 conditions.append("f.layer_name = %s")
                 params.append(layer_name)
-            
+
             if bbox:
                 minx, miny, maxx, maxy = bbox
-                conditions.append(
-                    "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend([minx, miny, maxx, maxy])
-            
+
             where_clause = " AND ".join(conditions)
-            
+
             query = f"""
-                SELECT 
+                SELECT
                     f.id,
                     f.layer_name,
                     ST_AsGeoJSON(f.geom) as geometry,
@@ -273,40 +275,40 @@ def export_features_geojson_streaming(
                 WHERE {where_clause}
                 ORDER BY f.id
             """
-            
+
             cur.execute(query, params)
-            
+
             # Yield opening
             yield '{"type":"FeatureCollection","features":['
-            
+
             first = True
             while True:
                 rows = cur.fetchmany(batch_size)
                 if not rows:
                     break
-                
+
                 for row in rows:
                     feature_id, layer, geometry_str, properties = row
-                    
+
                     feature_props = properties.copy() if properties else {}
                     feature_props["_layer"] = layer
-                    
+
                     feature = {
                         "type": "Feature",
                         "id": str(feature_id),
                         "geometry": json.loads(geometry_str),
                         "properties": feature_props,
                     }
-                    
+
                     if first:
                         first = False
                         yield json.dumps(feature)
                     else:
                         yield "," + json.dumps(feature)
-            
+
             # Yield closing
             yield "]}"
-            
+
     except Exception as e:
         logger.error(f"Error in streaming export: {e}")
         raise
@@ -323,7 +325,7 @@ def export_features_csv(
 ) -> str:
     """
     Export features as CSV.
-    
+
     Args:
         conn: Database connection
         tileset_id: Tileset UUID to export (optional if feature_ids provided)
@@ -332,7 +334,7 @@ def export_features_csv(
         bbox: Bounding box filter (optional)
         properties_columns: Specific property columns to include (optional)
         include_wkt: Include WKT geometry column (default: True)
-        
+
     Returns:
         CSV string
     """
@@ -341,7 +343,7 @@ def export_features_csv(
             # Build query
             conditions: List[str] = []
             params: List[Any] = []
-            
+
             if feature_ids:
                 # Export specific features by ID
                 conditions.append("f.id = ANY(%s::uuid[])")
@@ -352,25 +354,23 @@ def export_features_csv(
                 params.append(tileset_id)
             else:
                 raise ValueError("Either tileset_id or feature_ids must be provided")
-            
+
             if layer_name:
                 conditions.append("f.layer_name = %s")
                 params.append(layer_name)
-            
+
             if bbox:
                 minx, miny, maxx, maxy = bbox
-                conditions.append(
-                    "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend([minx, miny, maxx, maxy])
-            
+
             where_clause = " AND ".join(conditions) if conditions else "TRUE"
-            
+
             # Determine columns
             geom_col = "ST_AsText(f.geom) as wkt" if include_wkt else "NULL as wkt"
-            
+
             query = f"""
-                SELECT 
+                SELECT
                     f.id,
                     f.tileset_id,
                     f.layer_name,
@@ -382,10 +382,10 @@ def export_features_csv(
                 WHERE {where_clause}
                 ORDER BY f.id
             """
-            
+
             cur.execute(query, params)
             rows = cur.fetchall()
-            
+
             # Determine property columns
             if properties_columns:
                 prop_cols = properties_columns
@@ -396,26 +396,26 @@ def export_features_csv(
                     if row[6]:  # properties is now at index 6
                         prop_cols.update(row[6].keys())
                 prop_cols = sorted(prop_cols)
-            
+
             # Build CSV
             output = io.StringIO()
             writer = csv.writer(output)
-            
+
             # Header
             header = ["id", "tileset_id", "layer_name", "longitude", "latitude"]
             if include_wkt:
                 header.append("wkt")
             header.extend(prop_cols)
             writer.writerow(header)
-            
+
             # Data rows
             for row in rows:
                 feature_id, feat_tileset_id, layer, lon, lat, wkt, properties = row
-                
+
                 csv_row = [str(feature_id), str(feat_tileset_id), layer, lon, lat]
                 if include_wkt:
                     csv_row.append(wkt)
-                
+
                 # Add property values
                 props = properties or {}
                 for col in prop_cols:
@@ -423,11 +423,11 @@ def export_features_csv(
                     if isinstance(value, (dict, list)):
                         value = json.dumps(value)
                     csv_row.append(value)
-                
+
                 writer.writerow(csv_row)
-            
+
             return output.getvalue()
-            
+
     except Exception as e:
         logger.error(f"Error exporting CSV: {e}")
         raise
@@ -446,7 +446,7 @@ def batch_update_features(
 ) -> BatchResult:
     """
     Update multiple features at once.
-    
+
     Args:
         conn: Database connection
         feature_ids: List of feature UUIDs to update
@@ -455,7 +455,7 @@ def batch_update_features(
             - properties: Properties to set/merge
             - geometry: New GeoJSON geometry
         merge_properties: If True, merge properties; if False, replace
-        
+
     Returns:
         BatchResult with operation details
     """
@@ -463,12 +463,12 @@ def batch_update_features(
         total_count=len(feature_ids),
         started_at=datetime.now(timezone.utc),
     )
-    
+
     if not feature_ids:
         result.status = BatchStatus.COMPLETED
         result.completed_at = datetime.now(timezone.utc)
         return result
-    
+
     try:
         with conn.cursor() as cur:
             for feature_id in feature_ids:
@@ -476,11 +476,11 @@ def batch_update_features(
                     # Build SET clause dynamically
                     set_parts = ["updated_at = NOW()"]
                     params = []
-                    
+
                     if "layer_name" in updates:
                         set_parts.append("layer_name = %s")
                         params.append(updates["layer_name"])
-                    
+
                     if "properties" in updates:
                         if merge_properties:
                             # Merge with existing properties
@@ -489,16 +489,16 @@ def batch_update_features(
                             # Replace properties
                             set_parts.append("properties = %s::jsonb")
                         params.append(json.dumps(updates["properties"]))
-                    
+
                     if "geometry" in updates:
                         set_parts.append("geom = ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)")
                         params.append(json.dumps(updates["geometry"]))
-                    
+
                     if len(set_parts) == 1:
                         # Only updated_at, nothing to update
                         result.warnings.append(f"Feature {feature_id}: No updates provided")
                         continue
-                    
+
                     # Execute update
                     params.append(feature_id)
                     cur.execute(
@@ -510,25 +510,25 @@ def batch_update_features(
                         """,
                         params,
                     )
-                    
+
                     if cur.fetchone():
                         result.success_count += 1
                     else:
                         result.failed_count += 1
                         result.errors.append(f"Feature {feature_id}: Not found")
-                        
+
                 except Exception as e:
                     result.failed_count += 1
                     result.errors.append(f"Feature {feature_id}: {str(e)}")
                     conn.rollback()
-            
+
             conn.commit()
-            
+
     except Exception as e:
         result.status = BatchStatus.FAILED
         result.errors.append(f"Batch update failed: {str(e)}")
         conn.rollback()
-    
+
     result.completed_at = datetime.now(timezone.utc)
     return result
 
@@ -543,7 +543,7 @@ def batch_update_by_filter(
 ) -> BatchResult:
     """
     Update features matching filter conditions.
-    
+
     Args:
         conn: Database connection
         tileset_id: Tileset UUID
@@ -554,71 +554,69 @@ def batch_update_by_filter(
         updates: Fields to update (same as batch_update_features)
         merge_properties: If True, merge properties; if False, replace
         limit: Maximum number of features to update
-        
+
     Returns:
         BatchResult with operation details
     """
     result = BatchResult(started_at=datetime.now(timezone.utc))
-    
+
     try:
         with conn.cursor() as cur:
             # Build WHERE clause
             conditions = ["tileset_id = %s"]
             params: List[Any] = [tileset_id]
-            
+
             if "layer_name" in filter_conditions:
                 conditions.append("layer_name = %s")
                 params.append(filter_conditions["layer_name"])
-            
+
             if "bbox" in filter_conditions:
                 bbox = filter_conditions["bbox"]
-                conditions.append(
-                    "ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend(bbox)
-            
+
             if "properties" in filter_conditions:
                 for key, value in filter_conditions["properties"].items():
                     conditions.append("properties @> %s::jsonb")
                     params.append(json.dumps({key: value}))
-            
+
             where_clause = " AND ".join(conditions)
-            
+
             # Count matching features
             cur.execute(f"SELECT COUNT(*) FROM features WHERE {where_clause}", params)
             result.total_count = cur.fetchone()[0]
-            
+
             if result.total_count == 0:
                 result.warnings.append("No features matched the filter")
                 result.completed_at = datetime.now(timezone.utc)
                 return result
-            
+
             # Build SET clause
             set_parts = ["updated_at = NOW()"]
             update_params = []
-            
+
             if "layer_name" in updates:
                 set_parts.append("layer_name = %s")
                 update_params.append(updates["layer_name"])
-            
+
             if "properties" in updates:
                 if merge_properties:
                     set_parts.append("properties = properties || %s::jsonb")
                 else:
                     set_parts.append("properties = %s::jsonb")
                 update_params.append(json.dumps(updates["properties"]))
-            
+
             if "geometry" in updates:
                 set_parts.append("geom = ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)")
                 update_params.append(json.dumps(updates["geometry"]))
-            
+
             # Execute update
             update_query = f"""
                 UPDATE features
                 SET {', '.join(set_parts)}
                 WHERE {where_clause}
             """
-            
+
             if limit:
                 # Use subquery for limited update
                 update_query = f"""
@@ -630,18 +628,18 @@ def batch_update_by_filter(
                         LIMIT {int(limit)}
                     )
                 """
-            
+
             cur.execute(update_query, update_params + params)
             result.success_count = cur.rowcount
             result.failed_count = result.total_count - result.success_count
-            
+
             conn.commit()
-            
+
     except Exception as e:
         result.status = BatchStatus.FAILED
         result.errors.append(f"Batch update failed: {str(e)}")
         conn.rollback()
-    
+
     result.completed_at = datetime.now(timezone.utc)
     return result
 
@@ -657,11 +655,11 @@ def batch_delete_features(
 ) -> BatchResult:
     """
     Delete multiple features at once.
-    
+
     Args:
         conn: Database connection
         feature_ids: List of feature UUIDs to delete
-        
+
     Returns:
         BatchResult with operation details
     """
@@ -669,12 +667,12 @@ def batch_delete_features(
         total_count=len(feature_ids),
         started_at=datetime.now(timezone.utc),
     )
-    
+
     if not feature_ids:
         result.status = BatchStatus.COMPLETED
         result.completed_at = datetime.now(timezone.utc)
         return result
-    
+
     try:
         with conn.cursor() as cur:
             # Use ANY for efficient batch delete with UUID cast
@@ -682,23 +680,23 @@ def batch_delete_features(
                 "DELETE FROM features WHERE id = ANY(%s::uuid[]) RETURNING id",
                 (feature_ids,),
             )
-            
+
             deleted_ids = [str(row[0]) for row in cur.fetchall()]
             result.success_count = len(deleted_ids)
             result.failed_count = len(feature_ids) - result.success_count
-            
+
             # Identify not found features
             not_found = set(feature_ids) - set(deleted_ids)
             for feature_id in not_found:
                 result.errors.append(f"Feature {feature_id}: Not found")
-            
+
             conn.commit()
-            
+
     except Exception as e:
         result.status = BatchStatus.FAILED
         result.errors.append(f"Batch delete failed: {str(e)}")
         conn.rollback()
-    
+
     result.completed_at = datetime.now(timezone.utc)
     return result
 
@@ -712,7 +710,7 @@ def batch_delete_by_filter(
 ) -> BatchResult:
     """
     Delete features matching filter conditions.
-    
+
     Args:
         conn: Database connection
         tileset_id: Tileset UUID
@@ -722,50 +720,48 @@ def batch_delete_by_filter(
             - properties: Property key-value filters
         limit: Maximum number of features to delete
         dry_run: If True, only count without deleting
-        
+
     Returns:
         BatchResult with operation details
     """
     result = BatchResult(started_at=datetime.now(timezone.utc))
-    
+
     try:
         with conn.cursor() as cur:
             # Build WHERE clause
             conditions = ["tileset_id = %s"]
             params: List[Any] = [tileset_id]
-            
+
             if "layer_name" in filter_conditions:
                 conditions.append("layer_name = %s")
                 params.append(filter_conditions["layer_name"])
-            
+
             if "bbox" in filter_conditions:
                 bbox = filter_conditions["bbox"]
-                conditions.append(
-                    "ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend(bbox)
-            
+
             if "properties" in filter_conditions:
                 for key, value in filter_conditions["properties"].items():
                     conditions.append("properties @> %s::jsonb")
                     params.append(json.dumps({key: value}))
-            
+
             where_clause = " AND ".join(conditions)
-            
+
             # Count matching features
             cur.execute(f"SELECT COUNT(*) FROM features WHERE {where_clause}", params)
             result.total_count = cur.fetchone()[0]
-            
+
             if result.total_count == 0:
                 result.warnings.append("No features matched the filter")
                 result.completed_at = datetime.now(timezone.utc)
                 return result
-            
+
             if dry_run:
                 result.warnings.append(f"Dry run: would delete {result.total_count} features")
                 result.completed_at = datetime.now(timezone.utc)
                 return result
-            
+
             # Execute delete
             if limit:
                 delete_query = f"""
@@ -778,20 +774,20 @@ def batch_delete_by_filter(
                 """
             else:
                 delete_query = f"DELETE FROM features WHERE {where_clause}"
-            
+
             cur.execute(delete_query, params)
             result.success_count = cur.rowcount
             result.failed_count = 0
-            
+
             conn.commit()
-            
+
             logger.info(f"Deleted {result.success_count} features from tileset {tileset_id}")
-            
+
     except Exception as e:
         result.status = BatchStatus.FAILED
         result.errors.append(f"Batch delete failed: {str(e)}")
         conn.rollback()
-    
+
     result.completed_at = datetime.now(timezone.utc)
     return result
 

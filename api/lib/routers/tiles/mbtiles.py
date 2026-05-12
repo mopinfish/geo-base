@@ -12,11 +12,10 @@ from fastapi import APIRouter, Response
 from lib.errors import ErrorCode, api_error
 from lib.tiles import (
     FORMAT_MEDIA_TYPES,
-    get_tile_from_mbtiles,
-    get_mbtiles_metadata,
     get_cache_headers,
+    get_mbtiles_metadata,
+    get_tile_from_mbtiles,
 )
-
 
 router = APIRouter(prefix="/mbtiles", tags=["tiles"])
 
@@ -31,7 +30,7 @@ def get_mbtiles_tile(
 ):
     """
     Get a tile from an MBTiles file.
-    
+
     Note: This endpoint is primarily for local development.
     In production (Vercel), use database-backed tiles instead.
 

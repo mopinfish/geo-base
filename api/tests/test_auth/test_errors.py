@@ -1,21 +1,30 @@
 """Tests for auth.errors module."""
+
 import pytest
+
 from lib.auth.errors import (
     AuthError,
     InvalidCredentials,
-    RateLimited,
-    UserNotFound,
-    UserAlreadyExists,
     InvalidToken,
-    WeakPassword,
     ProviderError,
+    RateLimited,
+    UserAlreadyExists,
+    UserNotFound,
+    WeakPassword,
 )
 
 
 class TestAuthErrorHierarchy:
     def test_all_subclass_auth_error(self):
-        for cls in [InvalidCredentials, RateLimited, UserNotFound,
-                    UserAlreadyExists, InvalidToken, WeakPassword, ProviderError]:
+        for cls in [
+            InvalidCredentials,
+            RateLimited,
+            UserNotFound,
+            UserAlreadyExists,
+            InvalidToken,
+            WeakPassword,
+            ProviderError,
+        ]:
             assert issubclass(cls, AuthError)
             assert issubclass(cls, Exception)
 

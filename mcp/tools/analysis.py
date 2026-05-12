@@ -21,17 +21,17 @@ import httpx
 from tenacity import RetryError
 
 from config import get_settings
-from errors import handle_api_error, create_error_response, ErrorCode
-from logger import get_logger, ToolCallLogger
+from errors import ErrorCode, create_error_response, handle_api_error
+from logger import ToolCallLogger, get_logger
 from retry import fetch_with_retry
 from validators import (
-    validate_uuid,
     validate_bbox,
-    validate_latitude,
-    validate_longitude,
     validate_coordinates,
-    validate_positive_number,
+    validate_latitude,
     validate_limit,
+    validate_longitude,
+    validate_positive_number,
+    validate_uuid,
 )
 
 # Initialize logger and settings
@@ -48,8 +48,10 @@ def _get_auth_headers() -> dict[str, str]:
 
 
 def _haversine_distance(
-    lat1: float, lng1: float,
-    lat2: float, lng2: float,
+    lat1: float,
+    lng1: float,
+    lat2: float,
+    lng2: float,
 ) -> float:
     """
     Calculate the great-circle distance between two points using Haversine formula.
@@ -70,8 +72,10 @@ def _haversine_distance(
     d_lng = math.radians(lng2 - lng1)
 
     # Haversine formula
-    a = math.sin(d_lat / 2) ** 2 + \
-        math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(d_lng / 2) ** 2
+    a = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(d_lng / 2) ** 2
+    )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     return R * c
@@ -132,8 +136,10 @@ def _get_feature_centroid(feature: dict) -> tuple[float, float] | None:
 
 
 def _expand_bbox(
-    min_lng: float, min_lat: float,
-    max_lng: float, max_lat: float,
+    min_lng: float,
+    min_lat: float,
+    max_lng: float,
+    max_lat: float,
     buffer_km: float,
 ) -> tuple[float, float, float, float]:
     """
@@ -165,10 +171,22 @@ def _expand_bbox(
 def _bearing_to_direction(bearing: float) -> str:
     """Convert bearing in degrees to compass direction."""
     directions = [
-        "N", "NNE", "NE", "ENE",
-        "E", "ESE", "SE", "SSE",
-        "S", "SSW", "SW", "WSW",
-        "W", "WNW", "NW", "NNW",
+        "N",
+        "NNE",
+        "NE",
+        "ENE",
+        "E",
+        "ESE",
+        "SE",
+        "SSE",
+        "S",
+        "SSW",
+        "SW",
+        "WSW",
+        "W",
+        "WNW",
+        "NW",
+        "NNW",
     ]
     index = round(bearing / 22.5) % 16
     return directions[index]
@@ -203,9 +221,12 @@ async def analyze_area(
         - layers: Layer breakdown
     """
     with ToolCallLogger(
-        logger, "analyze_area",
-        bbox=bbox, tileset_id=tileset_id,
-        include_density=include_density, include_clustering=include_clustering
+        logger,
+        "analyze_area",
+        bbox=bbox,
+        tileset_id=tileset_id,
+        include_density=include_density,
+        include_clustering=include_clustering,
     ) as log:
         # Validate bbox using validators.py
         bbox_result = validate_bbox(bbox)
@@ -329,11 +350,13 @@ async def analyze_area(
                         if density_grid[row][col] > avg_per_cell * 1.5:
                             cell_center_lng = min_lng + (col + 0.5) * cell_width
                             cell_center_lat = min_lat + (row + 0.5) * cell_height
-                            hotspots.append({
-                                "lat": round(cell_center_lat, 6),
-                                "lng": round(cell_center_lng, 6),
-                                "count": density_grid[row][col],
-                            })
+                            hotspots.append(
+                                {
+                                    "lat": round(cell_center_lat, 6),
+                                    "lng": round(cell_center_lng, 6),
+                                    "count": density_grid[row][col],
+                                }
+                            )
 
                 result["density"] = {
                     "features_per_km2": round(density_per_km2, 4),
@@ -371,13 +394,15 @@ async def analyze_area(
                             cluster_lng_sum += lng2
 
                     if len(cluster_members) >= 2:  # Only report clusters of 2+
-                        clusters.append({
-                            "center": {
-                                "lat": round(cluster_lat_sum / len(cluster_members), 6),
-                                "lng": round(cluster_lng_sum / len(cluster_members), 6),
-                            },
-                            "member_count": len(cluster_members),
-                        })
+                        clusters.append(
+                            {
+                                "center": {
+                                    "lat": round(cluster_lat_sum / len(cluster_members), 6),
+                                    "lng": round(cluster_lng_sum / len(cluster_members), 6),
+                                },
+                                "member_count": len(cluster_members),
+                            }
+                        )
 
                 # Sort by size
                 clusters.sort(key=lambda x: x["member_count"], reverse=True)
@@ -446,8 +471,7 @@ async def calculate_distance(
         - points: The input coordinates
     """
     with ToolCallLogger(
-        logger, "calculate_distance",
-        lat1=lat1, lng1=lng1, lat2=lat2, lng2=lng2
+        logger, "calculate_distance", lat1=lat1, lng1=lng1, lat2=lat2, lng2=lng2
     ) as log:
         # Validate coordinates using validators.py
         coords1_result = validate_coordinates(lat1, lng1)
@@ -455,7 +479,8 @@ async def calculate_distance(
             result = create_error_response(
                 f"Invalid first point: {coords1_result.error}",
                 ErrorCode.VALIDATION_ERROR,
-                lat1=lat1, lng1=lng1,
+                lat1=lat1,
+                lng1=lng1,
             )
             log.set_result(result)
             return result
@@ -465,7 +490,8 @@ async def calculate_distance(
             result = create_error_response(
                 f"Invalid second point: {coords2_result.error}",
                 ErrorCode.VALIDATION_ERROR,
-                lat2=lat2, lng2=lng2,
+                lat2=lat2,
+                lng2=lng2,
             )
             log.set_result(result)
             return result
@@ -479,8 +505,9 @@ async def calculate_distance(
         d_lng = math.radians(lng2 - lng1)
 
         x = math.sin(d_lng) * math.cos(lat2_rad)
-        y = math.cos(lat1_rad) * math.sin(lat2_rad) - \
-            math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(d_lng)
+        y = math.cos(lat1_rad) * math.sin(lat2_rad) - math.sin(lat1_rad) * math.cos(
+            lat2_rad
+        ) * math.cos(d_lng)
 
         bearing = math.atan2(x, y)
         bearing_deg = (math.degrees(bearing) + 360) % 360
@@ -531,9 +558,14 @@ async def find_nearest_features(
         - count: Number of features found
     """
     with ToolCallLogger(
-        logger, "find_nearest_features",
-        lat=lat, lng=lng, radius_km=radius_km, limit=limit,
-        tileset_id=tileset_id, layer=layer
+        logger,
+        "find_nearest_features",
+        lat=lat,
+        lng=lng,
+        radius_km=radius_km,
+        limit=limit,
+        tileset_id=tileset_id,
+        layer=layer,
     ) as log:
         # Validate coordinates using validators.py
         lat_result = validate_latitude(lat)
@@ -609,18 +641,22 @@ async def find_nearest_features(
                 if centroid:
                     distance = _haversine_distance(lat, lng, centroid[0], centroid[1])
                     if distance <= radius_km:
-                        features_with_distance.append({
-                            "id": feature.get("id"),
-                            "distance_km": round(distance, 6),
-                            "distance_m": round(distance * 1000, 2),
-                            "geometry_type": (feature.get("geometry") or feature.get("geom") or {}).get("type"),
-                            "layer": feature.get("layer_name"),
-                            "properties": feature.get("properties", {}),
-                            "centroid": {
-                                "lat": centroid[0],
-                                "lng": centroid[1],
-                            },
-                        })
+                        features_with_distance.append(
+                            {
+                                "id": feature.get("id"),
+                                "distance_km": round(distance, 6),
+                                "distance_m": round(distance * 1000, 2),
+                                "geometry_type": (
+                                    feature.get("geometry") or feature.get("geom") or {}
+                                ).get("type"),
+                                "layer": feature.get("layer_name"),
+                                "properties": feature.get("properties", {}),
+                                "centroid": {
+                                    "lat": centroid[0],
+                                    "lng": centroid[1],
+                                },
+                            }
+                        )
 
             # Sort by distance
             features_with_distance.sort(key=lambda x: x["distance_km"])
@@ -660,7 +696,8 @@ async def find_nearest_features(
             result = create_error_response(
                 f"Unexpected error: {str(e)}",
                 ErrorCode.UNKNOWN_ERROR,
-                lat=lat, lng=lng,
+                lat=lat,
+                lng=lng,
             )
             log.set_result(result)
             return result
@@ -697,9 +734,13 @@ async def get_buffer_zone_features(
         - density_per_km2: Feature density in the ring
     """
     with ToolCallLogger(
-        logger, "get_buffer_zone_features",
-        lat=lat, lng=lng, inner_radius_km=inner_radius_km,
-        outer_radius_km=outer_radius_km, tileset_id=tileset_id
+        logger,
+        "get_buffer_zone_features",
+        lat=lat,
+        lng=lng,
+        inner_radius_km=inner_radius_km,
+        outer_radius_km=outer_radius_km,
+        tileset_id=tileset_id,
     ) as log:
         # Validate coordinates using validators.py
         lat_result = validate_latitude(lat)
@@ -748,13 +789,15 @@ async def get_buffer_zone_features(
             tileset_id = uuid_result.value
 
         # Calculate ring area
-        ring_area_km2 = math.pi * (outer_radius_km ** 2 - inner_radius_km ** 2)
+        ring_area_km2 = math.pi * (outer_radius_km**2 - inner_radius_km**2)
 
         # Create bbox for outer radius
         expanded_bbox = _expand_bbox(lng, lat, lng, lat, outer_radius_km * 1.5)
         bbox_str = f"{expanded_bbox[0]},{expanded_bbox[1]},{expanded_bbox[2]},{expanded_bbox[3]}"
 
-        logger.debug(f"Searching buffer zone {inner_radius_km}-{outer_radius_km}km around ({lat}, {lng})")
+        logger.debug(
+            f"Searching buffer zone {inner_radius_km}-{outer_radius_km}km around ({lat}, {lng})"
+        )
 
         tile_server_url = settings.tile_server_url.rstrip("/")
 
@@ -781,13 +824,17 @@ async def get_buffer_zone_features(
                 if centroid:
                     distance = _haversine_distance(lat, lng, centroid[0], centroid[1])
                     if inner_radius_km <= distance <= outer_radius_km:
-                        buffer_features.append({
-                            "id": feature.get("id"),
-                            "distance_km": round(distance, 6),
-                            "geometry_type": (feature.get("geometry") or feature.get("geom") or {}).get("type"),
-                            "layer": feature.get("layer_name"),
-                            "properties": feature.get("properties", {}),
-                        })
+                        buffer_features.append(
+                            {
+                                "id": feature.get("id"),
+                                "distance_km": round(distance, 6),
+                                "geometry_type": (
+                                    feature.get("geometry") or feature.get("geom") or {}
+                                ).get("type"),
+                                "layer": feature.get("layer_name"),
+                                "properties": feature.get("properties", {}),
+                            }
+                        )
 
             # Sort by distance
             buffer_features.sort(key=lambda x: x["distance_km"])
@@ -825,7 +872,8 @@ async def get_buffer_zone_features(
             result = create_error_response(
                 f"Unexpected error: {str(e)}",
                 ErrorCode.UNKNOWN_ERROR,
-                lat=lat, lng=lng,
+                lat=lat,
+                lng=lng,
             )
             log.set_result(result)
             return result

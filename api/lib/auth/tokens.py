@@ -4,6 +4,7 @@
 - トークンローテーション: 検証時に新トークン発行 + 旧トークン revoke
 - 再利用検知: revoked 済みトークンが再提示されたら、そのユーザーの全トークンを失効
 """
+
 import hashlib
 import logging
 import secrets
@@ -84,9 +85,7 @@ def verify_and_rotate_refresh_token(
 
         # ★ 再利用検知
         if revoked_at is not None:
-            logger.warning(
-                "Refresh token reuse detected", extra={"user_id": str(user_id)}
-            )
+            logger.warning("Refresh token reuse detected", extra={"user_id": str(user_id)})
             cur.execute(
                 """
                 UPDATE refresh_tokens

@@ -1,20 +1,27 @@
 """認証関連エンドポイント。"""
-from datetime import datetime
-from typing import Optional, Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Request, Response, status
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 
 from lib.auth import (
-    User, AuthContext, AuthError,
-    InvalidCredentials, RateLimited, InvalidToken,
-    UserAlreadyExists, UserNotFound, WeakPassword, ProviderError,
-    require_auth, get_auth_provider,
+    AuthError,
+    InvalidCredentials,
+    InvalidToken,
+    ProviderError,
+    RateLimited,
+    User,
+    UserAlreadyExists,
+    UserNotFound,
+    WeakPassword,
+    get_auth_provider,
+    require_auth,
 )
 from lib.config import get_settings
 from lib.database import get_connection, get_db_connection
 from lib.errors import ErrorCode, api_error
-
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -83,6 +90,7 @@ def _check_origin(request: Request) -> None:
 # 1. POST /login
 # ===========================================================================
 
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -105,7 +113,8 @@ async def login(
     provider = get_auth_provider()
     try:
         pair = await provider.authenticate(
-            body.email, body.password,
+            body.email,
+            body.password,
             ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
@@ -124,6 +133,7 @@ async def login(
 # ===========================================================================
 # 2. POST /refresh
 # ===========================================================================
+
 
 class RefreshResponse(BaseModel):
     access_token: str
@@ -150,6 +160,7 @@ async def refresh(request: Request, response: Response):
 
     # Decode access_token to get user_id
     from lib.auth.jwt_utils import decode_access_token
+
     settings = get_settings()
     claims = decode_access_token(
         pair.access_token,
@@ -170,6 +181,7 @@ async def refresh(request: Request, response: Response):
 # 3. POST /logout
 # ===========================================================================
 
+
 @router.post("/logout", status_code=204)
 async def logout(request: Request, response: Response):
     _check_origin(request)
@@ -186,6 +198,7 @@ async def logout(request: Request, response: Response):
 # 4. GET /me
 # ===========================================================================
 
+
 @router.get("/me", response_model=User)
 async def get_me(user: User = Depends(require_auth)):
     return user
@@ -194,6 +207,7 @@ async def get_me(user: User = Depends(require_auth)):
 # ===========================================================================
 # 5. PATCH /me
 # ===========================================================================
+
 
 class UpdateMeRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -205,7 +219,10 @@ class UpdateMeRequest(BaseModel):
 async def update_me(body: UpdateMeRequest, user: User = Depends(require_auth)):
     try:
         return await get_auth_provider().update_user(
-            user.id, name=body.name, email=body.email, user_metadata=body.user_metadata,
+            user.id,
+            name=body.name,
+            email=body.email,
+            user_metadata=body.user_metadata,
         )
     except AuthError as e:
         raise _translate(e)
@@ -249,7 +266,8 @@ async def update_my_locale(
         )
     try:
         return await get_auth_provider().update_preferred_locale(
-            user.id, body.preferred_locale,
+            user.id,
+            body.preferred_locale,
         )
     except AuthError as e:
         raise _translate(e)
@@ -258,6 +276,7 @@ async def update_my_locale(
 # ===========================================================================
 # 6. POST /me/password
 # ===========================================================================
+
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
@@ -282,6 +301,7 @@ async def change_password(
 
     # 全 refresh token を失効
     from lib.auth.tokens import revoke_all_user_tokens
+
     with get_db_connection() as conn:
         revoke_all_user_tokens(conn, user.id, reason="password_changed")
 
@@ -289,6 +309,7 @@ async def change_password(
 # ===========================================================================
 # 7. POST /password-reset/request
 # ===========================================================================
+
 
 class PasswordResetRequestModel(BaseModel):
     email: EmailStr
@@ -309,6 +330,7 @@ async def password_reset_request(body: PasswordResetRequestModel, request: Reque
 # 8. POST /password-reset/confirm
 # ===========================================================================
 
+
 class PasswordResetConfirmModel(BaseModel):
     token: str = Field(..., min_length=10)
     new_password: str = Field(..., min_length=8)
@@ -325,6 +347,7 @@ async def password_reset_confirm(body: PasswordResetConfirmModel):
 # ===========================================================================
 # 9. GET /invitations/{token}
 # ===========================================================================
+
 
 class InvitationInfoResponse(BaseModel):
     team_id: str
@@ -364,6 +387,7 @@ async def get_invitation(token: str, conn=Depends(get_connection)):
 
     # Compare expires_at to current time, handling timezone
     from datetime import timezone as _tz
+
     now = datetime.now(_tz.utc)
     if expires_at.tzinfo is None:
         # If naive, assume UTC
@@ -375,8 +399,12 @@ async def get_invitation(token: str, conn=Depends(get_connection)):
 
     existing = await get_auth_provider().get_user_by_email(email)
     return InvitationInfoResponse(
-        team_id=str(team_id), team_name=team_name, team_slug=team_slug,
-        role=role, email=email, inviter_name=inviter_name,
+        team_id=str(team_id),
+        team_name=team_name,
+        team_slug=team_slug,
+        role=role,
+        email=email,
+        inviter_name=inviter_name,
         expires_at=expires_at,
         has_existing_account=existing is not None,
     )
@@ -385,6 +413,7 @@ async def get_invitation(token: str, conn=Depends(get_connection)):
 # ===========================================================================
 # 10. POST /accept-invitation
 # ===========================================================================
+
 
 class AcceptInvitationRequest(BaseModel):
     token: str = Field(..., min_length=10)
@@ -429,6 +458,7 @@ async def accept_invitation(
         )
 
     from datetime import timezone as _tz
+
     now = datetime.now(_tz.utc)
     if expires_at.tzinfo is None:
         expires_at_aware = expires_at.replace(tzinfo=_tz.utc)
@@ -452,7 +482,9 @@ async def accept_invitation(
     # ユーザー作成
     try:
         user = await provider.create_user(
-            email=email, password=body.password, name=body.name,
+            email=email,
+            password=body.password,
+            name=body.name,
             email_verified=True,
         )
     except AuthError as e:
@@ -474,7 +506,8 @@ async def accept_invitation(
 
     # ログイン状態にする
     pair = await provider.authenticate(
-        email, body.password,
+        email,
+        body.password,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )

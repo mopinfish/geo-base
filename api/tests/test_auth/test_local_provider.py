@@ -1,14 +1,16 @@
 """Tests for LocalAuthProvider."""
-import pytest
-import secrets
-from unittest.mock import AsyncMock, patch
 
-from lib.auth.providers.local import LocalAuthProvider
-from lib.auth.errors import (
-    InvalidCredentials, RateLimited, UserAlreadyExists,
-    InvalidToken, WeakPassword,
-)
+import pytest
+
 from lib.auth.email_backends import NullEmailBackend
+from lib.auth.errors import (
+    InvalidCredentials,
+    InvalidToken,
+    RateLimited,
+    UserAlreadyExists,
+    WeakPassword,
+)
+from lib.auth.providers.local import LocalAuthProvider
 
 
 @pytest.fixture
@@ -30,6 +32,7 @@ def provider(monkeypatch):
     monkeypatch.setenv("JWT_AUDIENCE", "authenticated")
     monkeypatch.setenv("JWT_ISSUER", "geo-base-test")
     from lib.config import get_settings
+
     get_settings.cache_clear()
     return LocalAuthProvider()
 
@@ -72,7 +75,8 @@ class TestCreateUser:
         users.role は default の 'authenticated' のまま記録されていた。
         """
         u = await provider.create_user(
-            "admin@example.com", "ValidPass123",
+            "admin@example.com",
+            "ValidPass123",
             role="admin",
             app_metadata={"role": "admin"},
         )
@@ -100,7 +104,9 @@ class TestUpdateUser:
     async def test_role_omitted_does_not_change(self, provider, db_conn, clean_auth_tables):
         """role=None なら他フィールド更新時も role は変わらない。"""
         created = await provider.create_user(
-            "a@b.com", "ValidPass123", role="admin",
+            "a@b.com",
+            "ValidPass123",
+            role="admin",
         )
         updated = await provider.update_user(created.id, name="renamed")
         assert updated.role == "admin"
@@ -174,18 +180,23 @@ class TestPasswordReset:
         assert "a@b.com" == email_backend.sent[0]["to"]
 
     @pytest.mark.asyncio
-    async def test_request_nonexistent_silent(self, provider, email_backend, db_conn, clean_auth_tables):
+    async def test_request_nonexistent_silent(
+        self, provider, email_backend, db_conn, clean_auth_tables
+    ):
         # 存在しない email でも例外なく成功（情報漏洩防止）
         await provider.request_password_reset("nobody@example.com")
         assert len(email_backend.sent) == 0  # メールは送られない
 
     @pytest.mark.asyncio
-    async def test_confirm_changes_password(self, provider, email_backend, db_conn, clean_auth_tables):
+    async def test_confirm_changes_password(
+        self, provider, email_backend, db_conn, clean_auth_tables
+    ):
         await provider.create_user("a@b.com", "OldPass123")
         await provider.request_password_reset("a@b.com")
         # メール本文からトークンを抽出
         body = email_backend.sent[0]["body"]
         import re
+
         token_match = re.search(r"token=([A-Za-z0-9_\-]+)", body)
         token = token_match.group(1)
 
@@ -198,10 +209,13 @@ class TestPasswordReset:
             await provider.authenticate("a@b.com", "OldPass123", ip="1.1.1.1")
 
     @pytest.mark.asyncio
-    async def test_confirm_token_only_once(self, provider, email_backend, db_conn, clean_auth_tables):
+    async def test_confirm_token_only_once(
+        self, provider, email_backend, db_conn, clean_auth_tables
+    ):
         await provider.create_user("a@b.com", "OldPass123")
         await provider.request_password_reset("a@b.com")
         import re
+
         token = re.search(r"token=([A-Za-z0-9_\-]+)", email_backend.sent[0]["body"]).group(1)
         await provider.confirm_password_reset(token, "NewPass456")
         # 同じトークンは 2 回目失敗

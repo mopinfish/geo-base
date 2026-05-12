@@ -2,38 +2,36 @@
 Teams management CRUD endpoints.
 """
 
-from datetime import datetime, timedelta, timezone
 import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
 
+from lib.auth import User, require_auth
 from lib.config import get_settings
 from lib.database import get_connection
 from lib.errors import ErrorCode, api_error
-from lib.auth import User, get_current_user, require_auth
 from lib.models.team import (
-    TeamRole,
     InvitationStatus,
     TeamCreate,
-    TeamUpdate,
-    TeamResponse,
+    TeamInvitationAccept,
+    TeamInvitationCreate,
+    TeamInvitationListResponse,
+    TeamInvitationResponse,
     TeamListResponse,
     TeamMemberAdd,
-    TeamMemberUpdate,
-    TeamMemberResponse,
     TeamMemberListResponse,
-    TeamInvitationCreate,
-    TeamInvitationResponse,
-    TeamInvitationAccept,
-    TeamInvitationListResponse,
-    TeamTilesetAdd,
-    TeamTilesetResponse,
-    TeamTilesetListResponse,
+    TeamMemberResponse,
+    TeamMemberUpdate,
     TeamOwnershipTransfer,
+    TeamResponse,
+    TeamRole,
+    TeamTilesetAdd,
+    TeamTilesetListResponse,
+    TeamTilesetResponse,
+    TeamUpdate,
 )
-
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 settings = get_settings()
@@ -43,14 +41,16 @@ settings = get_settings()
 # Helper Functions
 # =============================================================================
 
+
 def generate_slug(name: str) -> str:
     """Generate a URL-safe slug from team name."""
     import re
+
     slug = name.lower()
-    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
-    slug = re.sub(r'[\s_]+', '-', slug)
-    slug = re.sub(r'-+', '-', slug)
-    slug = slug.strip('-')
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    slug = slug.strip("-")
     # Add random suffix for uniqueness
     suffix = secrets.token_hex(4)
     return f"{slug}-{suffix}" if slug else suffix
@@ -65,8 +65,7 @@ def get_user_role_in_team(conn, team_id: str, user_id: str) -> Optional[TeamRole
     """Get user's role in a team."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT role FROM team_members WHERE team_id = %s AND user_id = %s",
-            (team_id, user_id)
+            "SELECT role FROM team_members WHERE team_id = %s AND user_id = %s", (team_id, user_id)
         )
         row = cur.fetchone()
         if row:
@@ -86,11 +85,11 @@ def get_team_or_404(conn, team_id: str) -> dict:
         cur.execute(
             """SELECT id, name, slug, description, owner_id, settings, created_at, updated_at
                FROM teams WHERE id = %s""",
-            (team_id,)
+            (team_id,),
         )
         columns = [desc[0] for desc in cur.description]
         row = cur.fetchone()
-    
+
     if not row:
         raise api_error(
             404,
@@ -108,11 +107,11 @@ def serialize_team(team_data: dict) -> dict:
     for key, value in team_data.items():
         if value is None:
             result[key] = None
-        elif key in ('id', 'owner_id'):
+        elif key in ("id", "owner_id"):
             result[key] = str(value)
-        elif key in ('created_at', 'updated_at'):
+        elif key in ("created_at", "updated_at"):
             result[key] = value.isoformat() if value else None
-        elif key == 'settings':
+        elif key == "settings":
             result[key] = value if value else {}
         else:
             result[key] = value
@@ -123,51 +122,50 @@ def serialize_team(team_data: dict) -> dict:
 # Team CRUD Endpoints
 # =============================================================================
 
+
 @router.post("", response_model=TeamResponse, status_code=201)
 def create_team(
-    team_data: TeamCreate,
-    conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    team_data: TeamCreate, conn=Depends(get_connection), user: User = Depends(require_auth)
 ):
     """Create a new team."""
     import json
-    
+
     try:
         slug = team_data.slug or generate_slug(team_data.name)
-        settings_json = json.dumps(team_data.settings) if team_data.settings else '{}'
-        
+        settings_json = json.dumps(team_data.settings) if team_data.settings else "{}"
+
         with conn.cursor() as cur:
             # Check if slug already exists
             cur.execute("SELECT id FROM teams WHERE slug = %s", (slug,))
             if cur.fetchone():
                 slug = generate_slug(team_data.name)
-            
+
             # Create team
             cur.execute(
                 """INSERT INTO teams (name, slug, description, owner_id, settings)
                    VALUES (%s, %s, %s, %s, %s::jsonb)
                    RETURNING id, name, slug, description, owner_id, settings, created_at, updated_at""",
-                (team_data.name, slug, team_data.description, user.id, settings_json)
+                (team_data.name, slug, team_data.description, user.id, settings_json),
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
             team = dict(zip(columns, row))
-            
+
             # Add creator as owner member (with conflict handling)
             cur.execute(
                 """INSERT INTO team_members (team_id, user_id, role)
                    VALUES (%s, %s, 'owner')
                    ON CONFLICT (team_id, user_id) DO NOTHING""",
-                (team['id'], user.id)
+                (team["id"], user.id),
             )
-        
+
         conn.commit()
-        
+
         result = serialize_team(team)
-        result['member_count'] = 1
-        result['tileset_count'] = 0
+        result["member_count"] = 1
+        result["tileset_count"] = 0
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -184,22 +182,22 @@ def list_teams(
     conn=Depends(get_connection),
     user: User = Depends(require_auth),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100)
+    page_size: int = Query(20, ge=1, le=100),
 ):
     """List teams the user is a member of."""
     try:
         offset = (page - 1) * page_size
-        
+
         with conn.cursor() as cur:
             # Get total count
             cur.execute(
                 """SELECT COUNT(*) FROM teams t
                    JOIN team_members tm ON t.id = tm.team_id
                    WHERE tm.user_id = %s""",
-                (user.id,)
+                (user.id,),
             )
             total = cur.fetchone()[0]
-            
+
             # Get teams with counts
             cur.execute(
                 """SELECT t.id, t.name, t.slug, t.description, t.owner_id, t.settings,
@@ -211,20 +209,15 @@ def list_teams(
                    WHERE tm.user_id = %s
                    ORDER BY t.created_at DESC
                    LIMIT %s OFFSET %s""",
-                (user.id, page_size, offset)
+                (user.id, page_size, offset),
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         teams = [serialize_team(dict(zip(columns, row))) for row in rows]
-        
-        return {
-            "teams": teams,
-            "total": total,
-            "page": page,
-            "page_size": page_size
-        }
-        
+
+        return {"teams": teams, "total": total, "page": page, "page_size": page_size}
+
     except Exception as e:
         raise api_error(
             500,
@@ -234,38 +227,38 @@ def list_teams(
 
 
 @router.get("/{team_id}", response_model=TeamResponse)
-def get_team(
-    team_id: str,
-    conn=Depends(get_connection),
-    user: User = Depends(require_auth)
-):
+def get_team(team_id: str, conn=Depends(get_connection), user: User = Depends(require_auth)):
     """Get team details."""
     try:
         team = get_team_or_404(conn, team_id)
-        
+
         # Check if user is a member
-        if not check_team_permission(conn, team_id, user.id,
-                                     [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
+        if not check_team_permission(
+            conn,
+            team_id,
+            user.id,
+            [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST],
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
                 "You are not a member of this team",
                 details={"team_id": team_id},
             )
-        
+
         # Get counts
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM team_members WHERE team_id = %s", (team_id,))
             member_count = cur.fetchone()[0]
-            
+
             cur.execute("SELECT COUNT(*) FROM team_tilesets WHERE team_id = %s", (team_id,))
             tileset_count = cur.fetchone()[0]
-        
+
         result = serialize_team(team)
-        result['member_count'] = member_count
-        result['tileset_count'] = tileset_count
+        result["member_count"] = member_count
+        result["tileset_count"] = tileset_count
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -281,37 +274,39 @@ def update_team(
     team_id: str,
     update_data: TeamUpdate,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Update team details."""
     import json
-    
+
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
                 "Only owners and administrators can update team settings",
                 details={"team_id": team_id},
             )
-        
+
         updates = []
         params = []
-        
+
         if update_data.name is not None:
             updates.append("name = %s")
             params.append(update_data.name)
-        
+
         if update_data.description is not None:
             updates.append("description = %s")
             params.append(update_data.description)
-        
+
         if update_data.settings is not None:
             updates.append("settings = %s::jsonb")
             params.append(json.dumps(update_data.settings))
-        
+
         if not updates:
             raise api_error(
                 400,
@@ -326,15 +321,15 @@ def update_team(
                 f"""UPDATE teams SET {', '.join(updates)}, updated_at = NOW()
                     WHERE id = %s
                     RETURNING id, name, slug, description, owner_id, settings, created_at, updated_at""",
-                tuple(params)
+                tuple(params),
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         return serialize_team(dict(zip(columns, row)))
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -347,16 +342,12 @@ def update_team(
 
 
 @router.delete("/{team_id}", status_code=204)
-def delete_team(
-    team_id: str,
-    conn=Depends(get_connection),
-    user: User = Depends(require_auth)
-):
+def delete_team(team_id: str, conn=Depends(get_connection), user: User = Depends(require_auth)):
     """Delete a team (owner only)."""
     try:
         team = get_team_or_404(conn, team_id)
-        
-        if str(team['owner_id']) != user.id:
+
+        if str(team["owner_id"]) != user.id:
             raise api_error(
                 403,
                 ErrorCode.TEAM_OWNER_REQUIRED,
@@ -384,18 +375,21 @@ def delete_team(
 # Team Members Endpoints
 # =============================================================================
 
+
 @router.get("/{team_id}/members", response_model=TeamMemberListResponse)
 def list_team_members(
-    team_id: str,
-    conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    team_id: str, conn=Depends(get_connection), user: User = Depends(require_auth)
 ):
     """List team members."""
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id,
-                                     [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
+
+        if not check_team_permission(
+            conn,
+            team_id,
+            user.id,
+            [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST],
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -414,7 +408,7 @@ def list_team_members(
                    LEFT JOIN users u ON u.id = tm.user_id
                    WHERE tm.team_id = %s
                    ORDER BY tm.joined_at""",
-                (team_id,)
+                (team_id,),
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
@@ -422,24 +416,24 @@ def list_team_members(
         members = []
         for row in rows:
             member = dict(zip(columns, row))
-            members.append({
-                "id": str(member['id']),
-                "team_id": str(member['team_id']),
-                "user_id": str(member['user_id']),
-                "role": member['role'],
-                "notification_enabled": member['notification_enabled'],
-                "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
-                "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
-                "user_email": member.get('user_email'),
-                "user_name": member.get('user_name'),
-            })
-        
-        return {
-            "members": members,
-            "total": len(members),
-            "team_id": team_id
-        }
-        
+            members.append(
+                {
+                    "id": str(member["id"]),
+                    "team_id": str(member["team_id"]),
+                    "user_id": str(member["user_id"]),
+                    "role": member["role"],
+                    "notification_enabled": member["notification_enabled"],
+                    "joined_at": member["joined_at"].isoformat() if member["joined_at"] else None,
+                    "updated_at": (
+                        member["updated_at"].isoformat() if member["updated_at"] else None
+                    ),
+                    "user_email": member.get("user_email"),
+                    "user_name": member.get("user_name"),
+                }
+            )
+
+        return {"members": members, "total": len(members), "team_id": team_id}
+
     except HTTPException:
         raise
     except Exception as e:
@@ -455,13 +449,15 @@ def add_team_member(
     team_id: str,
     member_data: TeamMemberAdd,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Add a member to the team."""
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -473,7 +469,7 @@ def add_team_member(
             # Check if already a member
             cur.execute(
                 "SELECT id FROM team_members WHERE team_id = %s AND user_id = %s",
-                (team_id, member_data.user_id)
+                (team_id, member_data.user_id),
             )
             if cur.fetchone():
                 raise api_error(
@@ -482,31 +478,39 @@ def add_team_member(
                     "User is already a member of this team",
                     details={"team_id": team_id, "user_id": str(member_data.user_id)},
                 )
-            
+
             # Add member
             cur.execute(
                 """INSERT INTO team_members (team_id, user_id, role, notification_enabled)
                    VALUES (%s, %s, %s, %s)
                    RETURNING id, team_id, user_id, role, notification_enabled, joined_at, updated_at""",
-                (team_id, member_data.user_id, member_data.role or 'member', 
-                 member_data.notification_enabled if member_data.notification_enabled is not None else True)
+                (
+                    team_id,
+                    member_data.user_id,
+                    member_data.role or "member",
+                    (
+                        member_data.notification_enabled
+                        if member_data.notification_enabled is not None
+                        else True
+                    ),
+                ),
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         member = dict(zip(columns, row))
         return {
-            "id": str(member['id']),
-            "team_id": str(member['team_id']),
-            "user_id": str(member['user_id']),
-            "role": member['role'],
-            "notification_enabled": member['notification_enabled'],
-            "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
-            "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
+            "id": str(member["id"]),
+            "team_id": str(member["team_id"]),
+            "user_id": str(member["user_id"]),
+            "role": member["role"],
+            "notification_enabled": member["notification_enabled"],
+            "joined_at": member["joined_at"].isoformat() if member["joined_at"] else None,
+            "updated_at": member["updated_at"].isoformat() if member["updated_at"] else None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -524,13 +528,15 @@ def update_team_member(
     user_id: str,
     update_data: TeamMemberUpdate,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Update a team member's role or settings."""
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -542,7 +548,7 @@ def update_team_member(
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT role FROM team_members WHERE team_id = %s AND user_id = %s",
-                (team_id, user_id)
+                (team_id, user_id),
             )
             row = cur.fetchone()
             if not row:
@@ -552,25 +558,25 @@ def update_team_member(
                     "Member not found",
                     details={"team_id": team_id, "user_id": user_id},
                 )
-            if row[0] == 'owner' and update_data.role and update_data.role != TeamRole.OWNER:
+            if row[0] == "owner" and update_data.role and update_data.role != TeamRole.OWNER:
                 raise api_error(
                     400,
                     ErrorCode.TEAM_OWNER_REQUIRED,
                     "Cannot change owner's role. Transfer ownership first.",
                     details={"team_id": team_id, "user_id": user_id},
                 )
-        
+
         updates = []
         params = []
-        
+
         if update_data.role is not None:
             updates.append("role = %s")
             params.append(update_data.role.value)
-        
+
         if update_data.notification_enabled is not None:
             updates.append("notification_enabled = %s")
             params.append(update_data.notification_enabled)
-        
+
         if not updates:
             raise api_error(
                 400,
@@ -579,7 +585,7 @@ def update_team_member(
             )
 
         params.extend([team_id, user_id])
-        
+
         with conn.cursor() as cur:
             # list_team_members と同じく user_email / user_name を返して
             # クライアント側の state 更新で member.user_email が失われないようにする。
@@ -587,27 +593,24 @@ def update_team_member(
                 f"""UPDATE team_members SET {', '.join(updates)}, updated_at = NOW()
                     WHERE team_id = %s AND user_id = %s
                     RETURNING id, team_id, user_id, role, notification_enabled, joined_at, updated_at""",
-                tuple(params)
+                tuple(params),
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
             member = dict(zip(columns, row))
-            cur.execute(
-                "SELECT email, name FROM users WHERE id = %s",
-                (member['user_id'],)
-            )
+            cur.execute("SELECT email, name FROM users WHERE id = %s", (member["user_id"],))
             user_row = cur.fetchone()
 
         conn.commit()
 
         return {
-            "id": str(member['id']),
-            "team_id": str(member['team_id']),
-            "user_id": str(member['user_id']),
-            "role": member['role'],
-            "notification_enabled": member['notification_enabled'],
-            "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
-            "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
+            "id": str(member["id"]),
+            "team_id": str(member["team_id"]),
+            "user_id": str(member["user_id"]),
+            "role": member["role"],
+            "notification_enabled": member["notification_enabled"],
+            "joined_at": member["joined_at"].isoformat() if member["joined_at"] else None,
+            "updated_at": member["updated_at"].isoformat() if member["updated_at"] else None,
             "user_email": user_row[0] if user_row else None,
             "user_name": user_row[1] if user_row else None,
         }
@@ -625,19 +628,18 @@ def update_team_member(
 
 @router.delete("/{team_id}/members/{user_id}", status_code=204)
 def remove_team_member(
-    team_id: str,
-    user_id: str,
-    conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    team_id: str, user_id: str, conn=Depends(get_connection), user: User = Depends(require_auth)
 ):
     """Remove a member from the team."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         # User can remove themselves, or admin/owner can remove others
         is_self = user_id == user.id
-        is_admin = check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR])
-        
+        is_admin = check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        )
+
         if not is_self and not is_admin:
             raise api_error(
                 403,
@@ -650,7 +652,7 @@ def remove_team_member(
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT role FROM team_members WHERE team_id = %s AND user_id = %s",
-                (team_id, user_id)
+                (team_id, user_id),
             )
             row = cur.fetchone()
             if not row:
@@ -660,21 +662,20 @@ def remove_team_member(
                     "Member not found",
                     details={"team_id": team_id, "user_id": user_id},
                 )
-            if row[0] == 'owner':
+            if row[0] == "owner":
                 raise api_error(
                     400,
                     ErrorCode.TEAM_OWNER_REQUIRED,
                     "Cannot remove team owner. Transfer ownership first.",
                     details={"team_id": team_id, "user_id": user_id},
                 )
-            
+
             cur.execute(
-                "DELETE FROM team_members WHERE team_id = %s AND user_id = %s",
-                (team_id, user_id)
+                "DELETE FROM team_members WHERE team_id = %s AND user_id = %s", (team_id, user_id)
             )
-        
+
         conn.commit()
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -690,65 +691,66 @@ def remove_team_member(
 # Team Invitations Endpoints
 # =============================================================================
 
+
 @router.get("/{team_id}/invitations", response_model=TeamInvitationListResponse)
 def list_team_invitations(
     team_id: str,
     status: Optional[InvitationStatus] = None,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """List team invitations."""
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
                 "Only owners and administrators can view invitations",
                 details={"team_id": team_id},
             )
-        
+
         query = """SELECT id, team_id, email, role, invited_by, message, token, status,
                           expires_at, accepted_at, created_at
                    FROM team_invitations
                    WHERE team_id = %s"""
         params = [team_id]
-        
+
         if status:
             query += " AND status = %s"
             params.append(status.value)
-        
+
         query += " ORDER BY created_at DESC"
-        
+
         with conn.cursor() as cur:
             cur.execute(query, tuple(params))
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         invitations = []
         for row in rows:
             inv = dict(zip(columns, row))
-            invitations.append({
-                "id": str(inv['id']),
-                "team_id": str(inv['team_id']),
-                "email": inv['email'],
-                "role": inv['role'],
-                "invited_by": str(inv['invited_by']),
-                "message": inv['message'],
-                "token": inv['token'],
-                "status": inv['status'],
-                "expires_at": inv['expires_at'].isoformat() if inv['expires_at'] else None,
-                "accepted_at": inv['accepted_at'].isoformat() if inv['accepted_at'] else None,
-                "created_at": inv['created_at'].isoformat() if inv['created_at'] else None,
-            })
-        
-        return {
-            "invitations": invitations,
-            "total": len(invitations),
-            "team_id": team_id
-        }
-        
+            invitations.append(
+                {
+                    "id": str(inv["id"]),
+                    "team_id": str(inv["team_id"]),
+                    "email": inv["email"],
+                    "role": inv["role"],
+                    "invited_by": str(inv["invited_by"]),
+                    "message": inv["message"],
+                    "token": inv["token"],
+                    "status": inv["status"],
+                    "expires_at": inv["expires_at"].isoformat() if inv["expires_at"] else None,
+                    "accepted_at": inv["accepted_at"].isoformat() if inv["accepted_at"] else None,
+                    "created_at": inv["created_at"].isoformat() if inv["created_at"] else None,
+                }
+            )
+
+        return {"invitations": invitations, "total": len(invitations), "team_id": team_id}
+
     except HTTPException:
         raise
     except Exception as e:
@@ -764,13 +766,15 @@ async def create_team_invitation(
     team_id: str,
     invitation_data: TeamInvitationCreate,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Create a new team invitation."""
     try:
         team = get_team_or_404(conn, team_id)
 
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -787,7 +791,7 @@ async def create_team_invitation(
             cur.execute(
                 """SELECT id FROM team_invitations
                    WHERE team_id = %s AND email = %s AND status = 'pending'""",
-                (team_id, invitation_data.email)
+                (team_id, invitation_data.email),
             )
             if cur.fetchone():
                 raise api_error(
@@ -801,8 +805,15 @@ async def create_team_invitation(
                 """INSERT INTO team_invitations (team_id, email, role, invited_by, message, token, expires_at)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                    RETURNING id, team_id, email, role, invited_by, message, token, status, expires_at, created_at""",
-                (team_id, invitation_data.email, invitation_data.role or 'member',
-                 user.id, invitation_data.message, token, expires_at)
+                (
+                    team_id,
+                    invitation_data.email,
+                    invitation_data.role or "member",
+                    user.id,
+                    invitation_data.message,
+                    token,
+                    expires_at,
+                ),
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
@@ -819,7 +830,7 @@ async def create_team_invitation(
             accept_url = f"{settings.invitation_base_url}/accept-invitation?token={token}"
             inviter_name = user.name or user.email or "Unknown"
             subject, body = render_invitation_email(
-                team_name=team['name'],
+                team_name=team["name"],
                 inviter_name=inviter_name,
                 accept_url=accept_url,
                 expires_at=expires_at,
@@ -827,19 +838,20 @@ async def create_team_invitation(
             await get_email_backend().send(invitation_data.email, subject, body)
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).error(f"Failed to send invitation email: {e}")
 
         return {
-            "id": str(inv['id']),
-            "team_id": str(inv['team_id']),
-            "email": inv['email'],
-            "role": inv['role'],
-            "invited_by": str(inv['invited_by']),
-            "message": inv['message'],
-            "token": inv['token'],
-            "status": inv['status'],
-            "expires_at": inv['expires_at'].isoformat() if inv['expires_at'] else None,
-            "created_at": inv['created_at'].isoformat() if inv['created_at'] else None,
+            "id": str(inv["id"]),
+            "team_id": str(inv["team_id"]),
+            "email": inv["email"],
+            "role": inv["role"],
+            "invited_by": str(inv["invited_by"]),
+            "message": inv["message"],
+            "token": inv["token"],
+            "status": inv["status"],
+            "expires_at": inv["expires_at"].isoformat() if inv["expires_at"] else None,
+            "created_at": inv["created_at"].isoformat() if inv["created_at"] else None,
         }
 
     except HTTPException:
@@ -857,7 +869,7 @@ async def create_team_invitation(
 def accept_team_invitation(
     accept_data: TeamInvitationAccept,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Accept a team invitation."""
     try:
@@ -870,10 +882,10 @@ def accept_team_invitation(
             cur.execute(
                 """SELECT id, team_id, email, role, status, expires_at
                    FROM team_invitations WHERE token = %s FOR UPDATE""",
-                (accept_data.token,)
+                (accept_data.token,),
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise api_error(
                     404,
@@ -883,7 +895,7 @@ def accept_team_invitation(
 
             inv_id, team_id, email, role, status, expires_at = row
 
-            if status != 'pending':
+            if status != "pending":
                 raise api_error(
                     400,
                     ErrorCode.TEAM_INVITATION_INVALID_STATUS,
@@ -905,7 +917,7 @@ def accept_team_invitation(
                     # Update status to expired and clear token (#55: replay prevention)
                     cur.execute(
                         "UPDATE team_invitations SET status = 'expired', token = NULL WHERE id = %s",
-                        (inv_id,)
+                        (inv_id,),
                     )
                     conn.commit()
                     raise api_error(
@@ -925,7 +937,7 @@ def accept_team_invitation(
             # Check if already a member
             cur.execute(
                 "SELECT id FROM team_members WHERE team_id = %s AND user_id = %s",
-                (team_id, user.id)
+                (team_id, user.id),
             )
             if cur.fetchone():
                 raise api_error(
@@ -934,36 +946,36 @@ def accept_team_invitation(
                     "You are already a member of this team",
                     details={"team_id": str(team_id)},
                 )
-            
+
             # Add as member
             cur.execute(
                 """INSERT INTO team_members (team_id, user_id, role)
                    VALUES (%s, %s, %s)
                    RETURNING id, team_id, user_id, role, notification_enabled, joined_at, updated_at""",
-                (team_id, user.id, role)
+                (team_id, user.id, role),
             )
             columns = [desc[0] for desc in cur.description]
             member_row = cur.fetchone()
-            
+
             # Update invitation status and clear token (#55: replay prevention)
             cur.execute(
                 "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW(), token = NULL WHERE id = %s",
-                (inv_id,)
+                (inv_id,),
             )
-        
+
         conn.commit()
-        
+
         member = dict(zip(columns, member_row))
         return {
-            "id": str(member['id']),
-            "team_id": str(member['team_id']),
-            "user_id": str(member['user_id']),
-            "role": member['role'],
-            "notification_enabled": member['notification_enabled'],
-            "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
-            "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
+            "id": str(member["id"]),
+            "team_id": str(member["team_id"]),
+            "user_id": str(member["user_id"]),
+            "role": member["role"],
+            "notification_enabled": member["notification_enabled"],
+            "joined_at": member["joined_at"].isoformat() if member["joined_at"] else None,
+            "updated_at": member["updated_at"].isoformat() if member["updated_at"] else None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -980,13 +992,15 @@ def cancel_team_invitation(
     team_id: str,
     invitation_id: str,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Cancel a pending invitation."""
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -1001,7 +1015,7 @@ def cancel_team_invitation(
                    SET status = 'cancelled', token = NULL
                    WHERE id = %s AND team_id = %s AND status = 'pending'
                    RETURNING id""",
-                (invitation_id, team_id)
+                (invitation_id, team_id),
             )
             if not cur.fetchone():
                 raise api_error(
@@ -1028,18 +1042,21 @@ def cancel_team_invitation(
 # Team Tilesets Endpoints
 # =============================================================================
 
+
 @router.get("/{team_id}/tilesets", response_model=TeamTilesetListResponse)
 def list_team_tilesets(
-    team_id: str,
-    conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    team_id: str, conn=Depends(get_connection), user: User = Depends(require_auth)
 ):
     """List tilesets shared with the team."""
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id,
-                                     [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
+
+        if not check_team_permission(
+            conn,
+            team_id,
+            user.id,
+            [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST],
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -1055,31 +1072,29 @@ def list_team_tilesets(
                    JOIN tilesets t ON tt.tileset_id = t.id
                    WHERE tt.team_id = %s
                    ORDER BY tt.created_at DESC""",
-                (team_id,)
+                (team_id,),
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         tilesets = []
         for row in rows:
             ts = dict(zip(columns, row))
-            tilesets.append({
-                "id": str(ts['id']),
-                "team_id": str(ts['team_id']),
-                "tileset_id": str(ts['tileset_id']),
-                "added_by": str(ts['added_by']),
-                "permission_level": ts['permission_level'],
-                "created_at": ts['created_at'].isoformat() if ts['created_at'] else None,
-                "tileset_name": ts['tileset_name'],
-                "tileset_type": ts['tileset_type'],
-            })
-        
-        return {
-            "tilesets": tilesets,
-            "total": len(tilesets),
-            "team_id": team_id
-        }
-        
+            tilesets.append(
+                {
+                    "id": str(ts["id"]),
+                    "team_id": str(ts["team_id"]),
+                    "tileset_id": str(ts["tileset_id"]),
+                    "added_by": str(ts["added_by"]),
+                    "permission_level": ts["permission_level"],
+                    "created_at": ts["created_at"].isoformat() if ts["created_at"] else None,
+                    "tileset_name": ts["tileset_name"],
+                    "tileset_type": ts["tileset_type"],
+                }
+            )
+
+        return {"tilesets": tilesets, "total": len(tilesets), "team_id": team_id}
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1095,7 +1110,7 @@ def add_team_tileset(
     team_id: str,
     tileset_data: TeamTilesetAdd,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Add a tileset to the team. Owner / administrator のみ実行可能。
 
@@ -1105,7 +1120,9 @@ def add_team_tileset(
     try:
         get_team_or_404(conn, team_id)
 
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -1117,7 +1134,7 @@ def add_team_tileset(
             # Check if already added
             cur.execute(
                 "SELECT id FROM team_tilesets WHERE team_id = %s AND tileset_id = %s",
-                (team_id, tileset_data.tileset_id)
+                (team_id, tileset_data.tileset_id),
             )
             if cur.fetchone():
                 raise api_error(
@@ -1128,7 +1145,9 @@ def add_team_tileset(
                 )
 
             # Verify tileset exists
-            cur.execute("SELECT id, name, type FROM tilesets WHERE id = %s", (tileset_data.tileset_id,))
+            cur.execute(
+                "SELECT id, name, type FROM tilesets WHERE id = %s", (tileset_data.tileset_id,)
+            )
             tileset = cur.fetchone()
             if not tileset:
                 raise api_error(
@@ -1137,32 +1156,37 @@ def add_team_tileset(
                     "Tileset not found",
                     details={"tileset_id": str(tileset_data.tileset_id)},
                 )
-            
+
             tileset_name, tileset_type = tileset[1], tileset[2]
-            
+
             cur.execute(
                 """INSERT INTO team_tilesets (team_id, tileset_id, added_by, permission_level)
                    VALUES (%s, %s, %s, %s)
                    RETURNING id, team_id, tileset_id, added_by, permission_level, created_at""",
-                (team_id, tileset_data.tileset_id, user.id, tileset_data.permission_level or 'read')
+                (
+                    team_id,
+                    tileset_data.tileset_id,
+                    user.id,
+                    tileset_data.permission_level or "read",
+                ),
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         ts = dict(zip(columns, row))
         return {
-            "id": str(ts['id']),
-            "team_id": str(ts['team_id']),
-            "tileset_id": str(ts['tileset_id']),
-            "added_by": str(ts['added_by']),
-            "permission_level": ts['permission_level'],
-            "created_at": ts['created_at'].isoformat() if ts['created_at'] else None,
+            "id": str(ts["id"]),
+            "team_id": str(ts["team_id"]),
+            "tileset_id": str(ts["tileset_id"]),
+            "added_by": str(ts["added_by"]),
+            "permission_level": ts["permission_level"],
+            "created_at": ts["created_at"].isoformat() if ts["created_at"] else None,
             "tileset_name": tileset_name,
             "tileset_type": tileset_type,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1176,16 +1200,15 @@ def add_team_tileset(
 
 @router.delete("/{team_id}/tilesets/{tileset_id}", status_code=204)
 def remove_team_tileset(
-    team_id: str,
-    tileset_id: str,
-    conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    team_id: str, tileset_id: str, conn=Depends(get_connection), user: User = Depends(require_auth)
 ):
     """Remove a tileset from the team."""
     try:
         get_team_or_404(conn, team_id)
-        
-        if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
+
+        if not check_team_permission(
+            conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]
+        ):
             raise api_error(
                 403,
                 ErrorCode.TEAM_FORBIDDEN,
@@ -1196,7 +1219,7 @@ def remove_team_tileset(
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM team_tilesets WHERE team_id = %s AND tileset_id = %s RETURNING id",
-                (team_id, tileset_id)
+                (team_id, tileset_id),
             )
             if not cur.fetchone():
                 raise api_error(
@@ -1223,18 +1246,19 @@ def remove_team_tileset(
 # Team Ownership Transfer
 # =============================================================================
 
+
 @router.post("/{team_id}/transfer-ownership", response_model=TeamResponse)
 def transfer_team_ownership(
     team_id: str,
     transfer_data: TeamOwnershipTransfer,
     conn=Depends(get_connection),
-    user: User = Depends(require_auth)
+    user: User = Depends(require_auth),
 ):
     """Transfer team ownership to another member."""
     try:
         team = get_team_or_404(conn, team_id)
-        
-        if str(team['owner_id']) != user.id:
+
+        if str(team["owner_id"]) != user.id:
             raise api_error(
                 403,
                 ErrorCode.TEAM_OWNER_REQUIRED,
@@ -1248,7 +1272,7 @@ def transfer_team_ownership(
             # Verify new owner is a member
             cur.execute(
                 "SELECT role FROM team_members WHERE team_id = %s AND user_id = %s",
-                (team_id, new_owner_id)
+                (team_id, new_owner_id),
             )
             if not cur.fetchone():
                 raise api_error(
@@ -1257,36 +1281,36 @@ def transfer_team_ownership(
                     "New owner must be a team member",
                     details={"team_id": team_id, "user_id": str(new_owner_id)},
                 )
-            
+
             # Update team owner
             cur.execute(
                 "UPDATE teams SET owner_id = %s, updated_at = NOW() WHERE id = %s",
-                (new_owner_id, team_id)
+                (new_owner_id, team_id),
             )
-            
+
             # Update member roles
             cur.execute(
                 "UPDATE team_members SET role = 'administrator' WHERE team_id = %s AND user_id = %s",
-                (team_id, user.id)
+                (team_id, user.id),
             )
             cur.execute(
                 "UPDATE team_members SET role = 'owner' WHERE team_id = %s AND user_id = %s",
-                (team_id, new_owner_id)
+                (team_id, new_owner_id),
             )
-            
+
             # Return updated team
             cur.execute(
                 """SELECT id, name, slug, description, owner_id, settings, created_at, updated_at
                    FROM teams WHERE id = %s""",
-                (team_id,)
+                (team_id,),
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         return serialize_team(dict(zip(columns, row)))
-        
+
     except HTTPException:
         raise
     except Exception as e:

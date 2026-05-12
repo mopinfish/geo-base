@@ -37,6 +37,7 @@ backend ごとのアルゴリズム差:
   Issue 仕様に従い **per-minute / per-day 両方をチェック** する（DB との挙動差
   — DB 側も将来揃える余地あり）
 """
+
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Protocol
@@ -170,6 +171,7 @@ class RedisRateLimiter:
         """
         if key_prefix is None:
             from lib.redis_client import get_redis_config
+
             # REDIS_KEY_PREFIX (既定 "geo-base:") + "rate:apikey" → "geo-base:rate:apikey"
             # key 組み立て側で `:{key_id}:m:{window}` を付加するため、末尾 `:` は不要
             key_prefix = f"{get_redis_config().key_prefix}rate:apikey"
@@ -245,7 +247,5 @@ def make_rate_limiter(conn) -> RateLimiter:
     if backend == "redis":
         return RedisRateLimiter()
     if backend != "db":
-        logger.warning(
-            "Unknown RATE_LIMIT_BACKEND=%r; falling back to DbRateLimiter.", backend
-        )
+        logger.warning("Unknown RATE_LIMIT_BACKEND=%r; falling back to DbRateLimiter.", backend)
     return DbRateLimiter(conn)

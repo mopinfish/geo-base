@@ -10,8 +10,6 @@ This module provides:
 import os
 import sys
 from pathlib import Path
-from typing import Generator, Optional
-import json
 
 import pytest
 
@@ -28,26 +26,17 @@ sys.path.insert(0, str(scripts_path))
 # Sample GeoJSON Data Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def sample_point():
     """Sample Point geometry."""
-    return {
-        "type": "Point",
-        "coordinates": [139.7, 35.7]
-    }
+    return {"type": "Point", "coordinates": [139.7, 35.7]}
 
 
 @pytest.fixture
 def sample_linestring():
     """Sample LineString geometry."""
-    return {
-        "type": "LineString",
-        "coordinates": [
-            [139.7, 35.7],
-            [139.8, 35.8],
-            [139.9, 35.9]
-        ]
-    }
+    return {"type": "LineString", "coordinates": [[139.7, 35.7], [139.8, 35.8], [139.9, 35.9]]}
 
 
 @pytest.fixture
@@ -55,13 +44,9 @@ def sample_polygon():
     """Sample Polygon geometry (closed ring)."""
     return {
         "type": "Polygon",
-        "coordinates": [[
-            [139.7, 35.7],
-            [139.8, 35.7],
-            [139.8, 35.8],
-            [139.7, 35.8],
-            [139.7, 35.7]  # Closed
-        ]]
+        "coordinates": [
+            [[139.7, 35.7], [139.8, 35.7], [139.8, 35.8], [139.7, 35.8], [139.7, 35.7]]  # Closed
+        ],
     }
 
 
@@ -72,36 +57,17 @@ def sample_polygon_with_hole():
         "type": "Polygon",
         "coordinates": [
             # Exterior ring
-            [
-                [139.7, 35.7],
-                [139.9, 35.7],
-                [139.9, 35.9],
-                [139.7, 35.9],
-                [139.7, 35.7]
-            ],
+            [[139.7, 35.7], [139.9, 35.7], [139.9, 35.9], [139.7, 35.9], [139.7, 35.7]],
             # Hole
-            [
-                [139.75, 35.75],
-                [139.85, 35.75],
-                [139.85, 35.85],
-                [139.75, 35.85],
-                [139.75, 35.75]
-            ]
-        ]
+            [[139.75, 35.75], [139.85, 35.75], [139.85, 35.85], [139.75, 35.85], [139.75, 35.75]],
+        ],
     }
 
 
 @pytest.fixture
 def sample_multipoint():
     """Sample MultiPoint geometry."""
-    return {
-        "type": "MultiPoint",
-        "coordinates": [
-            [139.7, 35.7],
-            [139.8, 35.8],
-            [139.9, 35.9]
-        ]
-    }
+    return {"type": "MultiPoint", "coordinates": [[139.7, 35.7], [139.8, 35.8], [139.9, 35.9]]}
 
 
 @pytest.fixture
@@ -109,10 +75,7 @@ def sample_multilinestring():
     """Sample MultiLineString geometry."""
     return {
         "type": "MultiLineString",
-        "coordinates": [
-            [[139.7, 35.7], [139.8, 35.8]],
-            [[140.0, 36.0], [140.1, 36.1]]
-        ]
+        "coordinates": [[[139.7, 35.7], [139.8, 35.8]], [[140.0, 36.0], [140.1, 36.1]]],
     }
 
 
@@ -123,18 +86,15 @@ def sample_multipolygon():
         "type": "MultiPolygon",
         "coordinates": [
             [[[139.7, 35.7], [139.8, 35.7], [139.8, 35.8], [139.7, 35.8], [139.7, 35.7]]],
-            [[[140.0, 36.0], [140.1, 36.0], [140.1, 36.1], [140.0, 36.1], [140.0, 36.0]]]
-        ]
+            [[[140.0, 36.0], [140.1, 36.0], [140.1, 36.1], [140.0, 36.1], [140.0, 36.0]]],
+        ],
     }
 
 
 @pytest.fixture
 def sample_geometry_collection(sample_point, sample_linestring):
     """Sample GeometryCollection."""
-    return {
-        "type": "GeometryCollection",
-        "geometries": [sample_point, sample_linestring]
-    }
+    return {"type": "GeometryCollection", "geometries": [sample_point, sample_linestring]}
 
 
 @pytest.fixture
@@ -143,10 +103,7 @@ def sample_feature(sample_point):
     return {
         "type": "Feature",
         "geometry": sample_point,
-        "properties": {
-            "name": "Tokyo Tower",
-            "height": 333
-        }
+        "properties": {"name": "Tokyo Tower", "height": 333},
     }
 
 
@@ -156,23 +113,16 @@ def sample_feature_collection(sample_point, sample_polygon):
     return {
         "type": "FeatureCollection",
         "features": [
-            {
-                "type": "Feature",
-                "geometry": sample_point,
-                "properties": {"name": "Point 1"}
-            },
-            {
-                "type": "Feature",
-                "geometry": sample_polygon,
-                "properties": {"name": "Polygon 1"}
-            }
-        ]
+            {"type": "Feature", "geometry": sample_point, "properties": {"name": "Point 1"}},
+            {"type": "Feature", "geometry": sample_polygon, "properties": {"name": "Polygon 1"}},
+        ],
     }
 
 
 # ============================================================================
 # Bounds and Center Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_bounds_tokyo():
@@ -208,6 +158,7 @@ def sample_center_with_zoom():
 # Invalid Data Fixtures (for error testing)
 # ============================================================================
 
+
 @pytest.fixture
 def invalid_geometry_no_type():
     """Invalid geometry missing type."""
@@ -237,13 +188,15 @@ def invalid_polygon_not_closed():
     """Polygon that is not closed."""
     return {
         "type": "Polygon",
-        "coordinates": [[
-            [139.7, 35.7],
-            [139.8, 35.7],
-            [139.8, 35.8],
-            [139.7, 35.8]
-            # Missing closing point
-        ]]
+        "coordinates": [
+            [
+                [139.7, 35.7],
+                [139.8, 35.7],
+                [139.8, 35.8],
+                [139.7, 35.8],
+                # Missing closing point
+            ]
+        ],
     }
 
 
@@ -263,6 +216,7 @@ def invalid_center_out_of_range():
 # Tileset Data Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def sample_tileset_create_data():
     """Sample data for creating a tileset."""
@@ -276,7 +230,7 @@ def sample_tileset_create_data():
         "bounds": [139.5, 35.5, 140.0, 36.0],
         "center": [139.75, 35.75, 10],
         "attribution": "© Test",
-        "is_public": True
+        "is_public": True,
     }
 
 
@@ -286,13 +240,14 @@ def sample_tileset_update_data():
     return {
         "name": "Updated Tileset",
         "description": "Updated description",
-        "bounds": [139.4, 35.4, 140.1, 36.1]
+        "bounds": [139.4, 35.4, 140.1, 36.1],
     }
 
 
 # ============================================================================
 # Feature Data Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_feature_create_data(sample_point):
@@ -301,7 +256,7 @@ def sample_feature_create_data(sample_point):
         "tileset_id": "test-tileset-id",
         "layer_name": "default",
         "geometry": sample_point,
-        "properties": {"name": "Test Feature"}
+        "properties": {"name": "Test Feature"},
     }
 
 
@@ -309,21 +264,13 @@ def sample_feature_create_data(sample_point):
 def sample_bulk_features(sample_point, sample_polygon):
     """Sample data for bulk feature creation."""
     return [
-        {
-            "type": "Feature",
-            "geometry": sample_point,
-            "properties": {"name": "Feature 1"}
-        },
-        {
-            "type": "Feature", 
-            "geometry": sample_polygon,
-            "properties": {"name": "Feature 2"}
-        },
+        {"type": "Feature", "geometry": sample_point, "properties": {"name": "Feature 1"}},
+        {"type": "Feature", "geometry": sample_polygon, "properties": {"name": "Feature 2"}},
         {
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [140.0, 36.0]},
-            "properties": {"name": "Feature 3"}
-        }
+            "properties": {"name": "Feature 3"},
+        },
     ]
 
 
@@ -337,9 +284,11 @@ def sample_bulk_features(sample_point, sample_polygon):
 # #47). The fixtures below enforce this by failing loudly when
 # TEST_DATABASE_URL is unset or equal to DATABASE_URL.
 
+
 def _db_name_only(url: str) -> str:
     """DB 接続文字列から DB 名のみ抜き出す（資格情報の CI ログ漏洩防止）。"""
     from urllib.parse import urlparse
+
     try:
         parsed = urlparse(url)
         return parsed.path.lstrip("/") or "<unknown>"
@@ -419,6 +368,7 @@ def db_conn(test_database_url, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", test_database_url)
     from lib.config import get_settings
     from lib.database import close_pool
+
     get_settings.cache_clear()
     close_pool()
 
@@ -445,11 +395,12 @@ def clean_auth_tables(db_conn):
 # Utility Functions
 # ============================================================================
 
+
 def assert_valid_geojson_geometry(geometry: dict) -> None:
     """Assert that a geometry is valid GeoJSON."""
     assert isinstance(geometry, dict), "Geometry must be a dict"
     assert "type" in geometry, "Geometry must have 'type'"
-    
+
     if geometry["type"] == "GeometryCollection":
         assert "geometries" in geometry, "GeometryCollection must have 'geometries'"
     else:
@@ -480,10 +431,12 @@ def assert_valid_bounds(bounds: list) -> None:
 # Auth / Team / API Key / Tileset Fixtures (pluggable auth Phase 4)
 # ============================================================================
 
+
 @pytest.fixture
 def null_email_backend(monkeypatch):
     """get_email_backend() を NullEmailBackend に差し替え。"""
     from lib.auth.email_backends import NullEmailBackend, get_email_backend
+
     backend = NullEmailBackend()
     monkeypatch.setattr("lib.auth.email_backends.get_email_backend", lambda: backend)
     get_email_backend.cache_clear()
@@ -507,10 +460,11 @@ def local_auth_settings(monkeypatch, test_database_url):
     monkeypatch.setenv("CORS_ORIGINS", '["http://testserver"]')
     monkeypatch.setenv("DATABASE_URL", test_database_url)
 
-    from lib.config import get_settings
     from lib.auth import get_auth_provider
     from lib.auth.email_backends import get_email_backend
+    from lib.config import get_settings
     from lib.database import close_pool
+
     get_settings.cache_clear()
     get_auth_provider.cache_clear()
     get_email_backend.cache_clear()
@@ -525,8 +479,9 @@ def local_auth_settings(monkeypatch, test_database_url):
 @pytest.fixture
 def make_user(db_conn, clean_auth_tables, local_auth_settings):
     """ローカル DB にユーザーを作成するファクトリ。"""
-    import uuid as uuid_lib
     import asyncio
+    import uuid as uuid_lib
+
     from lib.auth.providers.local import LocalAuthProvider
 
     def _make(email=None, password="ValidPass123", name="Test User"):
@@ -570,7 +525,8 @@ def make_team(db_conn, make_user):
 @pytest.fixture
 def make_api_key(db_conn, make_user):
     """API キー発行ファクトリ。"""
-    import secrets, hashlib
+    import hashlib
+    import secrets
 
     def _make(user=None, team_id=None, scopes=None):
         user = user or make_user()
@@ -596,6 +552,7 @@ def make_api_key(db_conn, make_user):
 def public_tileset(db_conn, make_user):
     """公開タイルセット"""
     import uuid as uuid_lib
+
     user = make_user()
     tid = str(uuid_lib.uuid4())
     with db_conn.cursor() as cur:
@@ -612,6 +569,7 @@ def public_tileset(db_conn, make_user):
 def private_tileset(db_conn, make_user):
     """非公開タイルセット"""
     import uuid as uuid_lib
+
     user = make_user()
     tid = str(uuid_lib.uuid4())
     with db_conn.cursor() as cur:

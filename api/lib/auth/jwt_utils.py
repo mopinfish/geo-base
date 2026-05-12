@@ -2,6 +2,7 @@
 
 このモジュールは純粋関数のみで、設定取得は呼び出し側の責任。
 """
+
 from datetime import datetime, timedelta, timezone
 from typing import Any
 

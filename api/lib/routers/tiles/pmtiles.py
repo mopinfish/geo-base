@@ -7,25 +7,24 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from lib.database import get_connection
-from lib.errors import ErrorCode, api_error
-from lib.pmtiles import (
-    is_pmtiles_available,
-    get_pmtiles_tile,
-    get_pmtiles_metadata,
-    get_pmtiles_media_type,
-    get_pmtiles_content_encoding,
-    get_pmtiles_cache_headers,
-    generate_pmtiles_tilejson,
-)
-from lib.cache import get_cached_tileset_info, cache_tileset_info
 from lib.auth import (
     AuthContext,
     acheck_tileset_access_v2,
     check_tileset_access_v2,
     get_auth_context_optional,
 )
-
+from lib.cache import cache_tileset_info, get_cached_tileset_info
+from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
+from lib.pmtiles import (
+    generate_pmtiles_tilejson,
+    get_pmtiles_cache_headers,
+    get_pmtiles_content_encoding,
+    get_pmtiles_media_type,
+    get_pmtiles_metadata,
+    get_pmtiles_tile,
+    is_pmtiles_available,
+)
 
 router = APIRouter(prefix="/pmtiles", tags=["tiles"])
 
@@ -33,36 +32,37 @@ router = APIRouter(prefix="/pmtiles", tags=["tiles"])
 def get_base_url(request: Request) -> str:
     """
     Get base URL from request headers.
-    
+
     Handles various proxy configurations including Fly.io and Vercel.
     Always uses HTTPS in production (non-localhost).
     """
     # Get protocol - prefer x-forwarded-proto, also check fly-forwarded-proto
     forwarded_proto = (
-        request.headers.get("x-forwarded-proto") or
-        request.headers.get("fly-forwarded-proto") or
-        "http"
+        request.headers.get("x-forwarded-proto")
+        or request.headers.get("fly-forwarded-proto")
+        or "http"
     )
-    
+
     # Get host - prefer x-forwarded-host, fallback to host header
-    forwarded_host = (
-        request.headers.get("x-forwarded-host") or
-        request.headers.get("host")
-    )
-    
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+
     if forwarded_host:
         # Force HTTPS for non-localhost hosts
         if "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
             forwarded_proto = "https"
         return f"{forwarded_proto}://{forwarded_host}"
-    
+
     # Fallback to request.base_url
     base_url = str(request.base_url).rstrip("/")
-    
+
     # Force HTTPS for production URLs
-    if base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
+    if (
+        base_url.startswith("http://")
+        and "localhost" not in base_url
+        and "127.0.0.1" not in base_url
+    ):
         base_url = base_url.replace("http://", "https://", 1)
-    
+
     return base_url
 
 
@@ -78,11 +78,11 @@ async def get_pmtiles_tile_endpoint(
 ):
     """
     Get a tile from a PMTiles archive.
-    
+
     Access control:
     - Public tilesets: No authentication required
     - Private tilesets: Only the owner can access
-    
+
     Args:
         tileset_id: Tileset ID
         z: Zoom level
@@ -100,7 +100,7 @@ async def get_pmtiles_tile_endpoint(
     # Try to get tileset info from cache first
     cache_key = f"pmtiles:{tileset_id}"
     cached_info = get_cached_tileset_info(cache_key)
-    
+
     if cached_info:
         pmtiles_url = cached_info["pmtiles_url"]
         tile_type = cached_info["tile_type"]
@@ -144,15 +144,18 @@ async def get_pmtiles_tile_endpoint(
             owner_user_id = str(owner_user_id) if owner_user_id else None
 
             # Cache the tileset info
-            cache_tileset_info(cache_key, {
-                "pmtiles_url": pmtiles_url,
-                "tile_type": tile_type,
-                "compression": compression,
-                "min_zoom": min_zoom,
-                "max_zoom": max_zoom,
-                "is_public": is_public,
-                "owner_user_id": owner_user_id,
-            })
+            cache_tileset_info(
+                cache_key,
+                {
+                    "pmtiles_url": pmtiles_url,
+                    "tile_type": tile_type,
+                    "compression": compression,
+                    "min_zoom": min_zoom,
+                    "max_zoom": max_zoom,
+                    "is_public": is_public,
+                    "owner_user_id": owner_user_id,
+                },
+            )
 
         except HTTPException:
             raise
@@ -225,18 +228,18 @@ async def get_pmtiles_tile_endpoint(
             "Tile not found",
             details={"tileset_id": tileset_id, "z": z, "x": x, "y": y},
         )
-    
+
     # Determine media type
     media_type = get_pmtiles_media_type(tile_type or "mvt")
-    
+
     # Build response headers
     headers = get_pmtiles_cache_headers(z, is_static=True)
-    
+
     # Add content-encoding if compressed
     content_encoding = get_pmtiles_content_encoding(compression or "gzip")
     if content_encoding:
         headers["Content-Encoding"] = content_encoding
-    
+
     return Response(content=tile_data, media_type=media_type, headers=headers)
 
 
@@ -249,7 +252,7 @@ def get_pmtiles_tilejson_endpoint(
 ):
     """
     Get TileJSON for a PMTiles tileset.
-    
+
     Args:
         tileset_id: Tileset ID
     """
@@ -283,8 +286,20 @@ def get_pmtiles_tilejson_endpoint(
                 details={"tileset_id": tileset_id},
             )
 
-        (name, description, attribution, is_public, owner_user_id,
-         pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers) = row
+        (
+            name,
+            description,
+            attribution,
+            is_public,
+            owner_user_id,
+            pmtiles_url,
+            tile_type,
+            min_zoom,
+            max_zoom,
+            bounds,
+            center,
+            layers,
+        ) = row
         owner_user_id = str(owner_user_id) if owner_user_id else None
 
         # Check access
@@ -311,7 +326,7 @@ def get_pmtiles_tilejson_endpoint(
             )
 
         base_url = get_base_url(request)
-        
+
         return generate_pmtiles_tilejson(
             tileset_id=tileset_id,
             name=name,
@@ -325,7 +340,7 @@ def get_pmtiles_tilejson_endpoint(
             attribution=attribution,
             layers=layers,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -344,9 +359,9 @@ async def get_pmtiles_metadata_endpoint(
 ):
     """
     Get metadata from a PMTiles file.
-    
+
     This endpoint reads metadata directly from the PMTiles file header.
-    
+
     Args:
         tileset_id: Tileset ID
     """

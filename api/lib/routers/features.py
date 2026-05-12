@@ -13,18 +13,10 @@ Key features:
 
 import json
 import logging
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from lib.database import get_connection
-from lib.errors import ErrorCode, api_error
-from lib.models.feature import (
-    FeatureCreate,
-    FeatureUpdate,
-    BulkFeatureCreate,
-    BulkFeatureResponse,
-)
 from lib.auth import (
     AuthContext,
     check_tileset_access_v2,
@@ -32,13 +24,18 @@ from lib.auth import (
     get_auth_context_optional,
     require_auth_context,
 )
-from lib.validators import (
-    validate_feature,
-    validate_geometry,
-    ValidationResult,
-)
 from lib.cache import invalidate_tileset_cache
-
+from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
+from lib.models.feature import (
+    BulkFeatureCreate,
+    BulkFeatureResponse,
+    FeatureCreate,
+    FeatureUpdate,
+)
+from lib.validators import (
+    validate_geometry,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/features", tags=["features"])
@@ -49,14 +46,16 @@ router = APIRouter(prefix="/api/features", tags=["features"])
 # ============================================================================
 
 
-def _update_tileset_bounds(tileset_id: str, conn) -> Tuple[bool, Optional[List[float]], Optional[List[float]]]:
+def _update_tileset_bounds(
+    tileset_id: str, conn
+) -> Tuple[bool, Optional[List[float]], Optional[List[float]]]:
     """
     Calculate and update tileset bounds from its features.
-    
+
     Args:
         tileset_id: The tileset ID to update
         conn: Database connection
-        
+
     Returns:
         Tuple of (success, bounds, center)
         - success: Whether bounds were successfully updated
@@ -68,7 +67,7 @@ def _update_tileset_bounds(tileset_id: str, conn) -> Tuple[bool, Optional[List[f
             # Calculate bounding box from all features in this tileset
             cur.execute(
                 """
-                SELECT 
+                SELECT
                     ST_XMin(ST_Extent(geom)) as xmin,
                     ST_YMin(ST_Extent(geom)) as ymin,
                     ST_XMax(ST_Extent(geom)) as xmax,
@@ -82,13 +81,13 @@ def _update_tileset_bounds(tileset_id: str, conn) -> Tuple[bool, Optional[List[f
                 (tileset_id,),
             )
             result = cur.fetchone()
-            
+
             if not result or result[0] is None:
                 logger.info(f"No features found for tileset {tileset_id}, skipping bounds update")
                 return False, None, None
-            
+
             xmin, ymin, xmax, ymax, center_x, center_y, feature_count = result
-            
+
             # Update tileset with calculated bounds and center
             cur.execute(
                 """
@@ -100,53 +99,51 @@ def _update_tileset_bounds(tileset_id: str, conn) -> Tuple[bool, Optional[List[f
                 """,
                 (xmin, ymin, xmax, ymax, center_x, center_y, tileset_id),
             )
-            
+
             logger.info(
                 f"Updated bounds for tileset {tileset_id}: "
                 f"bounds=[{xmin}, {ymin}, {xmax}, {ymax}], "
                 f"center=[{center_x}, {center_y}], "
                 f"features={feature_count}"
             )
-            
+
             return True, [xmin, ymin, xmax, ymax], [center_x, center_y]
-            
+
     except Exception as e:
         logger.error(f"Error updating tileset bounds: {str(e)}")
         return False, None, None
 
 
 def _validate_features_for_import(
-    features: List[dict],
-    validate_geometry_flag: bool = True,
-    max_errors: int = 100
+    features: List[dict], validate_geometry_flag: bool = True, max_errors: int = 100
 ) -> Tuple[List[dict], List[str], List[str]]:
     """
     Validate features before import.
-    
+
     Args:
         features: List of GeoJSON feature objects
         validate_geometry_flag: Whether to perform geometry validation
         max_errors: Maximum number of errors to collect
-        
+
     Returns:
         Tuple of (valid_features, errors, warnings)
     """
     valid_features = []
     errors = []
     warnings = []
-    
+
     for idx, feature in enumerate(features):
         try:
             # Basic structure validation
             if not isinstance(feature, dict):
                 errors.append(f"Feature #{idx + 1}: Must be an object")
                 continue
-            
+
             geometry = feature.get("geometry")
             if not geometry:
                 errors.append(f"Feature #{idx + 1}: Missing geometry")
                 continue
-            
+
             # Validate geometry if flag is set
             if validate_geometry_flag:
                 result = validate_geometry(geometry, f"Feature #{idx + 1}", check_coordinates=True)
@@ -156,27 +153,29 @@ def _validate_features_for_import(
                         errors.append(f"... stopped after {max_errors} errors")
                         break
                     continue
-                
+
                 # Collect warnings
                 for warning in result.warnings:
                     warnings.append(f"Feature #{idx + 1}: {warning}")
-            
+
             # Ensure properties is a dict
             properties = feature.get("properties", {})
             if properties is None:
                 properties = {}
-            
-            valid_features.append({
-                "geometry": json.dumps(geometry),
-                "properties": json.dumps(properties),
-            })
-            
+
+            valid_features.append(
+                {
+                    "geometry": json.dumps(geometry),
+                    "properties": json.dumps(properties),
+                }
+            )
+
         except Exception as e:
             errors.append(f"Feature #{idx + 1}: {str(e)}")
             if len(errors) >= max_errors:
                 errors.append(f"... stopped after {max_errors} errors")
                 break
-    
+
     return valid_features, errors, warnings
 
 
@@ -223,7 +222,6 @@ def create_feature(
                     details={"tileset_id": str(row[0])},
                 )
 
-
             # Validate geometry
             geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
             if not geom_result.valid:
@@ -232,11 +230,11 @@ def create_feature(
                     ErrorCode.FEATURE_INVALID_GEOMETRY,
                     f"Invalid geometry: {geom_result.error}",
                 )
-            
+
             # Convert GeoJSON geometry to JSON string
             geometry_json = json.dumps(feature.geometry)
             properties_json = json.dumps(feature.properties) if feature.properties else "{}"
-            
+
             cur.execute(
                 """
                 INSERT INTO features (tileset_id, layer_name, geom, properties)
@@ -251,13 +249,13 @@ def create_feature(
                     properties_json,
                 ),
             )
-            
+
             row = cur.fetchone()
             conn.commit()
-            
+
             # Invalidate cache
             invalidate_tileset_cache(f"vector:{feature.tileset_id}")
-            
+
             return {
                 "id": str(row[0]),
                 "type": "Feature",
@@ -269,7 +267,7 @@ def create_feature(
                     "updated_at": row[5].isoformat() if row[5] else None,
                 },
             }
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -334,19 +332,19 @@ def create_features_bulk(
                 )
 
             tileset_type = row[2]
-            
+
             # Warn if adding features to non-vector tileset
             if tileset_type != "vector":
                 logger.warning(
                     f"Adding features to non-vector tileset {data.tileset_id} (type: {tileset_type})"
                 )
-            
+
             # Validate and prepare features
             valid_features, validation_errors, validation_warnings = _validate_features_for_import(
                 data.features,
                 validate_geometry_flag=data.validate_geometry,
             )
-            
+
             if not valid_features:
                 return BulkFeatureResponse(
                     success_count=0,
@@ -356,26 +354,26 @@ def create_features_bulk(
                     warnings=validation_warnings[:50],
                     bounds_updated=False,
                 )
-            
+
             # Prepare for bulk insert
             success_count = 0
             failed_count = len(validation_errors)  # Already failed validation
             feature_ids = []
             errors = validation_errors.copy()
-            
+
             # Batch insert using execute_values for performance
             insert_query = """
                 INSERT INTO features (tileset_id, layer_name, geom, properties)
                 VALUES %s
                 RETURNING id
             """
-            
+
             # Prepare values template
             values_template = f"('{data.tileset_id}', '{data.layer_name}', ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s)"
-            
+
             # Convert to list of tuples for execute_values
             values_list = [(f["geometry"], f["properties"]) for f in valid_features]
-            
+
             try:
                 # Use execute_values for efficient bulk insert
                 result = execute_values(
@@ -385,30 +383,30 @@ def create_features_bulk(
                     template=values_template,
                     fetch=True,
                 )
-                
+
                 # Collect created feature IDs
                 for row in result:
                     feature_ids.append(str(row[0]))
                     success_count += 1
-                
+
                 # Update bounds if requested and we have successful inserts
                 bounds_updated = False
                 bounds = None
                 center = None
-                
+
                 if data.update_bounds and success_count > 0:
                     bounds_updated, bounds, center = _update_tileset_bounds(data.tileset_id, conn)
-                
+
                 conn.commit()
-                
+
                 # Invalidate cache
                 invalidate_tileset_cache(f"vector:{data.tileset_id}")
-                
+
                 logger.info(
                     f"Bulk import completed: {success_count} succeeded, {failed_count} failed, "
                     f"bounds_updated={bounds_updated}"
                 )
-                
+
                 return BulkFeatureResponse(
                     success_count=success_count,
                     failed_count=failed_count,
@@ -419,11 +417,11 @@ def create_features_bulk(
                     bounds=bounds,
                     center=center,
                 )
-                
+
             except Exception as e:
                 conn.rollback()
                 logger.warning(f"Batch insert failed, falling back to individual inserts: {str(e)}")
-                
+
                 # If batch insert fails, try one by one to identify problematic features
                 for idx, values in enumerate(values_list):
                     try:
@@ -444,20 +442,20 @@ def create_features_bulk(
                         conn.rollback()
                         failed_count += 1
                         errors.append(f"Feature #{idx + 1}: {str(inner_e)}")
-                
+
                 # Update bounds after fallback inserts
                 bounds_updated = False
                 bounds = None
                 center = None
-                
+
                 if data.update_bounds and success_count > 0:
                     bounds_updated, bounds, center = _update_tileset_bounds(data.tileset_id, conn)
                     conn.commit()
-                
+
                 # Invalidate cache
                 if success_count > 0:
                     invalidate_tileset_cache(f"vector:{data.tileset_id}")
-                
+
                 return BulkFeatureResponse(
                     success_count=success_count,
                     failed_count=failed_count,
@@ -468,7 +466,7 @@ def create_features_bulk(
                     bounds=bounds,
                     center=center,
                 )
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -541,17 +539,17 @@ def list_features(
                             "You do not have permission to access this tileset",
                             details={"tileset_id": tileset_id},
                         )
-                
+
                 conditions.append("f.tileset_id = %s")
                 params.append(tileset_id)
             else:
                 # Only return features from public tilesets if no tileset_id specified
                 conditions.append("t.is_public = true")
-            
+
             if layer:
                 conditions.append("f.layer_name = %s")
                 params.append(layer)
-            
+
             if bbox:
                 try:
                     minx, miny, maxx, maxy = [float(x) for x in bbox.split(",")]
@@ -566,9 +564,9 @@ def list_features(
                         "Invalid bbox format",
                         details={"bbox": bbox},
                     )
-            
+
             where_clause = " AND ".join(conditions) if conditions else "1=1"
-            
+
             # Get total count
             cur.execute(
                 f"""
@@ -580,7 +578,7 @@ def list_features(
                 params,
             )
             total_count = cur.fetchone()[0]
-            
+
             # Get features
             cur.execute(
                 f"""
@@ -595,22 +593,24 @@ def list_features(
                 params + [limit, offset],
             )
             rows = cur.fetchall()
-            
+
             features = []
             for row in rows:
-                features.append({
-                    "id": str(row[0]),
-                    "type": "Feature",
-                    "geometry": row[2],
-                    "properties": {
-                        **(row[3] if row[3] else {}),
-                        "layer_name": row[1],
-                        "tileset_id": str(row[4]),
-                        "created_at": row[5].isoformat() if row[5] else None,
-                        "updated_at": row[6].isoformat() if row[6] else None,
-                    },
-                })
-            
+                features.append(
+                    {
+                        "id": str(row[0]),
+                        "type": "Feature",
+                        "geometry": row[2],
+                        "properties": {
+                            **(row[3] if row[3] else {}),
+                            "layer_name": row[1],
+                            "tileset_id": str(row[4]),
+                            "created_at": row[5].isoformat() if row[5] else None,
+                            "updated_at": row[6].isoformat() if row[6] else None,
+                        },
+                    }
+                )
+
             return {
                 "type": "FeatureCollection",
                 "features": features,
@@ -618,7 +618,7 @@ def list_features(
                 "limit": limit,
                 "offset": offset,
             }
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -690,7 +690,7 @@ def get_feature(
                     "You do not have permission to access this feature",
                     details={"feature_id": feature_id},
                 )
-            
+
             return {
                 "id": str(row[0]),
                 "type": "Feature",
@@ -703,7 +703,7 @@ def get_feature(
                     "updated_at": row[6].isoformat() if row[6] else None,
                 },
             }
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -773,7 +773,9 @@ def update_feature(
 
             if feature.geometry is not None:
                 # Validate geometry
-                geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
+                geom_result = validate_geometry(
+                    feature.geometry, "geometry", check_coordinates=True
+                )
                 if not geom_result.valid:
                     raise api_error(
                         400,
@@ -794,10 +796,10 @@ def update_feature(
                     ErrorCode.VALIDATION_FIELD_REQUIRED,
                     "No fields to update",
                 )
-            
+
             updates.append("updated_at = NOW()")
             params.append(feature_id)
-            
+
             cur.execute(
                 f"""
                 UPDATE features
@@ -808,13 +810,13 @@ def update_feature(
                 """,
                 params,
             )
-            
+
             row = cur.fetchone()
             conn.commit()
-            
+
             # Invalidate cache
             invalidate_tileset_cache(f"vector:{tileset_id}")
-            
+
             return {
                 "id": str(row[0]),
                 "type": "Feature",
@@ -827,7 +829,7 @@ def update_feature(
                     "updated_at": row[6].isoformat() if row[6] else None,
                 },
             }
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -887,16 +889,16 @@ def delete_feature(
                     "Not authorized to delete this feature",
                     details={"feature_id": feature_id, "tileset_id": tileset_id},
                 )
-            
+
             # Delete feature
             cur.execute("DELETE FROM features WHERE id = %s", (feature_id,))
             conn.commit()
-            
+
             # Invalidate cache
             invalidate_tileset_cache(f"vector:{tileset_id}")
-            
+
             return Response(status_code=204)
-            
+
     except HTTPException:
         raise
     except Exception as e:

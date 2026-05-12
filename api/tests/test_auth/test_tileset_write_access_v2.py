@@ -7,12 +7,12 @@ team_tilesets を直接見る API キー経路の両方をカバー。
 team_members.user_id には users への FK が無いので、ここでは
 `make_user` を経由せず bare UUID を直接 INSERT して self-contained に保つ。
 """
+
 import uuid
 
 import pytest
 
 from lib.auth import AuthContext, check_tileset_write_access_v2
-
 
 # ---------------------------------------------------------------------------
 # Sync-friendly fixtures（async テストから安全に呼べる）
@@ -140,9 +140,7 @@ def add_team_tileset(db_conn):
 class TestAuthGuards:
     def test_no_ctx_denied(self, db_conn, make_tileset):
         ts = make_tileset()
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, None, "update") is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, None, "update") is False
 
     def test_no_write_scope_denied(self, db_conn, make_tileset):
         ts = make_tileset()
@@ -152,9 +150,7 @@ class TestAuthGuards:
             is_api_key=True,
         )
         # owner だが scope 不足 → 拒否
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "update") is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "update") is False
 
     def test_no_delete_scope_for_delete_action(self, db_conn, make_tileset):
         ts = make_tileset()
@@ -163,20 +159,13 @@ class TestAuthGuards:
             scopes=["read", "write"],  # write はあるが delete は無い
             is_api_key=True,
         )
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "delete") is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "delete") is False
 
     def test_unknown_action_denied(self, db_conn, make_tileset, jwt_ctx):
         """未登録の action は許可されない（タイポ防止 / 未知 scope での意図せぬ通過防止）。"""
         ts = make_tileset()
         # owner かつフルスコープでも、未知 action は False
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(ts["user_id"]), "drop"
-            )
-            is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(ts["user_id"]), "drop") is False
 
 
 # ---------------------------------------------------------------------------
@@ -187,31 +176,16 @@ class TestAuthGuards:
 class TestPersonalTileset:
     def test_owner_can_update(self, db_conn, make_tileset, jwt_ctx):
         ts = make_tileset()
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(ts["user_id"]), "update"
-            )
-            is True
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(ts["user_id"]), "update") is True
 
     def test_owner_can_delete(self, db_conn, make_tileset, jwt_ctx):
         ts = make_tileset()
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(ts["user_id"]), "delete"
-            )
-            is True
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(ts["user_id"]), "delete") is True
 
     def test_non_owner_denied(self, db_conn, make_tileset, jwt_ctx):
         ts = make_tileset()
         outsider = str(uuid.uuid4())
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(outsider), "update"
-            )
-            is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(outsider), "update") is False
 
 
 # ---------------------------------------------------------------------------
@@ -233,10 +207,7 @@ class TestTeamSharedJwt:
         team = make_team_with_owner()
         add_team_tileset(team["id"], ts["id"])  # permission_level なし → role 継承
         assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(team["owner_id"]), "update"
-            )
-            is True
+            check_tileset_write_access_v2(db_conn, ts, jwt_ctx(team["owner_id"]), "update") is True
         )
 
     def test_team_owner_default_permission_can_delete(
@@ -252,10 +223,7 @@ class TestTeamSharedJwt:
         add_team_tileset(team["id"], ts["id"])
         # team owner は role 継承で admin → delete 可
         assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(team["owner_id"]), "delete"
-            )
-            is True
+            check_tileset_write_access_v2(db_conn, ts, jwt_ctx(team["owner_id"]), "delete") is True
         )
 
     def test_team_member_default_can_update_but_not_delete(
@@ -272,18 +240,8 @@ class TestTeamSharedJwt:
         member_id = add_team_member(team["id"], role="member")
         add_team_tileset(team["id"], ts["id"])  # permission_level なし → 'write'
         # member は default で write → update 可、delete 不可
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(member_id), "update"
-            )
-            is True
-        )
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(member_id), "delete"
-            )
-            is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(member_id), "update") is True
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(member_id), "delete") is False
 
     def test_team_member_with_read_permission_denied(
         self,
@@ -299,12 +257,7 @@ class TestTeamSharedJwt:
         member_id = add_team_member(team["id"], role="member")
         add_team_tileset(team["id"], ts["id"], permission_level="read")
         # 明示 read → 更新不可
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(member_id), "update"
-            )
-            is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(member_id), "update") is False
 
     def test_team_member_with_admin_permission_can_delete(
         self,
@@ -320,12 +273,7 @@ class TestTeamSharedJwt:
         member_id = add_team_member(team["id"], role="member")
         add_team_tileset(team["id"], ts["id"], permission_level="admin")
         # 明示 admin → delete 可
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(member_id), "delete"
-            )
-            is True
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(member_id), "delete") is True
 
     def test_non_member_denied(
         self,
@@ -339,12 +287,7 @@ class TestTeamSharedJwt:
         team = make_team_with_owner()
         add_team_tileset(team["id"], ts["id"])
         outsider = str(uuid.uuid4())
-        assert (
-            check_tileset_write_access_v2(
-                db_conn, ts, jwt_ctx(outsider), "update"
-            )
-            is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, jwt_ctx(outsider), "update") is False
 
 
 # ---------------------------------------------------------------------------
@@ -353,15 +296,11 @@ class TestTeamSharedJwt:
 
 
 class TestApiKey:
-    def test_api_key_owner_can_update(
-        self, db_conn, make_tileset, api_key_ctx
-    ):
+    def test_api_key_owner_can_update(self, db_conn, make_tileset, api_key_ctx):
         ts = make_tileset()
         # API キーの user_id がオーナーなら team_id 不要で update 可
         ctx = api_key_ctx(user_id=ts["user_id"])
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "update") is True
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "update") is True
 
     def test_api_key_no_team_denied_for_team_tileset(
         self,
@@ -376,9 +315,7 @@ class TestApiKey:
         add_team_tileset(team["id"], ts["id"], permission_level="write")
         # team_id 無しの API キー（オーナーでもない）→ 拒否
         ctx = api_key_ctx(team_id=None)
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "update") is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "update") is False
 
     def test_api_key_team_with_write_permission_can_update(
         self,
@@ -392,9 +329,7 @@ class TestApiKey:
         team = make_team_with_owner()
         add_team_tileset(team["id"], ts["id"], permission_level="write")
         ctx = api_key_ctx(team_id=team["id"])
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "update") is True
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "update") is True
 
     def test_api_key_team_with_write_cannot_delete(
         self,
@@ -409,9 +344,7 @@ class TestApiKey:
         add_team_tileset(team["id"], ts["id"], permission_level="write")
         # delete スコープを持っていても、permission_level=write では delete 不可
         ctx = api_key_ctx(team_id=team["id"], scopes=["read", "write", "delete"])
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "delete") is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "delete") is False
 
     def test_api_key_team_with_admin_permission_can_delete(
         self,
@@ -425,9 +358,7 @@ class TestApiKey:
         team = make_team_with_owner()
         add_team_tileset(team["id"], ts["id"], permission_level="admin")
         ctx = api_key_ctx(team_id=team["id"], scopes=["read", "write", "delete"])
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "delete") is True
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "delete") is True
 
     def test_api_key_team_no_role_inheritance(
         self,
@@ -444,6 +375,4 @@ class TestApiKey:
         team = make_team_with_owner()
         add_team_tileset(team["id"], ts["id"], permission_level=None)
         ctx = api_key_ctx(team_id=team["id"])
-        assert (
-            check_tileset_write_access_v2(db_conn, ts, ctx, "update") is False
-        )
+        assert check_tileset_write_access_v2(db_conn, ts, ctx, "update") is False

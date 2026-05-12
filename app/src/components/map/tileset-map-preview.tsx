@@ -389,6 +389,11 @@ export function TilesetMapPreview({
     }
   }, []);
 
+  // 再帰呼び出し (style ロード待ち) で TDZ を回避するため ref 経由で参照する
+  const updateRasterSourceRef = useRef<
+    ((mapInstance: maplibregl.Map, newColormap: string) => void) | null
+  >(null);
+
   /**
    * ラスターソースを安全に更新（カラーマップ変更時）
    */
@@ -397,7 +402,7 @@ export function TilesetMapPreview({
     if (!mapInstance.isStyleLoaded()) {
       console.log("Style not loaded yet, waiting...");
       mapInstance.once("idle", () => {
-        updateRasterSource(mapInstance, newColormap);
+        updateRasterSourceRef.current?.(mapInstance, newColormap);
       });
       return;
     }
@@ -435,6 +440,11 @@ export function TilesetMapPreview({
       console.error("Error updating raster source:", err);
     }
   }, [getTileUrl, tileJSON, tileset, rasterOpacity, refreshKey]);
+
+  // ref を最新の callback に同期 (上記再帰呼び出し用)
+  useEffect(() => {
+    updateRasterSourceRef.current = updateRasterSource;
+  }, [updateRasterSource]);
 
   /**
    * カラーマップ変更ハンドラ
@@ -683,6 +693,10 @@ export function TilesetMapPreview({
     if (map.current) {
       map.current.remove();
       map.current = null;
+      // 地図の再初期化フローでローカル UI 状態をリセット。
+      // React 19 の set-state-in-effect ルールが警告するが、deps 変更時の
+      // 再初期化シーケンスで意図的に必要。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoaded(false);
       setHasFittedBounds(false);
     }
@@ -773,6 +787,10 @@ export function TilesetMapPreview({
     
     const vectorLayers = getVectorLayers();
     if (vectorLayers.length > 0 && visibleLayers.size === 0) {
+      // 地図 load 完了後に動的に決定される vectorLayers を初期表示状態として
+      // 1 度だけ反映する用途。derived state では tileJSON 取得タイミングに
+      // 追随できないため、effect 内 setState が必要。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVisibleLayers(new Set(vectorLayers.map(l => l.id)));
     }
   }, [isLoaded, getVectorLayers, visibleLayers.size]);

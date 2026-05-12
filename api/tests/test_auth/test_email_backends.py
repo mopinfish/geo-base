@@ -1,12 +1,13 @@
 """Tests for auth.email_backends."""
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import patch, MagicMock
 
 from lib.auth.email_backends import (
+    ConsoleEmailBackend,
     EmailBackend,
     NullEmailBackend,
-    ConsoleEmailBackend,
     SMTPEmailBackend,
 )
 
@@ -46,9 +47,12 @@ class TestSMTPBackend:
             mock_smtp.return_value.__enter__.return_value = mock_server
 
             b = SMTPEmailBackend(
-                host="smtp.example.com", port=587,
-                username="user", password="pass",
-                from_addr="no-reply@example.com", use_tls=True,
+                host="smtp.example.com",
+                port=587,
+                username="user",
+                password="pass",
+                from_addr="no-reply@example.com",
+                use_tls=True,
             )
             await b.send("to@example.com", "Hi", "Body")
 

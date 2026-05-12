@@ -19,6 +19,7 @@ API キーから書き込みできなかった。本 PR で `require_auth_contex
 で全変更を巻き戻している（psycopg2 の Connection は `commit` 属性が
 read-only で `monkeypatch.setattr` が効かないため proxy 経由）。
 """
+
 import uuid
 
 import pytest
@@ -30,7 +31,6 @@ from lib.database import get_connection
 from lib.routers.datasources import router as datasources_router
 from lib.routers.features import router as features_router
 from lib.routers.tilesets import router as tilesets_router
-
 
 # ---------------------------------------------------------------------------
 # Test app + dependency overrides
@@ -89,6 +89,7 @@ def client_for(app):
                 # require_auth_context は ctx None を 401 で拒否するので、
                 # テスト用に直接エラーを発生させる
                 from fastapi import HTTPException
+
                 raise HTTPException(status_code=401, detail="No auth")
             return ctx
 
@@ -287,9 +288,7 @@ class TestApiKeyOwnerWrite:
 
 
 class TestApiKeyTeamWrite:
-    def test_team_api_key_write_permission_can_patch(
-        self, client_for, make_team_tileset
-    ):
+    def test_team_api_key_write_permission_can_patch(self, client_for, make_team_tileset):
         team = make_team_tileset(permission_level="write")
         # API キーは team に紐付く（API キー所有者 user_id は member ではない）
         ctx = api_key_ctx(team_id=team["team_id"], scopes=["read", "write"])
@@ -300,9 +299,7 @@ class TestApiKeyTeamWrite:
         )
         assert res.status_code == 200, res.text
 
-    def test_team_api_key_read_permission_cannot_patch(
-        self, client_for, make_team_tileset
-    ):
+    def test_team_api_key_read_permission_cannot_patch(self, client_for, make_team_tileset):
         team = make_team_tileset(permission_level="read")
         # team_tilesets が read のみ → write 不可
         ctx = api_key_ctx(team_id=team["team_id"], scopes=["read", "write"])
@@ -313,9 +310,7 @@ class TestApiKeyTeamWrite:
         )
         assert res.status_code == 403
 
-    def test_team_api_key_admin_permission_can_delete(
-        self, client_for, make_team_tileset
-    ):
+    def test_team_api_key_admin_permission_can_delete(self, client_for, make_team_tileset):
         team = make_team_tileset(permission_level="admin")
         ctx = api_key_ctx(
             team_id=team["team_id"],
@@ -325,9 +320,7 @@ class TestApiKeyTeamWrite:
         res = client.delete(f"/api/tilesets/{team['tileset_id']}")
         assert res.status_code == 204
 
-    def test_team_api_key_write_permission_cannot_delete(
-        self, client_for, make_team_tileset
-    ):
+    def test_team_api_key_write_permission_cannot_delete(self, client_for, make_team_tileset):
         team = make_team_tileset(permission_level="write")
         # write のみ → delete (admin permission_level) 不可
         ctx = api_key_ctx(
@@ -338,9 +331,7 @@ class TestApiKeyTeamWrite:
         res = client.delete(f"/api/tilesets/{team['tileset_id']}")
         assert res.status_code == 403
 
-    def test_api_key_no_team_id_for_team_tileset_403(
-        self, client_for, make_team_tileset
-    ):
+    def test_api_key_no_team_id_for_team_tileset_403(self, client_for, make_team_tileset):
         team = make_team_tileset(permission_level="write")
         # team_id が無い API キー（オーナーでもない）→ 403
         ctx = api_key_ctx(team_id=None, scopes=["read", "write"])
@@ -413,9 +404,7 @@ def make_feature_in_tileset(db_conn, make_tileset):
 
 
 class TestFeaturesApiKey:
-    def test_owner_api_key_with_write_can_create_feature(
-        self, client_for, make_tileset
-    ):
+    def test_owner_api_key_with_write_can_create_feature(self, client_for, make_tileset):
         ts = make_tileset()
         ctx = api_key_ctx(user_id=ts["user_id"], scopes=["read", "write"])
         client = client_for(ctx)
@@ -430,9 +419,7 @@ class TestFeaturesApiKey:
         )
         assert res.status_code == 201, res.text
 
-    def test_read_only_api_key_cannot_create_feature(
-        self, client_for, make_tileset
-    ):
+    def test_read_only_api_key_cannot_create_feature(self, client_for, make_tileset):
         ts = make_tileset()
         ctx = api_key_ctx(user_id=ts["user_id"], scopes=["read"])
         client = client_for(ctx)
@@ -459,9 +446,7 @@ class TestFeaturesApiKey:
         res = client.delete(f"/api/features/{f['feature_id']}")
         assert res.status_code == 204
 
-    def test_write_only_api_key_cannot_delete_feature(
-        self, client_for, make_feature_in_tileset
-    ):
+    def test_write_only_api_key_cannot_delete_feature(self, client_for, make_feature_in_tileset):
         f = make_feature_in_tileset()
         ctx = api_key_ctx(user_id=f["user_id"], scopes=["read", "write"])
         client = client_for(ctx)
@@ -496,9 +481,7 @@ def make_pmtiles_source(db_conn, make_tileset):
 
 
 class TestDatasourcesApiKey:
-    def test_owner_api_key_with_delete_can_delete_datasource(
-        self, client_for, make_pmtiles_source
-    ):
+    def test_owner_api_key_with_delete_can_delete_datasource(self, client_for, make_pmtiles_source):
         ds = make_pmtiles_source()
         ctx = api_key_ctx(
             user_id=ds["user_id"],
@@ -508,18 +491,14 @@ class TestDatasourcesApiKey:
         res = client.delete(f"/api/datasources/{ds['datasource_id']}")
         assert res.status_code == 204
 
-    def test_read_only_api_key_cannot_delete_datasource(
-        self, client_for, make_pmtiles_source
-    ):
+    def test_read_only_api_key_cannot_delete_datasource(self, client_for, make_pmtiles_source):
         ds = make_pmtiles_source()
         ctx = api_key_ctx(user_id=ds["user_id"], scopes=["read"])
         client = client_for(ctx)
         res = client.delete(f"/api/datasources/{ds['datasource_id']}")
         assert res.status_code == 403
 
-    def test_outsider_api_key_cannot_delete_datasource(
-        self, client_for, make_pmtiles_source
-    ):
+    def test_outsider_api_key_cannot_delete_datasource(self, client_for, make_pmtiles_source):
         ds = make_pmtiles_source()
         # 別ユーザーの API キー
         ctx = api_key_ctx(scopes=["read", "write", "delete"])

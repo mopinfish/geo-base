@@ -9,21 +9,21 @@ Tests end-to-end workflows combining multiple components:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
-from validators import (
-    validate_uuid,
-    validate_bbox,
-    validate_coordinates,
-    validate_geometry,
-)
+import pytest
+
 from errors import (
-    handle_api_error,
-    create_error_response,
     ErrorCode,
     MCPError,
     ValidationError,
+    handle_api_error,
+)
+from validators import (
+    validate_bbox,
+    validate_coordinates,
+    validate_geometry,
+    validate_uuid,
 )
 
 
@@ -70,7 +70,7 @@ class TestValidatorToolIntegration:
         # Invalid Polygon - ring too short
         invalid_polygon = {
             "type": "Polygon",
-            "coordinates": [[[0, 0], [1, 0], [0, 0]]]  # Only 3 points
+            "coordinates": [[[0, 0], [1, 0], [0, 0]]],  # Only 3 points
         }
         result = validate_geometry(invalid_polygon)
         assert not result.valid
@@ -83,7 +83,7 @@ class TestErrorHandlerIntegration:
         """MCPError should convert to proper response."""
         error = MCPError("Test error", code=ErrorCode.VALIDATION_ERROR)
         error_dict = error.to_dict()
-        
+
         assert error_dict["error"] == "Test error"
         assert error_dict["code"] == ErrorCode.VALIDATION_ERROR.value
 
@@ -91,7 +91,7 @@ class TestErrorHandlerIntegration:
         """ValidationError should include field info."""
         error = ValidationError("Invalid format", field="bbox")
         error_dict = error.to_dict()
-        
+
         assert error_dict["details"]["field"] == "bbox"
         assert "Invalid format" in error_dict["error"]
 
@@ -116,8 +116,8 @@ class TestStatsAnalysisIntegration:
 
     def test_area_calculations_consistent(self):
         """Area calculations should be consistent across tools."""
-        from tools.stats import _calculate_bbox_area_km2
         from tools.analysis import _haversine_distance
+        from tools.stats import _calculate_bbox_area_km2
 
         # Calculate area via bbox
         area = _calculate_bbox_area_km2(139.5, 35.5, 140.0, 36.0)
@@ -135,9 +135,7 @@ class TestStatsAnalysisIntegration:
         from tools.analysis import _get_feature_centroid
 
         # Point
-        point_feature = {
-            "geometry": {"type": "Point", "coordinates": [139.7, 35.6]}
-        }
+        point_feature = {"geometry": {"type": "Point", "coordinates": [139.7, 35.6]}}
         centroid = _get_feature_centroid(point_feature)
         assert centroid == (35.6, 139.7)
 
@@ -145,7 +143,7 @@ class TestStatsAnalysisIntegration:
         polygon_feature = {
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]
+                "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
             }
         }
         centroid = _get_feature_centroid(polygon_feature)
@@ -161,6 +159,7 @@ class TestFullWorkflows:
 
     def test_search_and_analyze_workflow(self):
         """Test searching features and analyzing results."""
+
         async def run_test():
             from tools.features import search_features
             from tools.stats import get_area_stats
@@ -188,9 +187,10 @@ class TestFullWorkflows:
             }
             feature_response.raise_for_status = Mock()
 
-            with patch("tools.features.httpx.AsyncClient") as mock_features, \
-                 patch("tools.stats.httpx.AsyncClient") as mock_stats:
-
+            with (
+                patch("tools.features.httpx.AsyncClient") as mock_features,
+                patch("tools.stats.httpx.AsyncClient") as mock_stats,
+            ):
                 # Setup mocks
                 mock_feat_instance = AsyncMock()
                 mock_feat_instance.get.return_value = feature_response
@@ -219,39 +219,45 @@ class TestFullWorkflows:
     @pytest.mark.skip(reason="Complex async mock setup needs refactoring")
     def test_geocode_and_find_nearby_workflow(self):
         """Test geocoding a location and finding nearby features."""
+
         async def run_test():
-            from tools.geocoding import geocode
             from tools.analysis import find_nearest_features
+            from tools.geocoding import geocode
 
             # Mock geocode response (Nominatim format) - use Mock for response object
             geocode_response = Mock()
-            geocode_response.json = Mock(return_value=[
-                {
-                    "lat": "35.6812",
-                    "lon": "139.7671",
-                    "display_name": "Tokyo Station",
-                    "type": "station",
-                    "category": "railway",
-                }
-            ])
+            geocode_response.json = Mock(
+                return_value=[
+                    {
+                        "lat": "35.6812",
+                        "lon": "139.7671",
+                        "display_name": "Tokyo Station",
+                        "type": "station",
+                        "category": "railway",
+                    }
+                ]
+            )
             geocode_response.raise_for_status = Mock()
 
             # Mock nearby features response
             features_response = Mock()
-            features_response.json = Mock(return_value={
-                "features": [
-                    {
-                        "id": "550e8400-e29b-41d4-a716-446655440022",
-                        "geometry": {"type": "Point", "coordinates": [139.768, 35.682]},
-                        "properties": {"name": "Nearby POI"},
-                    }
-                ]
-            })
+            features_response.json = Mock(
+                return_value={
+                    "features": [
+                        {
+                            "id": "550e8400-e29b-41d4-a716-446655440022",
+                            "geometry": {"type": "Point", "coordinates": [139.768, 35.682]},
+                            "properties": {"name": "Nearby POI"},
+                        }
+                    ]
+                }
+            )
             features_response.raise_for_status = Mock()
 
-            with patch("tools.geocoding.httpx.AsyncClient") as mock_geocoding, \
-                 patch("tools.analysis.httpx.AsyncClient") as mock_analysis:
-
+            with (
+                patch("tools.geocoding.httpx.AsyncClient") as mock_geocoding,
+                patch("tools.analysis.httpx.AsyncClient") as mock_analysis,
+            ):
                 # Setup geocoding mock - AsyncMock for get, returns Mock response
                 mock_geo_instance = AsyncMock()
                 mock_geo_instance.get = AsyncMock(return_value=geocode_response)
@@ -285,36 +291,42 @@ class TestFullWorkflows:
     @pytest.mark.skip(reason="Complex async mock setup needs refactoring")
     def test_create_and_query_workflow(self):
         """Test creating a feature and then querying it."""
+
         async def run_test():
             from tools.crud import create_feature
             from tools.features import get_feature
 
             # Mock create response (use regular Mock for json() and raise_for_status())
             create_response = Mock()
-            create_response.json = Mock(return_value={
-                "id": "new-feature-123",
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [139.7, 35.6]},
-                "properties": {"name": "New POI"},
-            })
+            create_response.json = Mock(
+                return_value={
+                    "id": "new-feature-123",
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [139.7, 35.6]},
+                    "properties": {"name": "New POI"},
+                }
+            )
             create_response.raise_for_status = Mock()
             create_response.status_code = 201
 
             # Mock get response
             get_response = Mock()
-            get_response.json = Mock(return_value={
-                "id": "new-feature-123",
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [139.7, 35.6]},
-                "properties": {"name": "New POI"},
-                "layer_name": "pois",
-                "created_at": "2025-01-01T00:00:00Z",
-            })
+            get_response.json = Mock(
+                return_value={
+                    "id": "new-feature-123",
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [139.7, 35.6]},
+                    "properties": {"name": "New POI"},
+                    "layer_name": "pois",
+                    "created_at": "2025-01-01T00:00:00Z",
+                }
+            )
             get_response.raise_for_status = Mock()
 
-            with patch("tools.crud.httpx.AsyncClient") as mock_crud, \
-                 patch("tools.features.httpx.AsyncClient") as mock_features:
-
+            with (
+                patch("tools.crud.httpx.AsyncClient") as mock_crud,
+                patch("tools.features.httpx.AsyncClient") as mock_features,
+            ):
                 # Setup crud mock - use AsyncMock for the client but Mock responses
                 mock_crud_instance = AsyncMock()
                 mock_crud_instance.post = AsyncMock(return_value=create_response)
@@ -351,6 +363,7 @@ class TestEdgeCases:
 
     def test_empty_results_handling(self):
         """Tools should handle empty results gracefully."""
+
         async def run_test():
             from tools.features import search_features
 
@@ -383,6 +396,7 @@ class TestEdgeCases:
 
     def test_unicode_in_properties(self):
         """Should handle Unicode in property values."""
+
         async def run_test():
             from tools.crud import create_feature
 

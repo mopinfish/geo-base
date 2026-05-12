@@ -57,13 +57,11 @@ test.describe("Password reset round-trip (AUTH-08)", () => {
       if (!res.ok()) {
         // 失敗してもテストは止めない (元々失敗してた場合、admin password は
         // まだ ORIGINAL のままの可能性も高い)。ログだけ残す。
-        // eslint-disable-next-line no-console
         console.error(
           `AUTH-08 rollback warn: confirm ${res.status()} ${await res.text()}`,
         );
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("AUTH-08 password rollback failed:", err);
     } finally {
       await ctx.dispose();

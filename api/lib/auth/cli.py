@@ -7,6 +7,7 @@ Commands:
 - reset-password: Trigger password reset for a user
 - list-users: List all users
 """
+
 import argparse
 import asyncio
 import getpass
@@ -38,7 +39,9 @@ async def cmd_create_admin(args):
 
     try:
         user = await provider.create_user(
-            email=email, password=password, name=name,
+            email=email,
+            password=password,
+            name=name,
             email_verified=True,
             # `users.role` カラムに直接 'admin' を書く (issue #78)。
             # 旧 `app_metadata` のみだと JWT payload に role が乗らないので
@@ -110,13 +113,18 @@ async def cmd_list_users(args):
 
     users = []
     for row in rows:
-        users.append({
-            "id": str(row[0]), "email": row[1], "name": row[2], "role": row[3],
-            "is_active": row[4],
-            "email_verified": row[5] is not None,
-            "last_login_at": row[6].isoformat() if row[6] else None,
-            "created_at": row[7].isoformat() if row[7] else None,
-        })
+        users.append(
+            {
+                "id": str(row[0]),
+                "email": row[1],
+                "name": row[2],
+                "role": row[3],
+                "is_active": row[4],
+                "email_verified": row[5] is not None,
+                "last_login_at": row[6].isoformat() if row[6] else None,
+                "created_at": row[7].isoformat() if row[7] else None,
+            }
+        )
 
     if args.json:
         print(json.dumps(users, indent=2, ensure_ascii=False))

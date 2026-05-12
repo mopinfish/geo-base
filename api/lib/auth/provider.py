@@ -1,4 +1,5 @@
 """AuthProvider ABC - プラガブル認証の抽象インタフェース。"""
+
 from abc import ABC, abstractmethod
 from typing import Optional
 

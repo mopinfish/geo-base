@@ -77,9 +77,9 @@ def test_reset_handler_accepts_worker_database_prefix(monkeypatch):
     client = TestClient(app)
     res = client.post("/api/test/reset")
     # 接続できないなら 500 だが prefix チェックでは弾かれない（400 にならない）
-    assert res.status_code != 400, (
-        f"Expected non-400 (prefix check passed), got {res.status_code}: {res.text}"
-    )
+    assert (
+        res.status_code != 400
+    ), f"Expected non-400 (prefix check passed), got {res.status_code}: {res.text}"
 
 
 def test_tokens_endpoint_requires_email(monkeypatch):
@@ -132,12 +132,9 @@ def test_tokens_endpoint_returns_pending_invitation_token(monkeypatch):
     mock_cm.__enter__ = MagicMock(return_value=mock_conn)
     mock_cm.__exit__ = MagicMock(return_value=None)
 
-    with patch(
-        "lib.routers.test_helpers.get_db_connection", return_value=mock_cm
-    ):
+    with patch("lib.routers.test_helpers.get_db_connection", return_value=mock_cm):
         res = client.get(
-            "/api/test/tokens?type=team_invitation"
-            "&email=invitee@example.com",
+            "/api/test/tokens?type=team_invitation" "&email=invitee@example.com",
         )
 
     assert res.status_code == 200, res.text
@@ -160,22 +157,16 @@ def test_tokens_endpoint_returns_password_reset_token_from_console_backend(
 
     from lib.auth.email_backends import console_backend
 
-    console_backend._RECENT_PASSWORD_RESET_TOKENS["admin@example.com"] = (
-        "test-reset-token-xyz"
-    )
+    console_backend._RECENT_PASSWORD_RESET_TOKENS["admin@example.com"] = "test-reset-token-xyz"
 
     try:
         app = _make_app(monkeypatch, "1")
         client = TestClient(app)
-        res = client.get(
-            "/api/test/tokens?type=password_reset&email=admin@example.com"
-        )
+        res = client.get("/api/test/tokens?type=password_reset&email=admin@example.com")
         assert res.status_code == 200, res.text
         assert res.json() == {"token": "test-reset-token-xyz"}
     finally:
-        console_backend._RECENT_PASSWORD_RESET_TOKENS.pop(
-            "admin@example.com", None
-        )
+        console_backend._RECENT_PASSWORD_RESET_TOKENS.pop("admin@example.com", None)
 
 
 def test_tokens_endpoint_404_when_no_password_reset_token(monkeypatch):
@@ -190,13 +181,9 @@ def test_tokens_endpoint_404_when_no_password_reset_token(monkeypatch):
     from lib.auth.email_backends import console_backend
 
     # 念のため dict を空にする
-    console_backend._RECENT_PASSWORD_RESET_TOKENS.pop(
-        "nobody@example.com", None
-    )
+    console_backend._RECENT_PASSWORD_RESET_TOKENS.pop("nobody@example.com", None)
 
-    res = client.get(
-        "/api/test/tokens?type=password_reset&email=nobody@example.com"
-    )
+    res = client.get("/api/test/tokens?type=password_reset&email=nobody@example.com")
     assert res.status_code == 404
 
 
@@ -217,11 +204,7 @@ def test_console_backend_records_password_reset_url_token(monkeypatch):
             "パスワードリセット URL:\n"
             "http://localhost:3000/password-reset/confirm?token=abc123xyz\n"
         )
-        asyncio.run(
-            ConsoleEmailBackend().send(
-                to="user@example.com", subject="Reset", body=body
-            )
-        )
+        asyncio.run(ConsoleEmailBackend().send(to="user@example.com", subject="Reset", body=body))
         assert get_recent_password_reset_token("user@example.com") == "abc123xyz"
     finally:
         _RECENT_PASSWORD_RESET_TOKENS.clear()
@@ -240,14 +223,8 @@ def test_console_backend_does_not_record_when_e2e_mode_off(monkeypatch):
     monkeypatch.delenv("E2E_MODE", raising=False)
     _RECENT_PASSWORD_RESET_TOKENS.clear()
     try:
-        body = (
-            "http://localhost:3000/password-reset/confirm?token=should-not-record\n"
-        )
-        asyncio.run(
-            ConsoleEmailBackend().send(
-                to="user2@example.com", subject="Reset", body=body
-            )
-        )
+        body = "http://localhost:3000/password-reset/confirm?token=should-not-record\n"
+        asyncio.run(ConsoleEmailBackend().send(to="user2@example.com", subject="Reset", body=body))
         assert get_recent_password_reset_token("user2@example.com") is None
     finally:
         _RECENT_PASSWORD_RESET_TOKENS.clear()
@@ -278,9 +255,7 @@ def test_api_keys_expire_updates_existing_key(monkeypatch):
     mock_cm.__enter__ = MagicMock(return_value=mock_conn)
     mock_cm.__exit__ = MagicMock(return_value=None)
 
-    with patch(
-        "lib.routers.test_helpers.get_db_connection", return_value=mock_cm
-    ):
+    with patch("lib.routers.test_helpers.get_db_connection", return_value=mock_cm):
         res = client.post(
             "/api/test/api-keys/expire",
             json={"key_id": "some-uuid", "minutes_ago": 60},
@@ -317,9 +292,7 @@ def test_api_keys_expire_returns_404_for_unknown_key(monkeypatch):
     mock_cm.__enter__ = MagicMock(return_value=mock_conn)
     mock_cm.__exit__ = MagicMock(return_value=None)
 
-    with patch(
-        "lib.routers.test_helpers.get_db_connection", return_value=mock_cm
-    ):
+    with patch("lib.routers.test_helpers.get_db_connection", return_value=mock_cm):
         res = client.post(
             "/api/test/api-keys/expire",
             json={"key_id": "nonexistent", "minutes_ago": 60},

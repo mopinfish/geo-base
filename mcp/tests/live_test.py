@@ -13,7 +13,6 @@ Usage:
 """
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -22,15 +21,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import tools
 from config import get_settings
-from tools.tilesets import list_tilesets, get_tileset, get_tileset_tilejson
-from tools.features import search_features, get_feature
+from tools.features import get_feature, search_features
+from tools.tilesets import get_tileset, get_tileset_tilejson, list_tilesets
 
 
 def print_header(title: str):
     """Print a section header."""
     print(f"\n{'=' * 60}")
     print(f"🔧 {title}")
-    print('=' * 60)
+    print("=" * 60)
 
 
 def print_result(result: dict, indent: int = 0):
@@ -59,6 +58,7 @@ async def test_health_check():
     print_header("Health Check")
 
     import httpx
+
     settings = get_settings()
     url = f"{settings.tile_server_url.rstrip('/')}/api/health"
 
@@ -69,7 +69,7 @@ async def test_health_check():
             response = await client.get(url)
             print(f"📡 Status: {response.status_code}")
             if response.status_code == 200:
-                print(f"✅ Server is healthy")
+                print("✅ Server is healthy")
                 print_result(response.json())
                 return True
             else:
@@ -89,9 +89,11 @@ async def test_list_tilesets():
     print_result(result)
 
     if "tilesets" in result and result["tilesets"]:
-        print(f"\n📦 First 5 tilesets:")
+        print("\n📦 First 5 tilesets:")
         for ts in result["tilesets"][:5]:
-            print(f"   • {ts.get('name', 'unnamed')} ({ts.get('type', '?')}) - {ts.get('id', '?')[:8]}...")
+            print(
+                f"   • {ts.get('name', 'unnamed')} ({ts.get('type', '?')}) - {ts.get('id', '?')[:8]}..."
+            )
         return result["tilesets"][0].get("id") if result["tilesets"] else None
     return None
 
@@ -124,7 +126,7 @@ async def test_search_features():
     print_result(result)
 
     if "features" in result and result["features"]:
-        print(f"\n🔍 Found features:")
+        print("\n🔍 Found features:")
         for f in result["features"][:5]:
             props = f.get("properties", {})
             name = props.get("name") or props.get("name_en") or "unnamed"

@@ -4,6 +4,7 @@ Rate limit ロジックは `api_key_rate_limit.py` の `RateLimiter` 抽象に�
 ており、`settings.rate_limit_backend` (env: `RATE_LIMIT_BACKEND`) で DB / Redis
 の実装を切替可能（Issue #56）。
 """
+
 import asyncio
 import hashlib
 import logging
@@ -60,14 +61,14 @@ def _validate_sync(key: str, ip: Optional[str], user_agent: Optional[str]) -> Op
         if row is None:
             return None
 
-        (key_id, user_id, team_id, scopes,
-         rl_min, rl_day, is_active, expires_at, revoked_at) = row
+        (key_id, user_id, team_id, scopes, rl_min, rl_day, is_active, expires_at, revoked_at) = row
 
         if not is_active or revoked_at is not None:
             return None
 
         if expires_at is not None:
             from datetime import datetime, timezone
+
             if expires_at < datetime.now(timezone.utc):
                 return None
 
@@ -83,10 +84,14 @@ def _validate_sync(key: str, ip: Optional[str], user_agent: Optional[str]) -> Op
             cur.execute("SELECT update_api_key_last_used(%s)", (key_id,))
         conn.commit()
 
-        return AuthContext.from_api_key({
-            "id": key_id, "user_id": user_id, "team_id": team_id,
-            "scopes": scopes,
-        })
+        return AuthContext.from_api_key(
+            {
+                "id": key_id,
+                "user_id": user_id,
+                "team_id": team_id,
+                "scopes": scopes,
+            }
+        )
 
 
 async def log_api_key_request(
@@ -100,26 +105,34 @@ async def log_api_key_request(
 ) -> None:
     """API キー使用ログを記録（サンプリング適用）。"""
     from lib.config import get_settings
+
     settings = get_settings()
     sample_rate = settings.api_key_log_sample_rate
     if sample_rate < 1.0:
         import random
+
         if random.random() > sample_rate:
             return  # サンプル対象外
 
     await asyncio.to_thread(
-        _log_sync, api_key_id, endpoint, method, status_code,
-        response_time_ms, ip, user_agent,
+        _log_sync,
+        api_key_id,
+        endpoint,
+        method,
+        status_code,
+        response_time_ms,
+        ip,
+        user_agent,
     )
 
 
 def _log_sync(api_key_id, endpoint, method, status_code, response_time_ms, ip, user_agent):
     from lib.database import get_db_connection
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT log_api_key_usage(%s, %s, %s, %s, %s, %s, %s)",
-                (api_key_id, endpoint, method, status_code,
-                 response_time_ms, ip, user_agent),
+                (api_key_id, endpoint, method, status_code, response_time_ms, ip, user_agent),
             )
         conn.commit()

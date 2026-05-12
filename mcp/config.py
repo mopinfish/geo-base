@@ -5,7 +5,6 @@ Provides type-safe settings using Pydantic BaseSettings with
 environment variable support and .env file loading.
 """
 
-import os
 from functools import lru_cache
 
 from pydantic import Field

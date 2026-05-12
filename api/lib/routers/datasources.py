@@ -7,15 +7,12 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
-from lib.database import get_connection
-from lib.errors import ErrorCode, api_error
-from lib.models.datasource import DatasourceType, StorageProvider, DatasourceCreate
 from lib.auth import (
     AuthContext,
     User,
@@ -27,8 +24,11 @@ from lib.auth import (
     get_current_user,
     require_auth_context,
 )
-from lib.pmtiles import is_pmtiles_available, get_pmtiles_metadata
-from lib.raster_tiles import is_rasterio_available, get_cog_info
+from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
+from lib.models.datasource import DatasourceCreate, DatasourceType
+from lib.pmtiles import get_pmtiles_metadata, is_pmtiles_available
+from lib.raster_tiles import get_cog_info, is_rasterio_available
 from lib.storage import get_storage_client, validate_cog_file, validate_pmtiles_file
 
 logger = logging.getLogger(__name__)
@@ -45,16 +45,16 @@ router = APIRouter(prefix="/api/datasources", tags=["datasources"])
 def safe_json_parse(value: Any) -> Any:
     """
     Safely parse a value that might be JSON string or already a Python object.
-    
+
     PostgreSQL JSONB columns are automatically deserialized by psycopg2 to Python
     objects. This function handles both cases:
     - If value is a string, parse it as JSON
     - If value is already a Python object (list/dict), return as-is
     - If value is None, return None
-    
+
     Args:
         value: The value to parse (string, list, dict, or None)
-        
+
     Returns:
         Parsed Python object or None
     """
@@ -76,6 +76,7 @@ def safe_json_parse(value: Any) -> Any:
 
 class COGUploadResponse(BaseModel):
     """Response model for COG upload."""
+
     id: str
     tileset_id: str
     type: str = "cog"
@@ -94,6 +95,7 @@ class COGUploadResponse(BaseModel):
 
 class PMTilesUploadResponse(BaseModel):
     """Response model for PMTiles upload (Issue #101)."""
+
     id: str
     tileset_id: str
     type: str = "pmtiles"
@@ -124,13 +126,13 @@ def list_datasources(
 ):
     """
     List all accessible datasources (PMTiles and COG sources combined).
-    
+
     By default, only datasources from public tilesets are returned.
     With authentication and include_private=true, also returns user's private datasources.
     """
     try:
         datasources = []
-        
+
         with conn.cursor() as cur:
             # Build conditions for both queries
             if include_private and user:
@@ -139,7 +141,7 @@ def list_datasources(
             else:
                 access_condition = "t.is_public = true"
                 access_params = []
-            
+
             # Get PMTiles sources
             if type is None or type == "pmtiles":
                 cur.execute(
@@ -155,28 +157,30 @@ def list_datasources(
                     """,
                     access_params,
                 )
-                
+
                 for row in cur.fetchall():
-                    datasources.append({
-                        "id": str(row[0]),
-                        "tileset_id": str(row[1]),
-                        "type": "pmtiles",
-                        "url": row[2],
-                        "storage_provider": row[3],
-                        "tile_type": row[4],
-                        "compression": row[5],
-                        "min_zoom": row[6],
-                        "max_zoom": row[7],
-                        "bounds": safe_json_parse(row[8]),
-                        "center": safe_json_parse(row[9]),
-                        "metadata": safe_json_parse(row[10]),
-                        "created_at": row[11].isoformat() if row[11] else None,
-                        "updated_at": row[12].isoformat() if row[12] else None,
-                        "tileset_name": row[13],
-                        "is_public": row[14],
-                        "user_id": str(row[15]) if row[15] else None,
-                    })
-            
+                    datasources.append(
+                        {
+                            "id": str(row[0]),
+                            "tileset_id": str(row[1]),
+                            "type": "pmtiles",
+                            "url": row[2],
+                            "storage_provider": row[3],
+                            "tile_type": row[4],
+                            "compression": row[5],
+                            "min_zoom": row[6],
+                            "max_zoom": row[7],
+                            "bounds": safe_json_parse(row[8]),
+                            "center": safe_json_parse(row[9]),
+                            "metadata": safe_json_parse(row[10]),
+                            "created_at": row[11].isoformat() if row[11] else None,
+                            "updated_at": row[12].isoformat() if row[12] else None,
+                            "tileset_name": row[13],
+                            "is_public": row[14],
+                            "user_id": str(row[15]) if row[15] else None,
+                        }
+                    )
+
             # Get COG sources
             if type is None or type == "cog":
                 cur.execute(
@@ -192,31 +196,33 @@ def list_datasources(
                     """,
                     access_params,
                 )
-                
+
                 for row in cur.fetchall():
-                    datasources.append({
-                        "id": str(row[0]),
-                        "tileset_id": str(row[1]),
-                        "type": "cog",
-                        "url": row[2],
-                        "storage_provider": row[3],
-                        "band_count": row[4],
-                        "native_crs": row[5],
-                        "min_zoom": row[6],
-                        "max_zoom": row[7],
-                        "metadata": safe_json_parse(row[8]),
-                        "created_at": row[9].isoformat() if row[9] else None,
-                        "updated_at": row[10].isoformat() if row[10] else None,
-                        "tileset_name": row[11],
-                        "is_public": row[12],
-                        "user_id": str(row[13]) if row[13] else None,
-                    })
-        
+                    datasources.append(
+                        {
+                            "id": str(row[0]),
+                            "tileset_id": str(row[1]),
+                            "type": "cog",
+                            "url": row[2],
+                            "storage_provider": row[3],
+                            "band_count": row[4],
+                            "native_crs": row[5],
+                            "min_zoom": row[6],
+                            "max_zoom": row[7],
+                            "metadata": safe_json_parse(row[8]),
+                            "created_at": row[9].isoformat() if row[9] else None,
+                            "updated_at": row[10].isoformat() if row[10] else None,
+                            "tileset_name": row[11],
+                            "is_public": row[12],
+                            "user_id": str(row[13]) if row[13] else None,
+                        }
+                    )
+
         # Sort by created_at descending
         datasources.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-        
+
         return {"datasources": datasources, "count": len(datasources)}
-        
+
     except Exception as e:
         raise api_error(
             500,
@@ -318,7 +324,7 @@ def get_datasource(
                 (datasource_id,),
             )
             row = cur.fetchone()
-            
+
             if row:
                 tileset_for_access = {
                     "id": row[1],
@@ -362,7 +368,7 @@ def get_datasource(
                     "is_public": row[14],
                     "user_id": str(row[15]) if row[15] else None,
                 }
-            
+
             raise api_error(
                 404,
                 ErrorCode.DATASOURCE_NOT_FOUND,
@@ -475,7 +481,7 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
             "Datasource already exists for this tileset",
             details={"tileset_id": str(datasource.tileset_id)},
         )
-    
+
     # Fetch PMTiles metadata
     source_bounds = None
     source_center = None
@@ -484,7 +490,7 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
     tile_type = None
     tile_compression = None
     layers_json = None
-    
+
     if is_pmtiles_available():
         try:
             pmtiles_meta = await get_pmtiles_metadata(datasource.url)
@@ -500,7 +506,7 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
                     layers_json = json.dumps(layers)
         except Exception as meta_error:
             logger.warning("Could not fetch PMTiles metadata: %s", meta_error)
-    
+
     # Insert with metadata
     cur.execute(
         """
@@ -528,17 +534,16 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
             layers_json,
         ),
     )
-    
+
     row = cur.fetchone()
-    
+
     # Update parent tileset with bounds/center/zoom if available
     _update_tileset_from_metadata(
-        cur, datasource.tileset_id,
-        source_bounds, source_center, source_min_zoom, source_max_zoom
+        cur, datasource.tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
     )
-    
+
     conn.commit()
-    
+
     return {
         "id": str(row[0]),
         "tileset_id": str(row[1]),
@@ -572,7 +577,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
             "Datasource already exists for this tileset",
             details={"tileset_id": str(datasource.tileset_id)},
         )
-    
+
     # Fetch COG metadata
     source_bounds = None
     source_center = None
@@ -581,7 +586,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
     band_count = None
     band_descriptions_json = None
     native_crs = None
-    
+
     if is_rasterio_available():
         try:
             cog_info = get_cog_info(datasource.url)
@@ -592,7 +597,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
                     source_center = [
                         (cog_bounds[0] + cog_bounds[2]) / 2,
                         (cog_bounds[1] + cog_bounds[3]) / 2,
-                        10
+                        10,
                     ]
                 source_min_zoom = cog_info.get("minzoom")
                 source_max_zoom = cog_info.get("maxzoom")
@@ -603,7 +608,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
                 native_crs = cog_info.get("crs")
         except Exception as meta_error:
             logger.warning("Could not fetch COG info: %s", meta_error)
-    
+
     # Insert with metadata
     cur.execute(
         """
@@ -633,17 +638,16 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
             json.dumps(source_center) if source_center else None,
         ),
     )
-    
+
     row = cur.fetchone()
-    
+
     # Update parent tileset with bounds/center/zoom if available
     _update_tileset_from_metadata(
-        cur, datasource.tileset_id,
-        source_bounds, source_center, source_min_zoom, source_max_zoom
+        cur, datasource.tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
     )
-    
+
     conn.commit()
-    
+
     return {
         "id": str(row[0]),
         "tileset_id": str(row[1]),
@@ -663,32 +667,34 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
     }
 
 
-def _update_tileset_from_metadata(cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom):
+def _update_tileset_from_metadata(
+    cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
+):
     """Update parent tileset with metadata from datasource."""
     if source_bounds or source_center or source_min_zoom is not None or source_max_zoom is not None:
         update_parts = []
         update_values = []
-        
+
         if source_bounds and len(source_bounds) == 4:
             # Convert [west, south, east, north] to PostGIS Polygon
             west, south, east, north = source_bounds
             update_parts.append("bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)")
             update_values.extend([west, south, east, north])
-        
+
         if source_center and len(source_center) >= 2:
             # Convert [lon, lat, ...] to PostGIS Point
             lon, lat = source_center[0], source_center[1]
             update_parts.append("center = ST_SetSRID(ST_MakePoint(%s, %s), 4326)")
             update_values.extend([lon, lat])
-        
+
         if source_min_zoom is not None:
             update_parts.append("min_zoom = %s")
             update_values.append(source_min_zoom)
-        
+
         if source_max_zoom is not None:
             update_parts.append("max_zoom = %s")
             update_values.append(source_max_zoom)
-        
+
         if update_parts:
             update_values.append(tileset_id)
             cur.execute(
@@ -798,7 +804,7 @@ async def upload_cog(
                 ErrorCode.DATASOURCE_UNSUPPORTED_FORMAT,
                 f"Invalid COG file: {validation_message}",
             )
-        
+
         # Upload to S3 互換 storage (Fly Tigris by default)
         # `get_storage_client()` は singleton で必ず S3StorageClient を返す。
         storage = get_storage_client()
@@ -835,7 +841,7 @@ async def upload_cog(
         # Mark storage object as uploaded so we can clean it up if a subsequent
         # DB INSERT/COMMIT fails (orphan prevention).
         uploaded_storage_path = storage_path
-        
+
         # Get COG metadata
         source_bounds = None
         source_center = None
@@ -844,7 +850,7 @@ async def upload_cog(
         band_count = None
         band_descriptions_json = None
         native_crs = None
-        
+
         if is_rasterio_available():
             try:
                 cog_info = get_cog_info(cog_url)
@@ -855,7 +861,7 @@ async def upload_cog(
                         source_center = [
                             (cog_bounds[0] + cog_bounds[2]) / 2,
                             (cog_bounds[1] + cog_bounds[3]) / 2,
-                            10
+                            10,
                         ]
                     source_min_zoom = cog_info.get("minzoom")
                     source_max_zoom = cog_info.get("maxzoom")
@@ -866,7 +872,7 @@ async def upload_cog(
                     native_crs = cog_info.get("crs")
             except Exception as meta_error:
                 logger.warning("Could not fetch COG info: %s", meta_error)
-        
+
         # Insert datasource record
         with conn.cursor() as cur:
             cur.execute(
@@ -897,13 +903,12 @@ async def upload_cog(
                     json.dumps(source_center) if source_center else None,
                 ),
             )
-            
+
             row = cur.fetchone()
-            
+
             # Update parent tileset with bounds/center/zoom
             _update_tileset_from_metadata(
-                cur, tileset_id,
-                source_bounds, source_center, source_min_zoom, source_max_zoom
+                cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
             )
 
             conn.commit()
@@ -914,7 +919,7 @@ async def upload_cog(
 
             # Parse band descriptions from JSON - use safe_json_parse
             band_desc_list = safe_json_parse(row[7])
-            
+
             return COGUploadResponse(
                 id=str(row[0]),
                 tileset_id=str(row[1]),
@@ -930,7 +935,7 @@ async def upload_cog(
                 bounds=safe_json_parse(row[11]),
                 center=safe_json_parse(row[12]),
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1036,7 +1041,9 @@ async def upload_pmtiles(
         #   - 空 / dot-only fallback で `data.pmtiles` に
         # ファイル種別 (PMTiles magic) は上流の validate_pmtiles_file で確認済み。
         # `pmtiles/<tileset_id>/<YYYYMMDD>_<uuid8>_<filename>` で衝突回避。
-        original_filename = (file.filename or "upload.pmtiles").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        original_filename = (
+            (file.filename or "upload.pmtiles").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        )
         safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", original_filename)
         if not safe_filename or safe_filename.startswith("."):
             safe_filename = "data.pmtiles"
@@ -1113,8 +1120,7 @@ async def upload_pmtiles(
             row = cur.fetchone()
 
             _update_tileset_from_metadata(
-                cur, tileset_id,
-                source_bounds, source_center, source_min_zoom, source_max_zoom
+                cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
             )
 
             conn.commit()
@@ -1294,14 +1300,14 @@ async def test_datasource_connection(
                     )
 
                 pmtiles_url = row[1]
-                
+
                 if not is_pmtiles_available():
                     return {
                         "status": "error",
                         "type": "pmtiles",
                         "message": "PMTiles service is not available",
                     }
-                
+
                 try:
                     metadata = await get_pmtiles_metadata(pmtiles_url)
                     return {
@@ -1316,7 +1322,7 @@ async def test_datasource_connection(
                         "type": "pmtiles",
                         "message": f"Failed to connect: {str(e)}",
                     }
-            
+
             # Try COG
             cur.execute(
                 """
@@ -1344,14 +1350,14 @@ async def test_datasource_connection(
                     )
 
                 cog_url = row[1]
-                
+
                 if not is_rasterio_available():
                     return {
                         "status": "error",
                         "type": "cog",
                         "message": "Rasterio is not available",
                     }
-                
+
                 try:
                     cog_info = get_cog_info(cog_url)
                     return {
@@ -1366,7 +1372,7 @@ async def test_datasource_connection(
                         "type": "cog",
                         "message": f"Failed to connect: {str(e)}",
                     }
-            
+
             raise api_error(
                 404,
                 ErrorCode.DATASOURCE_NOT_FOUND,

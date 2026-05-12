@@ -12,6 +12,7 @@
 - check_tileset_access_v2: タイルセット読み取り認可（ctx ベース）
 - check_tileset_write_access_v2: タイルセット書き込み認可（ctx ベース、issue #49）
 """
+
 from functools import lru_cache
 from typing import Annotated, Optional
 
@@ -37,17 +38,18 @@ from .provider import AuthProvider
 def get_auth_provider() -> AuthProvider:
     """環境変数 AUTH_PROVIDER からプロバイダを選択。"""
     from lib.config import get_settings
+
     settings = get_settings()
 
     if settings.auth_provider == "local":
         from .providers.local import LocalAuthProvider
+
         return LocalAuthProvider()
 
     # Settings の validate_auth_config と同じ文言で reject。通常は Settings 側で
     # 先に弾かれるためここに到達しないが、validation を bypass された場合の保険。
     raise ValueError(
-        f"Unknown AUTH_PROVIDER: {settings.auth_provider} "
-        "(only 'local' is supported)"
+        f"Unknown AUTH_PROVIDER: {settings.auth_provider} " "(only 'local' is supported)"
     )
 
 
@@ -67,12 +69,14 @@ def extract_token_from_header(authorization: Optional[str]) -> Optional[str]:
 def verify_jwt_token(token: str) -> AuthResult:
     """既存コード互換。新規コードは get_auth_provider().verify_access_token() を使うこと。"""
     import asyncio
+
     return asyncio.get_event_loop().run_until_complete(
         get_auth_provider().verify_access_token(token)
     )
 
 
 # === FastAPI Dependencies ===
+
 
 async def get_current_user(
     authorization: Annotated[Optional[str], Header()] = None,
@@ -126,10 +130,12 @@ async def require_auth(
 def is_auth_configured() -> bool:
     """認証が正しく設定されているかチェック（後方互換）。"""
     from lib.config import get_settings
+
     return bool(get_settings().effective_jwt_secret)
 
 
 # === Unified Auth Dependencies (Task 3.2) ===
+
 
 async def get_auth_context_optional(
     authorization: Annotated[Optional[str], Header()] = None,
@@ -207,6 +213,7 @@ def check_tileset_access_v2(conn, tileset: dict, ctx: Optional["AuthContext"]) -
 
 def _is_tileset_shared_with_team(conn, tileset_id: str, team_id: str) -> bool:
     import psycopg2
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -222,6 +229,7 @@ def _is_tileset_shared_with_team(conn, tileset_id: str, team_id: str) -> bool:
 
 def _user_has_team_access(conn, user_id: str, tileset_id: str) -> bool:
     import psycopg2
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -238,9 +246,7 @@ def _user_has_team_access(conn, user_id: str, tileset_id: str) -> bool:
         return False
 
 
-async def acheck_tileset_access_v2(
-    conn, tileset: dict, ctx: Optional["AuthContext"]
-) -> bool:
+async def acheck_tileset_access_v2(conn, tileset: dict, ctx: Optional["AuthContext"]) -> bool:
     """`async def` ハンドラから呼ぶための async wrapper。
 
     `check_tileset_access_v2` は sync 関数で、`def` ハンドラから直接呼べば
@@ -255,6 +261,7 @@ async def acheck_tileset_access_v2(
     効率的に並行処理する（Option A の本旨）。
     """
     import asyncio
+
     return await asyncio.to_thread(check_tileset_access_v2, conn, tileset, ctx)
 
 
@@ -336,11 +343,10 @@ def check_tileset_write_access_v2(
     return _user_can_perform_action(conn, ctx.user_id, tileset_id, required_action)
 
 
-def _user_can_perform_action(
-    conn, user_id: str, tileset_id: str, action: str
-) -> bool:
+def _user_can_perform_action(conn, user_id: str, tileset_id: str, action: str) -> bool:
     """`can_user_perform_action()` SQL 関数を呼び出す（JWT ユーザー用）。"""
     import psycopg2
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -355,15 +361,14 @@ def _user_can_perform_action(
         return False
 
 
-def _team_permission_allows(
-    conn, team_id: str, tileset_id: str, action: str
-) -> bool:
+def _team_permission_allows(conn, team_id: str, tileset_id: str, action: str) -> bool:
     """team_tilesets.permission_level だけで action 可否を判定（API キー用）。
 
     team_role の継承（owner→admin 等）は適用しない。team_tilesets に紐付け
     が無ければ False。
     """
     import psycopg2
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -405,6 +410,7 @@ async def acheck_tileset_write_access_v2(
     `def` handler からは sync 版を直接呼ぶこと。
     """
     import asyncio
+
     return await asyncio.to_thread(
         check_tileset_write_access_v2, conn, tileset, ctx, required_action
     )
@@ -412,20 +418,35 @@ async def acheck_tileset_write_access_v2(
 
 __all__ = [
     # Models
-    "User", "AuthResult", "TokenPair",
+    "User",
+    "AuthResult",
+    "TokenPair",
     # Errors
-    "AuthError", "InvalidCredentials", "RateLimited", "UserNotFound",
-    "UserAlreadyExists", "InvalidToken", "WeakPassword", "ProviderError",
+    "AuthError",
+    "InvalidCredentials",
+    "RateLimited",
+    "UserNotFound",
+    "UserAlreadyExists",
+    "InvalidToken",
+    "WeakPassword",
+    "ProviderError",
     # Provider
-    "AuthProvider", "get_auth_provider",
+    "AuthProvider",
+    "get_auth_provider",
     # Dependencies (legacy JWT-only)
-    "get_current_user", "require_auth",
+    "get_current_user",
+    "require_auth",
     # Helpers
-    "extract_token_from_header", "verify_jwt_token",
+    "extract_token_from_header",
+    "verify_jwt_token",
     "is_auth_configured",
     # Unified context for JWT + API key (Task 3.2)
-    "AuthContext", "validate_api_key", "API_KEY_PREFIX", "log_api_key_request",
-    "get_auth_context_optional", "require_auth_context",
+    "AuthContext",
+    "validate_api_key",
+    "API_KEY_PREFIX",
+    "log_api_key_request",
+    "get_auth_context_optional",
+    "require_auth_context",
     # Tileset authorization (team-aware, ctx-based)
     "check_tileset_access_v2",
     "acheck_tileset_access_v2",  # async wrapper for use in async def handlers (#66)

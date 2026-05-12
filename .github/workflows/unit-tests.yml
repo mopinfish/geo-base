@@ -1,0 +1,87 @@
+name: Unit tests + lint
+
+# Issue #100 / #107 後の累積技術的負債対策 (PR #134 後の test/lint cleanup)。
+# CI に lint / unit test ジョブが無く、ローカルでしか検出できない不具合が
+# 累積していたため、最低限のチェックを PR とメインブランチ push で走らせる。
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "mcp/**"
+      - "app/**"
+      - ".github/workflows/unit-tests.yml"
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-lint:
+    name: API lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Sync deps
+        run: uv sync --extra dev
+      - name: ruff check
+        run: uv run ruff check .
+      # black は Python 3.12.6+ 必須 (AST safety bug)。CI runner は 3.11 を使うので OK。
+      - name: black check
+        run: uv run black --check .
+
+  mcp-lint:
+    name: MCP lint + unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Sync deps
+        run: uv sync --extra dev
+      - name: ruff check
+        run: uv run ruff check .
+      - name: black check
+        run: uv run black --check .
+      - name: pytest
+        run: uv run pytest -q
+
+  app-lint:
+    name: App lint + Vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/package-lock.json
+      - name: Install deps
+        run: npm ci
+      - name: ESLint
+        run: npm run lint -- --max-warnings 100
+      - name: Vitest
+        run: npm test

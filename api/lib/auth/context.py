@@ -1,4 +1,5 @@
 """AuthContext - JWT ユーザーと API キーを統一的に扱うコンテキスト。"""
+
 from typing import Optional
 
 from pydantic import BaseModel

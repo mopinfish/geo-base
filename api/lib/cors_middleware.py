@@ -3,11 +3,11 @@
 /api/auth/* → strict（allow_origins 指定 + allow_credentials=true）
 それ以外    → permissive（allow_origins=* + allow_credentials=false）
 """
+
 from typing import Sequence
 
 from starlette.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
-
 
 AUTH_PATH_PREFIX = "/api/auth/"
 

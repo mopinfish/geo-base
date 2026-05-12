@@ -12,26 +12,25 @@ This module tests all validation functions including:
 - String and numeric validation
 """
 
-import pytest
 from validators import (
     ValidationResult,
-    validate_uuid,
     is_valid_uuid,
-    validate_latitude,
-    validate_longitude,
-    validate_coordinates,
-    validate_bbox,
     parse_bbox,
-    validate_zoom,
-    validate_tile_coordinates,
-    validate_tileset_type,
-    validate_tile_format,
+    validate_bbox,
+    validate_coordinates,
+    validate_filter,
     validate_geometry,
+    validate_latitude,
+    validate_limit,
+    validate_longitude,
     validate_non_empty_string,
     validate_positive_number,
     validate_range,
-    validate_limit,
-    validate_filter,
+    validate_tile_coordinates,
+    validate_tile_format,
+    validate_tileset_type,
+    validate_uuid,
+    validate_zoom,
 )
 
 
@@ -247,7 +246,7 @@ class TestZoomValidation:
         """Should respect custom min/max."""
         result = validate_zoom(5, min_zoom=5, max_zoom=15)
         assert result.valid is True
-        
+
         result = validate_zoom(4, min_zoom=5, max_zoom=15)
         assert result.valid is False
 
@@ -323,19 +322,13 @@ class TestGeometryValidation:
 
     def test_valid_linestring(self):
         """Should accept valid LineString geometry."""
-        geom = {
-            "type": "LineString",
-            "coordinates": [[0, 0], [1, 1], [2, 2]]
-        }
+        geom = {"type": "LineString", "coordinates": [[0, 0], [1, 1], [2, 2]]}
         result = validate_geometry(geom)
         assert result.valid is True
 
     def test_valid_polygon(self):
         """Should accept valid Polygon geometry."""
-        geom = {
-            "type": "Polygon",
-            "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]
-        }
+        geom = {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}
         result = validate_geometry(geom)
         assert result.valid is True
 
@@ -381,8 +374,8 @@ class TestGeometryValidation:
             "type": "GeometryCollection",
             "geometries": [
                 {"type": "Point", "coordinates": [0, 0]},
-                {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}
-            ]
+                {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            ],
         }
         result = validate_geometry(geom)
         assert result.valid is True
@@ -411,7 +404,7 @@ class TestStringValidation:
         """Should enforce max length."""
         result = validate_non_empty_string("test", "field", max_length=3)
         assert result.valid is False
-        
+
         result = validate_non_empty_string("test", "field", max_length=10)
         assert result.valid is True
 
@@ -439,7 +432,7 @@ class TestNumericValidation:
         """Should validate numeric range."""
         result = validate_range(5, "field", min_value=1, max_value=10)
         assert result.valid is True
-        
+
         result = validate_range(0, "field", min_value=1, max_value=10)
         assert result.valid is False
 
@@ -448,10 +441,10 @@ class TestNumericValidation:
         result = validate_limit(50, "limit")
         assert result.valid is True
         assert result.value == 50
-        
+
         result = validate_limit(0, "limit")
         assert result.valid is False
-        
+
         result = validate_limit(1001, "limit")
         assert result.valid is False
 

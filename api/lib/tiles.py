@@ -10,7 +10,6 @@ Features:
 - Optimized cache headers
 """
 
-import json
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -58,22 +57,22 @@ def tms_to_xyz(z: int, y: int) -> int:
 def get_simplification_tolerance(z: int) -> float:
     """
     Calculate geometry simplification tolerance based on zoom level.
-    
+
     Lower zoom levels (zoomed out) get more aggressive simplification.
     Higher zoom levels (zoomed in) get minimal or no simplification.
-    
+
     The tolerance is in Web Mercator units (meters at equator).
-    
+
     Args:
         z: Zoom level (0-22)
-        
+
     Returns:
         Simplification tolerance in meters
     """
     # At zoom 0, one tile covers the whole world (~40,075 km)
     # At zoom 22, one tile is ~9.5 meters
     # We want more simplification at low zooms
-    
+
     if z >= 16:
         # High zoom: no simplification needed
         return 0
@@ -94,21 +93,21 @@ def get_simplification_tolerance(z: int) -> float:
 def get_cache_ttl(z: int, is_static: bool = False) -> int:
     """
     Calculate cache TTL (Time To Live) based on zoom level and data type.
-    
+
     Static tiles can be cached longer.
     Lower zoom levels (overview tiles) change less frequently.
-    
+
     Args:
         z: Zoom level (0-22)
         is_static: Whether the tile is from static source (MBTiles, etc.)
-        
+
     Returns:
         Cache TTL in seconds
     """
     if is_static:
         # Static tiles: long cache
         return 604800  # 7 days
-    
+
     # Dynamic tiles: cache varies by zoom
     if z <= 6:
         # Overview tiles: cache longer (data changes less impact these)
@@ -124,25 +123,25 @@ def get_cache_ttl(z: int, is_static: bool = False) -> int:
 def get_cache_headers(z: int, is_static: bool = False) -> dict:
     """
     Generate optimized cache headers based on zoom level.
-    
+
     Args:
         z: Zoom level
         is_static: Whether the tile is static
-        
+
     Returns:
         Dict of HTTP headers
     """
     ttl = get_cache_ttl(z, is_static)
-    
+
     headers = {
         "Cache-Control": f"public, max-age={ttl}, s-maxage={ttl}",
         "Access-Control-Allow-Origin": "*",
     }
-    
+
     # Add stale-while-revalidate for dynamic tiles
     if not is_static:
         headers["Cache-Control"] += f", stale-while-revalidate={ttl // 2}"
-    
+
     return headers
 
 
@@ -154,50 +153,50 @@ def get_cache_headers(z: int, is_static: bool = False) -> dict:
 def parse_filter_expression(filter_str: str) -> tuple[str, dict]:
     """
     Parse a filter expression string into SQL WHERE clause and parameters.
-    
+
     Supported formats:
     - Simple equality: "type=station"
     - Multiple values: "type=station,landmark"
     - Comparison: "population>1000000"
     - JSONB path: "properties.category=restaurant"
-    
+
     Args:
         filter_str: Filter expression string
-        
+
     Returns:
         Tuple of (SQL WHERE clause, parameters dict)
     """
     if not filter_str:
         return "TRUE", {}
-    
+
     conditions = []
     params = {}
     param_counter = 0
-    
+
     # Split by comma for OR conditions at top level, semicolon for AND
     # Example: "type=station;name_en=Tokyo" -> type=station AND name_en=Tokyo
-    
+
     for expr in filter_str.split(";"):
         expr = expr.strip()
         if not expr:
             continue
-        
+
         # Parse comparison operators
         match = re.match(r"^([\w.]+)\s*(=|!=|>|>=|<|<=|~)\s*(.+)$", expr)
         if not match:
             continue
-        
+
         field, operator, value = match.groups()
         param_name = f"filter_{param_counter}"
         param_counter += 1
-        
+
         # Check if it's a JSONB property access
         if "." in field:
             parts = field.split(".", 1)
             if parts[0] == "properties":
                 # JSONB access: properties.key
                 json_key = parts[1]
-                
+
                 if operator == "=":
                     # Handle multiple values (OR)
                     if "," in value:
@@ -249,10 +248,10 @@ def parse_filter_expression(filter_str: str) -> tuple[str, dict]:
             else:
                 params[param_name] = value
                 conditions.append(f"{field} {operator} %({param_name})s")
-    
+
     if not conditions:
         return "TRUE", {}
-    
+
     return " AND ".join(conditions), params
 
 
@@ -263,28 +262,28 @@ def build_bbox_filter(
 ) -> tuple[str, dict]:
     """
     Build a bounding box filter for spatial queries.
-    
+
     Args:
         bbox: Bounding box string "minx,miny,maxx,maxy"
         geometry_column: Name of the geometry column
         srid: SRID of the bounding box coordinates
-        
+
     Returns:
         Tuple of (SQL WHERE clause, parameters dict)
     """
     if not bbox:
         return "TRUE", {}
-    
+
     try:
         coords = [float(c.strip()) for c in bbox.split(",")]
         if len(coords) != 4:
             raise ValueError("BBOX must have 4 coordinates")
-        
+
         minx, miny, maxx, maxy = coords
-        
+
         return (
             f"{geometry_column} && ST_MakeEnvelope(%(minx)s, %(miny)s, %(maxx)s, %(maxy)s, {srid})",
-            {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
+            {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy},
         )
     except Exception:
         return "TRUE", {}
@@ -341,12 +340,12 @@ def generate_mvt_from_postgis(
 ) -> bytes:
     """
     Generate a Mapbox Vector Tile from PostGIS data.
-    
+
     Features:
     - Automatic geometry simplification based on zoom level
     - Custom WHERE clause for filtering
     - Configurable columns to include
-    
+
     Args:
         conn: Database connection
         table_name: Name of the table to query
@@ -360,16 +359,16 @@ def generate_mvt_from_postgis(
         simplify: Whether to apply zoom-based simplification
         where_clause: Additional WHERE clause for filtering
         params: Parameters for the WHERE clause
-        
+
     Returns:
         MVT data as bytes
     """
     if layer_name is None:
         layer_name = table_name
-    
+
     if params is None:
         params = {}
-    
+
     # Always include these params
     params.update({"z": z, "x": x, "y": y, "layer_name": layer_name})
 
@@ -381,7 +380,7 @@ def generate_mvt_from_postgis(
 
     # Get simplification tolerance
     tolerance = get_simplification_tolerance(z) if simplify else 0
-    
+
     # Build geometry transformation
     # First transform to Web Mercator (3857), then optionally simplify
     if tolerance > 0:
@@ -437,28 +436,28 @@ def generate_features_mvt(
 ) -> bytes:
     """
     Generate MVT from the features table with multi-layer support.
-    
+
     When layer_name is specified, generates a single layer with that name.
     When layer_name is None, generates multiple layers - one for each distinct
     layer_name in the database. This allows QGIS and other GIS tools to display
     each layer with different styles.
-    
+
     Args:
         conn: Database connection
         z: Zoom level
-        x: X coordinate  
+        x: X coordinate
         y: Y coordinate
         tileset_id: Optional tileset ID filter
         layer_name: Optional layer name filter (also used as MVT layer name)
         filter_expr: Optional attribute filter expression
         simplify: Whether to apply zoom-based simplification
-        
+
     Returns:
         MVT data as bytes
     """
     # Get simplification tolerance
     tolerance = get_simplification_tolerance(z) if simplify else 0
-    
+
     # Build geometry transformation
     if tolerance > 0:
         geom_transform = f"""
@@ -469,27 +468,27 @@ def generate_features_mvt(
         """
     else:
         geom_transform = "ST_Transform(geom, 3857)"
-    
+
     # Parse attribute filter if provided
     filter_clause = "TRUE"
     filter_params = {}
     if filter_expr:
         filter_clause, filter_params = parse_filter_expression(filter_expr)
-    
+
     # If specific layer_name is requested, generate single layer
     if layer_name:
         params = {"z": z, "x": x, "y": y, "layer_name": layer_name}
-        
-        conditions = [f"layer_name = %(layer_name)s"]
+
+        conditions = ["layer_name = %(layer_name)s"]
         if tileset_id:
             conditions.append("tileset_id = %(tileset_id)s")
             params["tileset_id"] = tileset_id
         if filter_clause != "TRUE":
             conditions.append(filter_clause)
             params.update(filter_params)
-        
+
         where_clause = " AND ".join(conditions)
-        
+
         query = f"""
             WITH mvtgeom AS (
                 SELECT
@@ -511,29 +510,29 @@ def generate_features_mvt(
             FROM mvtgeom
             WHERE geom IS NOT NULL;
         """
-        
+
         with conn.cursor() as cur:
             cur.execute(query, params)
             result = cur.fetchone()
-        
+
         if result and result[0]:
             return result[0].tobytes()
         return b""
-    
+
     # Multi-layer mode: generate separate MVT layer for each layer_name
     # First, get all distinct layer names within the tile bounds
     layer_query_params = {"z": z, "x": x, "y": y}
     layer_conditions = ["ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)"]
-    
+
     if tileset_id:
         layer_conditions.append("tileset_id = %(tileset_id)s")
         layer_query_params["tileset_id"] = tileset_id
     if filter_clause != "TRUE":
         layer_conditions.append(filter_clause)
         layer_query_params.update(filter_params)
-    
+
     layer_where = " AND ".join(layer_conditions)
-    
+
     with conn.cursor() as cur:
         cur.execute(
             f"""
@@ -542,20 +541,20 @@ def generate_features_mvt(
             WHERE {layer_where}
             ORDER BY layer_name
             """,
-            layer_query_params
+            layer_query_params,
         )
         layer_names = [row[0] for row in cur.fetchall()]
-    
+
     if not layer_names:
         return b""
-    
+
     # Generate MVT for each layer and concatenate using PostgreSQL's || operator
     # This creates a single MVT with multiple named layers
     mvt_parts = []
-    
+
     for ln in layer_names:
         params = {"z": z, "x": x, "y": y, "current_layer": ln}
-        
+
         conditions = ["layer_name = %(current_layer)s"]
         if tileset_id:
             conditions.append("tileset_id = %(tileset_id)s")
@@ -563,9 +562,9 @@ def generate_features_mvt(
         if filter_clause != "TRUE":
             conditions.append(filter_clause)
             params.update(filter_params)
-        
+
         where_clause = " AND ".join(conditions)
-        
+
         query = f"""
             WITH mvtgeom AS (
                 SELECT
@@ -587,17 +586,17 @@ def generate_features_mvt(
             FROM mvtgeom
             WHERE geom IS NOT NULL;
         """
-        
+
         with conn.cursor() as cur:
             cur.execute(query, params)
             result = cur.fetchone()
-        
+
         if result and result[0]:
             mvt_parts.append(result[0].tobytes())
-    
+
     if not mvt_parts:
         return b""
-    
+
     # Concatenate all MVT parts
     # MVT is a Protobuf format where multiple layers can be concatenated
     return b"".join(mvt_parts)

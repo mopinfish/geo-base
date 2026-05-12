@@ -1,5 +1,7 @@
 """Tests for AuthContext."""
+
 import pytest
+
 from lib.auth.context import AuthContext
 from lib.auth.models import User
 
@@ -19,7 +21,9 @@ class TestFromJwtUser:
 class TestFromApiKey:
     def test_basic(self):
         key_data = {
-            "id": "key-1", "user_id": "user-1", "team_id": "team-1",
+            "id": "key-1",
+            "user_id": "user-1",
+            "team_id": "team-1",
             "scopes": ["read"],
         }
         ctx = AuthContext.from_api_key(key_data)
@@ -36,17 +40,20 @@ class TestFromApiKey:
 
 
 class TestHasScope:
-    @pytest.mark.parametrize("scopes,required,expected", [
-        (["read"], "read", True),
-        (["read"], "write", False),
-        (["write"], "read", True),  # write 含意 read
-        (["delete"], "write", True),
-        (["delete"], "read", True),
-        (["admin"], "delete", True),
-        (["admin"], "read", True),
-        (["admin"], "admin", True),
-        ([], "read", False),
-    ])
+    @pytest.mark.parametrize(
+        "scopes,required,expected",
+        [
+            (["read"], "read", True),
+            (["read"], "write", False),
+            (["write"], "read", True),  # write 含意 read
+            (["delete"], "write", True),
+            (["delete"], "read", True),
+            (["admin"], "delete", True),
+            (["admin"], "read", True),
+            (["admin"], "admin", True),
+            ([], "read", False),
+        ],
+    )
     def test_scope_hierarchy(self, scopes, required, expected):
         ctx = AuthContext(user_id="u", scopes=scopes)
         assert ctx.has_scope(required) is expected

@@ -13,18 +13,19 @@ Uses standard asyncio approach (not pytest-asyncio).
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
-from tools.tilesets import (
-    list_tilesets,
-    get_tileset,
-    get_tileset_tilejson,
-)
+import pytest
+
 from tools.features import (
-    search_features,
     get_feature,
     get_features_in_tile,
+    search_features,
+)
+from tools.tilesets import (
+    get_tileset,
+    get_tileset_tilejson,
+    list_tilesets,
 )
 
 
@@ -33,6 +34,7 @@ class TestListTilesets:
 
     def test_list_tilesets_returns_dict(self):
         """list_tilesets should return a dictionary with tilesets."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = [
@@ -57,6 +59,7 @@ class TestListTilesets:
 
     def test_list_tilesets_with_type_filter(self):
         """list_tilesets should filter by type."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = [
@@ -79,6 +82,7 @@ class TestListTilesets:
 
     def test_list_tilesets_empty(self):
         """list_tilesets should handle empty result."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = []
@@ -100,6 +104,7 @@ class TestListTilesets:
 
     def test_list_tilesets_network_error(self):
         """list_tilesets should handle network errors."""
+
         async def run_test():
             import httpx
 
@@ -122,6 +127,7 @@ class TestGetTileset:
 
     def test_get_tileset_returns_dict(self):
         """get_tileset should return tileset details."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -151,6 +157,7 @@ class TestGetTileset:
 
     def test_get_tileset_not_found(self):
         """get_tileset should handle 404 errors."""
+
         async def run_test():
             import httpx
 
@@ -178,6 +185,7 @@ class TestGetTilesetTilejson:
 
     def test_get_tileset_tilejson_returns_dict(self):
         """get_tileset_tilejson should return TileJSON."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -208,6 +216,7 @@ class TestSearchFeatures:
 
     def test_search_features_returns_dict(self):
         """search_features should return features."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -242,6 +251,7 @@ class TestSearchFeatures:
 
     def test_search_features_with_bbox(self):
         """search_features should accept bbox parameter."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"features": []}
@@ -263,6 +273,7 @@ class TestSearchFeatures:
 
     def test_search_features_with_tileset_filter(self):
         """search_features should filter by tileset_id."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"features": []}
@@ -283,6 +294,7 @@ class TestSearchFeatures:
 
     def test_search_features_with_layer_filter(self):
         """search_features should filter by layer."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"features": []}
@@ -303,6 +315,7 @@ class TestSearchFeatures:
 
     def test_search_features_with_property_filter(self):
         """search_features should accept property filter."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"features": []}
@@ -323,6 +336,7 @@ class TestSearchFeatures:
 
     def test_search_features_with_limit(self):
         """search_features should respect limit parameter."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"features": [{"id": "1"}] * 50}
@@ -347,6 +361,7 @@ class TestGetFeature:
 
     def test_get_feature_returns_dict(self):
         """get_feature should return feature details."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -376,6 +391,7 @@ class TestGetFeature:
 
     def test_get_feature_not_found(self):
         """get_feature should handle 404 errors."""
+
         async def run_test():
             import httpx
 
@@ -403,11 +419,15 @@ class TestGetFeaturesInTile:
 
     def test_get_features_in_tile(self):
         """get_features_in_tile should return features in tile extent."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
                 "features": [
-                    {"id": "550e8400-e29b-41d4-a716-446655440004", "geometry": {"type": "Point", "coordinates": [139.76, 35.68]}},
+                    {
+                        "id": "550e8400-e29b-41d4-a716-446655440004",
+                        "geometry": {"type": "Point", "coordinates": [139.76, 35.68]},
+                    },
                 ]
             }
             mock_response.raise_for_status = Mock()
@@ -436,6 +456,7 @@ class TestGetFeaturesInTile:
 
     def test_get_features_in_tile_with_layer(self):
         """get_features_in_tile should filter by layer."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"features": []}
@@ -466,6 +487,7 @@ class TestErrorHandling:
 
     def test_invalid_tileset_id_handled(self):
         """Invalid tileset ID should be handled gracefully."""
+
         async def run_test():
             import httpx
 
@@ -489,6 +511,7 @@ class TestErrorHandling:
 
     def test_invalid_bbox_handled(self):
         """Invalid bbox should be handled gracefully."""
+
         async def run_test():
             import httpx
 
@@ -517,34 +540,43 @@ class TestIntegration:
     @pytest.mark.skip(reason="Complex async mock setup needs refactoring")
     def test_full_workflow(self):
         """Test listing tilesets, getting details, and searching features."""
+
         async def run_test():
             # Mock responses - use Mock for response objects with json() as Mock
             list_response = Mock()
-            list_response.json = Mock(return_value=[
-                {"id": "tileset-1", "name": "Test Tileset", "type": "vector"}
-            ])
+            list_response.json = Mock(
+                return_value=[{"id": "tileset-1", "name": "Test Tileset", "type": "vector"}]
+            )
             list_response.raise_for_status = Mock()
 
             detail_response = Mock()
-            detail_response.json = Mock(return_value={
-                "id": "tileset-1",
-                "name": "Test Tileset",
-                "type": "vector",
-                "bounds": [139.5, 35.5, 140.0, 36.0],
-            })
+            detail_response.json = Mock(
+                return_value={
+                    "id": "tileset-1",
+                    "name": "Test Tileset",
+                    "type": "vector",
+                    "bounds": [139.5, 35.5, 140.0, 36.0],
+                }
+            )
             detail_response.raise_for_status = Mock()
 
             features_response = Mock()
-            features_response.json = Mock(return_value={
-                "features": [
-                    {"id": "550e8400-e29b-41d4-a716-446655440004", "geometry": {"type": "Point", "coordinates": [139.7, 35.6]}}
-                ]
-            })
+            features_response.json = Mock(
+                return_value={
+                    "features": [
+                        {
+                            "id": "550e8400-e29b-41d4-a716-446655440004",
+                            "geometry": {"type": "Point", "coordinates": [139.7, 35.6]},
+                        }
+                    ]
+                }
+            )
             features_response.raise_for_status = Mock()
 
-            with patch("tools.tilesets.httpx.AsyncClient") as mock_tilesets, \
-                 patch("tools.features.httpx.AsyncClient") as mock_features:
-
+            with (
+                patch("tools.tilesets.httpx.AsyncClient") as mock_tilesets,
+                patch("tools.features.httpx.AsyncClient") as mock_features,
+            ):
                 # Setup tileset mocks - AsyncMock for get with side_effect
                 mock_ts_instance = AsyncMock()
                 mock_ts_instance.get = AsyncMock(side_effect=[list_response, detail_response])

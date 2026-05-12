@@ -8,6 +8,7 @@ I-2 防御層の確認:
 ここでは「post-revocation の状態に置かれた招待」に対する HTTP レスポンスを
 中心に検証する。受諾フロー全体（ユーザー作成 + 認証）のテストはスコープ外。
 """
+
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -17,7 +18,6 @@ from fastapi.testclient import TestClient
 
 from lib.database import get_connection
 from lib.routers.auth import router as auth_router
-
 
 # ---------------------------------------------------------------------------
 # Test app + dependency overrides
@@ -134,9 +134,7 @@ def _set_token_null(db_conn, inv_id, new_status):
 
 
 class TestGetInvitationAfterRevoke:
-    def test_pending_invitation_is_visible(
-        self, client, make_invitation, monkeypatch
-    ):
+    def test_pending_invitation_is_visible(self, client, make_invitation, monkeypatch):
         """sanity: pending 状態の招待は GET 200 で取得できる（旧 token が隠れていない）。
 
         `has_existing_account` 判定で auth provider にアクセスするため、
@@ -153,9 +151,7 @@ class TestGetInvitationAfterRevoke:
             async def get_user_by_email(self, email):
                 return await _no_existing(email)
 
-        monkeypatch.setattr(
-            "lib.routers.auth.get_auth_provider", lambda: _StubProvider()
-        )
+        monkeypatch.setattr("lib.routers.auth.get_auth_provider", lambda: _StubProvider())
         get_auth_provider.cache_clear()
 
         inv = make_invitation()
@@ -165,9 +161,7 @@ class TestGetInvitationAfterRevoke:
         assert body["email"] == inv["email"]
         assert body["has_existing_account"] is False
 
-    def test_accepted_invitation_token_returns_404(
-        self, client, make_invitation, db_conn
-    ):
+    def test_accepted_invitation_token_returns_404(self, client, make_invitation, db_conn):
         """受諾後（status=accepted, token=NULL）の旧 token は 404。"""
         inv = make_invitation()
         original_token = inv["token"]
@@ -176,9 +170,7 @@ class TestGetInvitationAfterRevoke:
         res = client.get(f"/api/auth/invitations/{original_token}")
         assert res.status_code == 404, res.text
 
-    def test_cancelled_invitation_token_returns_404(
-        self, client, make_invitation, db_conn
-    ):
+    def test_cancelled_invitation_token_returns_404(self, client, make_invitation, db_conn):
         inv = make_invitation()
         original_token = inv["token"]
         _set_token_null(db_conn, inv["id"], "cancelled")
@@ -186,9 +178,7 @@ class TestGetInvitationAfterRevoke:
         res = client.get(f"/api/auth/invitations/{original_token}")
         assert res.status_code == 404
 
-    def test_expired_invitation_token_returns_404(
-        self, client, make_invitation, db_conn
-    ):
+    def test_expired_invitation_token_returns_404(self, client, make_invitation, db_conn):
         inv = make_invitation()
         original_token = inv["token"]
         _set_token_null(db_conn, inv["id"], "expired")
@@ -203,9 +193,7 @@ class TestGetInvitationAfterRevoke:
 
 
 class TestAcceptInvitationReplayPrevention:
-    def test_replay_after_accept_is_rejected(
-        self, client, make_invitation, db_conn
-    ):
+    def test_replay_after_accept_is_rejected(self, client, make_invitation, db_conn):
         """受諾後に同じ旧 token で POST しても 400。"""
         inv = make_invitation()
         original_token = inv["token"]
@@ -222,9 +210,7 @@ class TestAcceptInvitationReplayPrevention:
         # 旧 token は DB から消えているので「Invalid invitation token」(400) で拒否
         assert res.status_code == 400, res.text
 
-    def test_replay_after_cancel_is_rejected(
-        self, client, make_invitation, db_conn
-    ):
+    def test_replay_after_cancel_is_rejected(self, client, make_invitation, db_conn):
         inv = make_invitation()
         original_token = inv["token"]
         _set_token_null(db_conn, inv["id"], "cancelled")
@@ -239,9 +225,7 @@ class TestAcceptInvitationReplayPrevention:
         )
         assert res.status_code == 400
 
-    def test_replay_after_expire_is_rejected(
-        self, client, make_invitation, db_conn
-    ):
+    def test_replay_after_expire_is_rejected(self, client, make_invitation, db_conn):
         inv = make_invitation()
         original_token = inv["token"]
         _set_token_null(db_conn, inv["id"], "expired")
@@ -282,9 +266,7 @@ class TestExpireOldInvitationsSql:
         assert status == "expired"
         assert token is None, "expire_old_invitations() should NULL out the token"
 
-    def test_expire_old_invitations_skips_non_pending(
-        self, db_conn, make_invitation
-    ):
+    def test_expire_old_invitations_skips_non_pending(self, db_conn, make_invitation):
         """すでに accepted な招待は触らない（既に token は NULL のはず）。"""
         past = datetime.now(timezone.utc) - timedelta(hours=1)
         inv = make_invitation(status="accepted", token=None, expires_at=past)
