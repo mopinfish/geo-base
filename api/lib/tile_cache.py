@@ -61,12 +61,13 @@ from lib.redis_client import (
 )
 
 # Type variable for TTLCache
-CacheT = TypeVar('CacheT')
+CacheT = TypeVar("CacheT")
 
 
 @dc_dataclass
 class CacheEntry(Generic[CacheT]):
     """A cache entry with value and expiration time."""
+
     value: CacheT
     expires_at: float
 
@@ -114,10 +115,7 @@ class TTLCache(Generic[CacheT]):
                     del self._cache[oldest_key]
 
             entry_ttl = ttl if ttl is not None else self._ttl
-            self._cache[key] = CacheEntry(
-                value=value,
-                expires_at=time.time() + entry_ttl
-            )
+            self._cache[key] = CacheEntry(value=value, expires_at=time.time() + entry_ttl)
 
             if key in self._access_order:
                 self._access_order.remove(key)
@@ -143,16 +141,14 @@ class TTLCache(Generic[CacheT]):
         """Return cache statistics."""
         with self._lock:
             now = time.time()
-            expired_count = sum(
-                1 for entry in self._cache.values()
-                if now > entry.expires_at
-            )
+            expired_count = sum(1 for entry in self._cache.values() if now > entry.expires_at)
             return {
                 "size": len(self._cache),
                 "max_size": self._max_size,
                 "ttl": self._ttl,
                 "expired_pending": expired_count,
             }
+
 
 logger = logging.getLogger(__name__)
 
@@ -189,21 +185,11 @@ class TileCacheConfig:
             tilejson_ttl=int(os.environ.get("TILEJSON_CACHE_TTL", "300")),
             tileset_info_ttl=int(os.environ.get("TILESET_INFO_CACHE_TTL", "60")),
             memory_cache_max_size=int(os.environ.get("MEMORY_CACHE_MAX_SIZE", "1000")),
-            memory_cache_enabled=os.environ.get(
-                "MEMORY_CACHE_ENABLED", "true"
-            ).lower() == "true",
-            cache_vector_tiles=os.environ.get(
-                "CACHE_VECTOR_TILES", "true"
-            ).lower() == "true",
-            cache_raster_tiles=os.environ.get(
-                "CACHE_RASTER_TILES", "true"
-            ).lower() == "true",
-            cache_pmtiles=os.environ.get(
-                "CACHE_PMTILES", "true"
-            ).lower() == "true",
-            cache_tilejson=os.environ.get(
-                "CACHE_TILEJSON", "true"
-            ).lower() == "true",
+            memory_cache_enabled=os.environ.get("MEMORY_CACHE_ENABLED", "true").lower() == "true",
+            cache_vector_tiles=os.environ.get("CACHE_VECTOR_TILES", "true").lower() == "true",
+            cache_raster_tiles=os.environ.get("CACHE_RASTER_TILES", "true").lower() == "true",
+            cache_pmtiles=os.environ.get("CACHE_PMTILES", "true").lower() == "true",
+            cache_tilejson=os.environ.get("CACHE_TILEJSON", "true").lower() == "true",
         )
 
 
@@ -354,9 +340,7 @@ def get_cached_tile(
     if tile_type == "pmtiles" and not config.cache_pmtiles:
         return None
 
-    key = _make_tile_key(
-        tileset_id, z, x, y, tile_type, layer, colormap, bands
-    )
+    key = _make_tile_key(tileset_id, z, x, y, tile_type, layer, colormap, bands)
 
     # Try Redis first
     if redis_available():
@@ -419,9 +403,7 @@ def cache_tile(
     if tile_type == "pmtiles" and not config.cache_pmtiles:
         return False
 
-    key = _make_tile_key(
-        tileset_id, z, x, y, tile_type, layer, colormap, bands
-    )
+    key = _make_tile_key(tileset_id, z, x, y, tile_type, layer, colormap, bands)
     cache_ttl = ttl or config.tile_ttl
 
     success = False
@@ -682,6 +664,7 @@ def invalidate_tile(
     # Remove from Redis
     if redis_available():
         from lib.redis_client import safe_redis_delete
+
         if safe_redis_delete(key):
             invalidated = True
 

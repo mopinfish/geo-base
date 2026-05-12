@@ -426,16 +426,38 @@ class TestGetTilesetById:
         """Test that tileset is returned as dictionary."""
         conn, cursor = mock_conn
         cursor.description = [
-            ("id",), ("name",), ("description",), ("type",), ("format",),
-            ("min_zoom",), ("max_zoom",), ("bounds",), ("center",),
-            ("attribution",), ("is_public",), ("user_id",),
-            ("metadata",), ("created_at",), ("updated_at",),
+            ("id",),
+            ("name",),
+            ("description",),
+            ("type",),
+            ("format",),
+            ("min_zoom",),
+            ("max_zoom",),
+            ("bounds",),
+            ("center",),
+            ("attribution",),
+            ("is_public",),
+            ("user_id",),
+            ("metadata",),
+            ("created_at",),
+            ("updated_at",),
         ]
         cursor.fetchone.return_value = (
-            "uuid-123", "Test Tileset", "Description", "vector", "pbf",
-            0, 22, None, None,
-            "Attribution", True, "user-uuid",
-            None, "2024-01-01", "2024-01-02",
+            "uuid-123",
+            "Test Tileset",
+            "Description",
+            "vector",
+            "pbf",
+            0,
+            22,
+            None,
+            None,
+            "Attribution",
+            True,
+            "user-uuid",
+            None,
+            "2024-01-01",
+            "2024-01-02",
         )
 
         result = get_tileset_by_id(conn, "uuid-123", config=test_config)
@@ -464,9 +486,7 @@ class TestCheckTilesetOwner:
         conn, cursor = mock_conn
         cursor.fetchone.return_value = ("uuid-123", "user-uuid")
 
-        exists, owner_id = check_tileset_owner(
-            conn, "uuid-123", "user-uuid", config=test_config
-        )
+        exists, owner_id = check_tileset_owner(conn, "uuid-123", "user-uuid", config=test_config)
 
         assert exists is True
         assert owner_id == "user-uuid"
@@ -476,9 +496,7 @@ class TestCheckTilesetOwner:
         conn, cursor = mock_conn
         cursor.fetchone.return_value = None
 
-        exists, owner_id = check_tileset_owner(
-            conn, "nonexistent", "user-uuid", config=test_config
-        )
+        exists, owner_id = check_tileset_owner(conn, "nonexistent", "user-uuid", config=test_config)
 
         assert exists is False
         assert owner_id is None
@@ -501,9 +519,7 @@ class TestCountFeatures:
         conn, cursor = mock_conn
         cursor.fetchone.return_value = (10,)
 
-        result = count_features(
-            conn, "uuid-123", layer_name="layer1", config=test_config
-        )
+        result = count_features(conn, "uuid-123", layer_name="layer1", config=test_config)
 
         assert result == 10
         # Verify query includes layer filter

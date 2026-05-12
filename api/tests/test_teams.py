@@ -1,6 +1,5 @@
 """Tests for Team models and functionality."""
 
-
 import pytest
 from pydantic import ValidationError
 
@@ -160,7 +159,9 @@ class TestTeamInvitationCreate:
 
 class TestPermissionCheckRequest:
     def test_valid_request(self):
-        request = PermissionCheckRequest(user_id="user-123", tileset_id="tileset-456", action="read")
+        request = PermissionCheckRequest(
+            user_id="user-123", tileset_id="tileset-456", action="read"
+        )
         assert request.action == "read"
 
     def test_invalid_action(self):

@@ -29,16 +29,13 @@ def get_base_url(request: Request) -> str:
     """
     # Get protocol - prefer x-forwarded-proto, also check fly-forwarded-proto
     forwarded_proto = (
-        request.headers.get("x-forwarded-proto") or
-        request.headers.get("fly-forwarded-proto") or
-        "http"
+        request.headers.get("x-forwarded-proto")
+        or request.headers.get("fly-forwarded-proto")
+        or "http"
     )
 
     # Get host - prefer x-forwarded-host, fallback to host header
-    forwarded_host = (
-        request.headers.get("x-forwarded-host") or
-        request.headers.get("host")
-    )
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
 
     if forwarded_host:
         # Force HTTPS for non-localhost hosts
@@ -50,7 +47,11 @@ def get_base_url(request: Request) -> str:
     base_url = str(request.base_url).rstrip("/")
 
     # Force HTTPS for production URLs
-    if base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
+    if (
+        base_url.startswith("http://")
+        and "localhost" not in base_url
+        and "127.0.0.1" not in base_url
+    ):
         base_url = base_url.replace("http://", "https://", 1)
 
     return base_url

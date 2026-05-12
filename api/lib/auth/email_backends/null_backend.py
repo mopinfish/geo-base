@@ -1,4 +1,5 @@
 """テスト用バックエンド。送信せず内部リストに記録。"""
+
 from . import EmailBackend
 
 

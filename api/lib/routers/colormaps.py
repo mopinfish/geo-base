@@ -82,11 +82,13 @@ def get_colormap_info(name: str):
         # Extract color stops
         color_stops = []
         for value, rgba in sorted(cmap.items()):
-            color_stops.append({
-                "value": value,
-                "color": f"rgba({rgba[0]}, {rgba[1]}, {rgba[2]}, {rgba[3] / 255:.2f})",
-                "hex": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}",
-            })
+            color_stops.append(
+                {
+                    "value": value,
+                    "color": f"rgba({rgba[0]}, {rgba[1]}, {rgba[2]}, {rgba[3] / 255:.2f})",
+                    "hex": f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}",
+                }
+            )
 
         return {
             "name": name,

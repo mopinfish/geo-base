@@ -1,4 +1,5 @@
 """メールテンプレート。Phase 3 はプレーンテキストのみ。"""
+
 from datetime import datetime
 from typing import Optional, Tuple
 

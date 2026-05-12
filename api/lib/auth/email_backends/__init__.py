@@ -1,4 +1,5 @@
 """メール送信バックエンド。Null/Console/SMTP の 3 実装。"""
+
 from abc import ABC, abstractmethod
 from functools import lru_cache
 
@@ -14,6 +15,7 @@ class EmailBackend(ABC):
 def _get_settings():
     """設定取得（遅延 import で循環依存を回避）"""
     from lib.config import get_settings
+
     return get_settings()
 
 

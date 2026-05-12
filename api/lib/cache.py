@@ -10,12 +10,13 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Generic, Optional, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class CacheEntry(Generic[T]):
     """A cache entry with value and expiration time."""
+
     value: T
     expires_at: float
 
@@ -96,10 +97,7 @@ class TTLCache(Generic[T]):
                     del self._cache[oldest_key]
 
             entry_ttl = ttl if ttl is not None else self._ttl
-            self._cache[key] = CacheEntry(
-                value=value,
-                expires_at=time.time() + entry_ttl
-            )
+            self._cache[key] = CacheEntry(value=value, expires_at=time.time() + entry_ttl)
 
             # Update access order
             if key in self._access_order:
@@ -139,10 +137,7 @@ class TTLCache(Generic[T]):
         """
         with self._lock:
             now = time.time()
-            expired_keys = [
-                key for key, entry in self._cache.items()
-                if now > entry.expires_at
-            ]
+            expired_keys = [key for key, entry in self._cache.items() if now > entry.expires_at]
             for key in expired_keys:
                 del self._cache[key]
                 if key in self._access_order:
@@ -158,10 +153,7 @@ class TTLCache(Generic[T]):
         """Return cache statistics."""
         with self._lock:
             now = time.time()
-            expired_count = sum(
-                1 for entry in self._cache.values()
-                if now > entry.expires_at
-            )
+            expired_count = sum(1 for entry in self._cache.values() if now > entry.expires_at)
             return {
                 "size": len(self._cache),
                 "max_size": self._max_size,

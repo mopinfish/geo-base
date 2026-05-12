@@ -42,6 +42,7 @@ router = APIRouter(prefix="/api/features", tags=["features-batch"])
 
 class ExportRequest(BaseModel):
     """Request model for export endpoint."""
+
     tileset_id: Optional[str] = Field(None, description="Tileset UUID to export")
     feature_ids: Optional[List[str]] = Field(
         None,
@@ -56,8 +57,7 @@ class ExportRequest(BaseModel):
         max_length=4,
     )
     properties_filter: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Property key-value filters"
+        None, description="Property key-value filters"
     )
     limit: Optional[int] = Field(None, ge=1, le=100000, description="Maximum features")
     format: str = Field("geojson", description="Export format: geojson or csv")
@@ -66,64 +66,46 @@ class ExportRequest(BaseModel):
 
 class BatchUpdateRequest(BaseModel):
     """Request model for batch update."""
+
     feature_ids: Optional[List[str]] = Field(
         None,
         description="List of feature UUIDs to update (max 10000)",
         max_length=10000,
     )
-    tileset_id: Optional[str] = Field(
-        None,
-        description="Tileset UUID for filter-based update"
-    )
+    tileset_id: Optional[str] = Field(None, description="Tileset UUID for filter-based update")
     filter: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Filter conditions (layer_name, bbox, properties)"
+        None, description="Filter conditions (layer_name, bbox, properties)"
     )
     updates: Dict[str, Any] = Field(
-        ...,
-        description="Fields to update (layer_name, properties, geometry)"
+        ..., description="Fields to update (layer_name, properties, geometry)"
     )
-    merge_properties: bool = Field(
-        True,
-        description="Merge properties instead of replacing"
-    )
+    merge_properties: bool = Field(True, description="Merge properties instead of replacing")
     limit: Optional[int] = Field(
-        None,
-        ge=1,
-        le=100000,
-        description="Maximum features to update (filter mode only)"
+        None, ge=1, le=100000, description="Maximum features to update (filter mode only)"
     )
 
 
 class BatchDeleteRequest(BaseModel):
     """Request model for batch delete."""
+
     feature_ids: Optional[List[str]] = Field(
         None,
         description="List of feature UUIDs to delete (max 10000)",
         max_length=10000,
     )
-    tileset_id: Optional[str] = Field(
-        None,
-        description="Tileset UUID for filter-based delete"
-    )
+    tileset_id: Optional[str] = Field(None, description="Tileset UUID for filter-based delete")
     filter: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Filter conditions (layer_name, bbox, properties)"
+        None, description="Filter conditions (layer_name, bbox, properties)"
     )
     limit: Optional[int] = Field(
-        None,
-        ge=1,
-        le=100000,
-        description="Maximum features to delete (filter mode only)"
+        None, ge=1, le=100000, description="Maximum features to delete (filter mode only)"
     )
-    dry_run: bool = Field(
-        False,
-        description="Preview delete without executing"
-    )
+    dry_run: bool = Field(False, description="Preview delete without executing")
 
 
 class BatchOperationResponse(BaseModel):
     """Response model for batch operations."""
+
     success_count: int = Field(..., description="Number of successful operations")
     failed_count: int = Field(..., description="Number of failed operations")
     total_count: int = Field(..., description="Total items processed")
@@ -230,9 +212,7 @@ def export_features(
             return Response(
                 content=csv_content,
                 media_type="text/csv",
-                headers={
-                    "Content-Disposition": f"attachment; filename={filename}.csv"
-                },
+                headers={"Content-Disposition": f"attachment; filename={filename}.csv"},
             )
 
         else:
@@ -306,9 +286,7 @@ def export_features_get(
             return Response(
                 content=csv_content,
                 media_type="text/csv",
-                headers={
-                    "Content-Disposition": f"attachment; filename={tileset_id}.csv"
-                },
+                headers={"Content-Disposition": f"attachment; filename={tileset_id}.csv"},
             )
 
         else:
@@ -378,9 +356,7 @@ def export_features_streaming(
         return StreamingResponse(
             generate(),
             media_type="application/geo+json",
-            headers={
-                "Content-Disposition": f"attachment; filename={tileset_id}.geojson"
-            },
+            headers={"Content-Disposition": f"attachment; filename={tileset_id}.geojson"},
         )
 
     except HTTPException:

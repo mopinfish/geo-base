@@ -227,7 +227,9 @@ class TestTileCachingMemoryOnly:
             # Cache tile
             result = cache_tile(
                 tileset_id="test-uuid",
-                z=10, x=100, y=200,
+                z=10,
+                x=100,
+                y=200,
                 data=sample_tile_data,
                 tile_type="vector",
             )
@@ -237,7 +239,9 @@ class TestTileCachingMemoryOnly:
             # Retrieve tile
             cached = get_cached_tile(
                 tileset_id="test-uuid",
-                z=10, x=100, y=200,
+                z=10,
+                x=100,
+                y=200,
                 tile_type="vector",
             )
 
@@ -250,7 +254,9 @@ class TestTileCachingMemoryOnly:
 
             cached = get_cached_tile(
                 tileset_id="nonexistent",
-                z=10, x=100, y=200,
+                z=10,
+                x=100,
+                y=200,
                 tile_type="vector",
             )
 
@@ -265,12 +271,15 @@ class TestTileCachingMemoryOnly:
                 # Reset config
                 import lib.tile_cache
                 from lib.tile_cache import cache_tile
+
                 lib.tile_cache._config = None
 
                 # Try to cache
                 result = cache_tile(
                     tileset_id="test-uuid",
-                    z=10, x=100, y=200,
+                    z=10,
+                    x=100,
+                    y=200,
                     data=sample_tile_data,
                     tile_type="vector",
                 )
@@ -487,9 +496,7 @@ class TestStatistics:
 class TestRedisIntegration:
     """Tests for Redis integration."""
 
-    def test_cache_tile_uses_redis_when_available(
-        self, reset_tile_cache, sample_tile_data
-    ):
+    def test_cache_tile_uses_redis_when_available(self, reset_tile_cache, sample_tile_data):
         """Test that tile caching uses Redis when available."""
         with patch("lib.tile_cache.redis_available", return_value=True):
             with patch("lib.tile_cache.redis_set_binary", return_value=True) as mock_set:
@@ -497,7 +504,9 @@ class TestRedisIntegration:
 
                 result = cache_tile(
                     tileset_id="test-uuid",
-                    z=10, x=100, y=200,
+                    z=10,
+                    x=100,
+                    y=200,
                     data=sample_tile_data,
                     tile_type="vector",
                 )
@@ -505,20 +514,19 @@ class TestRedisIntegration:
                 assert result is True
                 mock_set.assert_called_once()
 
-    def test_get_cached_tile_uses_redis_when_available(
-        self, reset_tile_cache, sample_tile_data
-    ):
+    def test_get_cached_tile_uses_redis_when_available(self, reset_tile_cache, sample_tile_data):
         """Test that tile retrieval uses Redis when available."""
         with patch("lib.tile_cache.redis_available", return_value=True):
             with patch(
-                "lib.tile_cache.redis_get_binary",
-                return_value=sample_tile_data
+                "lib.tile_cache.redis_get_binary", return_value=sample_tile_data
             ) as mock_get:
                 from lib.tile_cache import get_cached_tile
 
                 result = get_cached_tile(
                     tileset_id="test-uuid",
-                    z=10, x=100, y=200,
+                    z=10,
+                    x=100,
+                    y=200,
                     tile_type="vector",
                 )
 
@@ -528,10 +536,7 @@ class TestRedisIntegration:
     def test_invalidate_tileset_clears_redis(self, reset_tile_cache):
         """Test that tileset invalidation clears Redis."""
         with patch("lib.tile_cache.redis_available", return_value=True):
-            with patch(
-                "lib.tile_cache.safe_redis_delete_pattern",
-                return_value=5
-            ) as mock_delete:
+            with patch("lib.tile_cache.safe_redis_delete_pattern", return_value=5) as mock_delete:
                 from lib.tile_cache import invalidate_tileset
 
                 count = invalidate_tileset("test-uuid")

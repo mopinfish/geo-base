@@ -13,6 +13,7 @@ from typing import Any, Optional
 # aiopmtiles for async PMTiles reading via HTTP
 try:
     from aiopmtiles import Reader as PMTilesReader
+
     PMTILES_AVAILABLE = True
 except ImportError:
     PMTILES_AVAILABLE = False
@@ -26,7 +27,7 @@ except ImportError:
 # PMTiles tile type mapping (by enum value)
 PMTILES_TILE_TYPES = {
     0: "unknown",
-    1: "mvt",      # Mapbox Vector Tile
+    1: "mvt",  # Mapbox Vector Tile
     2: "png",
     3: "jpeg",
     4: "webp",
@@ -38,7 +39,7 @@ PMTILES_COMPRESSION = {
     0: "unknown",
     1: "none",
     2: "gzip",
-    3: "br",       # Brotli
+    3: "br",  # Brotli
     4: "zstd",
 }
 
@@ -154,7 +155,7 @@ async def get_pmtiles_metadata(pmtiles_url: str) -> dict[str, Any]:
             try:
                 tile_type_enum = src.tile_type
                 # Handle Enum - get the integer value
-                if hasattr(tile_type_enum, 'value'):
+                if hasattr(tile_type_enum, "value"):
                     tile_type_id = tile_type_enum.value
                 else:
                     tile_type_id = int(tile_type_enum)
@@ -171,7 +172,7 @@ async def get_pmtiles_metadata(pmtiles_url: str) -> dict[str, Any]:
             try:
                 comp_enum = src.tile_compression
                 # Handle Enum - get the integer value
-                if hasattr(comp_enum, 'value'):
+                if hasattr(comp_enum, "value"):
                     comp_id = comp_enum.value
                 else:
                     comp_id = int(comp_enum)
@@ -203,9 +204,9 @@ async def get_pmtiles_metadata(pmtiles_url: str) -> dict[str, Any]:
             min_zoom = 0
             max_zoom = 22
             try:
-                if hasattr(src, 'minzoom') and src.minzoom is not None:
+                if hasattr(src, "minzoom") and src.minzoom is not None:
                     min_zoom = int(src.minzoom)
-                if hasattr(src, 'maxzoom') and src.maxzoom is not None:
+                if hasattr(src, "maxzoom") and src.maxzoom is not None:
                     max_zoom = int(src.maxzoom)
             except Exception:
                 pass

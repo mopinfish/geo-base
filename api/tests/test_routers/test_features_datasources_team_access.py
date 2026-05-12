@@ -12,6 +12,7 @@ Note: seed fixture 内では `db_conn.commit()` を呼ばない。app は
 でもデータが見える。test 終了時の `db_conn.rollback()` で自動 cleanup
 される（テスト DB にデータが残留しない）。
 """
+
 import uuid
 
 import pytest
@@ -117,7 +118,6 @@ def make_tileset_with_feature(db_conn):
                 (feature_id, ts_id),
             )
         return {"tileset_id": ts_id, "feature_id": feature_id, "owner_id": owner_id}
-
 
     return _make
 
@@ -254,9 +254,7 @@ class TestFeaturesTeamShare:
         assert res.status_code == 200, res.text
         body = res.json()
         assert body["type"] == "FeatureCollection"
-        assert any(
-            f["properties"]["tileset_id"] == ts["tileset_id"] for f in body["features"]
-        )
+        assert any(f["properties"]["tileset_id"] == ts["tileset_id"] for f in body["features"])
 
     def test_list_features_outsider_denied(
         self,

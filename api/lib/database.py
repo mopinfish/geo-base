@@ -32,11 +32,11 @@ _pool: psycopg2.pool.SimpleConnectionPool | None = None
 
 # Connection settings for stable connections
 CONNECTION_SETTINGS = {
-    "connect_timeout": 10,      # Connection timeout in seconds
-    "keepalives": 1,            # Enable TCP keepalives
-    "keepalives_idle": 30,      # Seconds before sending first keepalive
+    "connect_timeout": 10,  # Connection timeout in seconds
+    "keepalives": 1,  # Enable TCP keepalives
+    "keepalives_idle": 30,  # Seconds before sending first keepalive
     "keepalives_interval": 10,  # Seconds between keepalive probes
-    "keepalives_count": 5,      # Number of failed probes before disconnect
+    "keepalives_count": 5,  # Number of failed probes before disconnect
 }
 
 # Retry settings
@@ -54,10 +54,7 @@ def _is_serverless() -> bool:
     Fly.io is NOT serverless - it runs persistent containers,
     so connection pooling is appropriate.
     """
-    return (
-        os.environ.get("VERCEL") == "1"
-        or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
-    )
+    return os.environ.get("VERCEL") == "1" or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
 
 
 def _is_fly() -> bool:
@@ -90,15 +87,9 @@ def _prepare_connection_string(database_url: str) -> str:
     # `.internal` / `.flycast` の SSL 自動付与スキップは **Fly 上で動いている時だけ**
     # 適用する。万一非 Fly な本番で同サフィックスのホストが来た場合に SSL が外れる
     # 事態を防ぐ defense-in-depth。
-    is_fly_internal = settings.is_fly and (
-        host.endswith(".internal") or host.endswith(".flycast")
-    )
+    is_fly_internal = settings.is_fly and (host.endswith(".internal") or host.endswith(".flycast"))
 
-    if (
-        is_production
-        and not is_fly_internal
-        and "sslmode" not in query_params
-    ):
+    if is_production and not is_fly_internal and "sslmode" not in query_params:
         query_params["sslmode"] = ["require"]
 
     # Rebuild query string
@@ -145,10 +136,7 @@ def _create_connection_with_retry(dsn: str):
 
     for attempt in range(MAX_RETRIES):
         try:
-            conn = psycopg2.connect(
-                dsn,
-                **CONNECTION_SETTINGS
-            )
+            conn = psycopg2.connect(dsn, **CONNECTION_SETTINGS)
 
             # Verify connection is alive
             with conn.cursor() as cur:
@@ -168,16 +156,14 @@ def _create_connection_with_retry(dsn: str):
                 raise
 
             if attempt < MAX_RETRIES - 1:
-                delay = RETRY_BASE_DELAY * (2 ** attempt)  # Exponential backoff
+                delay = RETRY_BASE_DELAY * (2**attempt)  # Exponential backoff
                 logger.warning(
                     f"Database connection failed (attempt {attempt + 1}/{MAX_RETRIES}), "
                     f"retrying in {delay}s: {e}"
                 )
                 time.sleep(delay)
             else:
-                logger.error(
-                    f"Database connection failed after {MAX_RETRIES} attempts: {e}"
-                )
+                logger.error(f"Database connection failed after {MAX_RETRIES} attempts: {e}")
 
     raise last_error
 
@@ -345,9 +331,11 @@ def check_postgis_extension() -> dict:
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT PostGIS_Version(), PostGIS_Full_Version()
-                """)
+                """
+                )
                 row = cur.fetchone()
                 if row:
                     return {

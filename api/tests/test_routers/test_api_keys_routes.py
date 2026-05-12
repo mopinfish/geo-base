@@ -7,6 +7,7 @@ HTTP レイヤから POST と PUT を叩いて metadata 有無の両ケースで
 
 テスト分離は test_write_api_key_auth.py と同じ `_CommitNoOpConn` 方式。
 """
+
 import uuid
 
 import pytest

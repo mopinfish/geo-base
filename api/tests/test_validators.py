@@ -31,6 +31,7 @@ from lib.validators import (
 # ValidationResult Tests
 # ============================================================================
 
+
 class TestValidationResult:
     """Tests for ValidationResult dataclass."""
 
@@ -83,6 +84,7 @@ class TestValidationResult:
 # ============================================================================
 # Coordinate Validation Tests
 # ============================================================================
+
 
 class TestCoordinateValidation:
     """Tests for coordinate validation functions."""
@@ -137,6 +139,7 @@ class TestCoordinateValidation:
 # ============================================================================
 # Bounds Validation Tests
 # ============================================================================
+
 
 class TestBoundsValidation:
     """Tests for bounding box validation."""
@@ -197,6 +200,7 @@ class TestBoundsValidation:
 # Center Validation Tests
 # ============================================================================
 
+
 class TestCenterValidation:
     """Tests for center point validation."""
 
@@ -232,6 +236,7 @@ class TestCenterValidation:
 # ============================================================================
 # Geometry Validation Tests
 # ============================================================================
+
 
 class TestGeometryValidation:
     """Tests for GeoJSON geometry validation."""
@@ -314,10 +319,9 @@ class TestGeometryValidation:
 
     def test_linestring_too_few_positions(self):
         """Test LineString with too few positions."""
-        result = validate_geometry({
-            "type": "LineString",
-            "coordinates": [[139.7, 35.7]]  # Need at least 2
-        })
+        result = validate_geometry(
+            {"type": "LineString", "coordinates": [[139.7, 35.7]]}  # Need at least 2
+        )
         assert result.valid is False
 
     def test_polygon_not_closed_warning(self, invalid_polygon_not_closed):
@@ -331,7 +335,7 @@ class TestGeometryValidation:
         """Test Polygon ring with too few positions."""
         geom = {
             "type": "Polygon",
-            "coordinates": [[[139.7, 35.7], [139.8, 35.7], [139.7, 35.7]]]  # Only 3 positions
+            "coordinates": [[[139.7, 35.7], [139.8, 35.7], [139.7, 35.7]]],  # Only 3 positions
         }
         result = validate_geometry(geom)
         assert result.valid is False
@@ -353,6 +357,7 @@ class TestGeometryValidation:
 # Feature Validation Tests
 # ============================================================================
 
+
 class TestFeatureValidation:
     """Tests for GeoJSON Feature validation."""
 
@@ -363,21 +368,13 @@ class TestFeatureValidation:
 
     def test_valid_feature_null_geometry(self):
         """Test Feature with null geometry (allowed in GeoJSON)."""
-        feature = {
-            "type": "Feature",
-            "geometry": None,
-            "properties": {"name": "Unknown Location"}
-        }
+        feature = {"type": "Feature", "geometry": None, "properties": {"name": "Unknown Location"}}
         result = validate_feature(feature)
         assert result.valid is True
 
     def test_valid_feature_null_properties(self, sample_point):
         """Test Feature with null properties."""
-        feature = {
-            "type": "Feature",
-            "geometry": sample_point,
-            "properties": None
-        }
+        feature = {"type": "Feature", "geometry": sample_point, "properties": None}
         result = validate_feature(feature)
         assert result.valid is True
 
@@ -386,7 +383,7 @@ class TestFeatureValidation:
         feature = {
             "type": "FeatureCollection",  # Wrong type
             "geometry": sample_point,
-            "properties": {}
+            "properties": {},
         }
         result = validate_feature(feature)
         assert result.valid is False
@@ -394,21 +391,13 @@ class TestFeatureValidation:
 
     def test_invalid_feature_geometry(self, invalid_geometry_bad_type):
         """Test Feature with invalid geometry."""
-        feature = {
-            "type": "Feature",
-            "geometry": invalid_geometry_bad_type,
-            "properties": {}
-        }
+        feature = {"type": "Feature", "geometry": invalid_geometry_bad_type, "properties": {}}
         result = validate_feature(feature)
         assert result.valid is False
 
     def test_invalid_feature_properties_not_object(self, sample_point):
         """Test Feature with non-object properties."""
-        feature = {
-            "type": "Feature",
-            "geometry": sample_point,
-            "properties": "not an object"
-        }
+        feature = {"type": "Feature", "geometry": sample_point, "properties": "not an object"}
         result = validate_feature(feature)
         assert result.valid is False
 
@@ -416,6 +405,7 @@ class TestFeatureValidation:
 # ============================================================================
 # FeatureCollection Validation Tests
 # ============================================================================
+
 
 class TestFeatureCollectionValidation:
     """Tests for GeoJSON FeatureCollection validation."""
@@ -447,7 +437,9 @@ class TestFeatureCollectionValidation:
         """Test FeatureCollection exceeding max features."""
         fc = {
             "type": "FeatureCollection",
-            "features": [{"type": "Feature", "geometry": None, "properties": {}} for _ in range(101)]
+            "features": [
+                {"type": "Feature", "geometry": None, "properties": {}} for _ in range(101)
+            ],
         }
         result = validate_feature_collection(fc, max_features=100)
         assert result.valid is False
@@ -458,17 +450,9 @@ class TestFeatureCollectionValidation:
         fc = {
             "type": "FeatureCollection",
             "features": [
-                {
-                    "type": "Feature",
-                    "geometry": sample_point,
-                    "properties": {}
-                },
-                {
-                    "type": "Feature",
-                    "geometry": invalid_geometry_bad_type,
-                    "properties": {}
-                }
-            ]
+                {"type": "Feature", "geometry": sample_point, "properties": {}},
+                {"type": "Feature", "geometry": invalid_geometry_bad_type, "properties": {}},
+            ],
         }
         result = validate_feature_collection(fc)
         assert result.valid is False
@@ -477,6 +461,7 @@ class TestFeatureCollectionValidation:
 # ============================================================================
 # Batch Validation Tests
 # ============================================================================
+
 
 class TestBatchValidation:
     """Tests for batch feature validation."""
@@ -490,21 +475,13 @@ class TestBatchValidation:
     def test_validate_features_batch_some_invalid(self, sample_point, invalid_geometry_bad_type):
         """Test batch validation with some invalid features."""
         features = [
-            {
-                "type": "Feature",
-                "geometry": sample_point,
-                "properties": {}
-            },
-            {
-                "type": "Feature",
-                "geometry": invalid_geometry_bad_type,
-                "properties": {}
-            },
+            {"type": "Feature", "geometry": sample_point, "properties": {}},
+            {"type": "Feature", "geometry": invalid_geometry_bad_type, "properties": {}},
             {
                 "type": "Feature",
                 "geometry": {"type": "Point", "coordinates": [140.0, 36.0]},
-                "properties": {}
-            }
+                "properties": {},
+            },
         ]
         valid, invalid = validate_features_batch(features)
         assert len(valid) == 2
@@ -515,6 +492,7 @@ class TestBatchValidation:
 # ============================================================================
 # Convenience Function Tests
 # ============================================================================
+
 
 class TestConvenienceFunctions:
     """Tests for convenience functions."""

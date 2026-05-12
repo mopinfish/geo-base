@@ -25,6 +25,7 @@ VALID_TILE_FORMATS = {"pbf", "png", "jpg", "jpeg", "webp", "geojson", "mvt"}
 # Validation Helper Functions
 # ============================================================================
 
+
 def validate_bounds_values(bounds: List[float]) -> Tuple[bool, Optional[str]]:
     """
     Validate bounding box values.
@@ -36,7 +37,10 @@ def validate_bounds_values(bounds: List[float]) -> Tuple[bool, Optional[str]]:
         Tuple of (is_valid, error_message)
     """
     if len(bounds) != 4:
-        return False, f"bounds must have exactly 4 values [west, south, east, north], got {len(bounds)}"
+        return (
+            False,
+            f"bounds must have exactly 4 values [west, south, east, north], got {len(bounds)}",
+        )
 
     west, south, east, north = bounds
 
@@ -81,7 +85,10 @@ def validate_center_values(center: List[float]) -> Tuple[bool, Optional[str]]:
         return False, f"center must have at least 2 values [longitude, latitude], got {len(center)}"
 
     if len(center) > 3:
-        return False, f"center must have at most 3 values [longitude, latitude, zoom], got {len(center)}"
+        return (
+            False,
+            f"center must have at most 3 values [longitude, latitude, zoom], got {len(center)}",
+        )
 
     try:
         lon, lat = float(center[0]), float(center[1])
@@ -113,6 +120,7 @@ def validate_center_values(center: List[float]) -> Tuple[bool, Optional[str]]:
 # Tileset Create Model
 # ============================================================================
 
+
 class TilesetCreate(BaseModel):
     """
     Request model for creating a tileset.
@@ -130,60 +138,24 @@ class TilesetCreate(BaseModel):
         is_public: Whether the tileset is publicly accessible (default: False)
         metadata: Optional additional metadata as JSON object
     """
-    name: str = Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        description="Tileset name"
-    )
-    description: Optional[str] = Field(
-        None,
-        max_length=2000,
-        description="Tileset description"
-    )
-    type: str = Field(
-        ...,
-        description="Tileset type (vector, raster, pmtiles)"
-    )
-    format: str = Field(
-        ...,
-        description="Tile format (pbf, png, jpg, webp, geojson)"
-    )
-    min_zoom: int = Field(
-        0,
-        ge=ZOOM_MIN,
-        le=ZOOM_MAX,
-        description="Minimum zoom level"
-    )
-    max_zoom: int = Field(
-        22,
-        ge=ZOOM_MIN,
-        le=ZOOM_MAX,
-        description="Maximum zoom level"
-    )
+
+    name: str = Field(..., min_length=1, max_length=255, description="Tileset name")
+    description: Optional[str] = Field(None, max_length=2000, description="Tileset description")
+    type: str = Field(..., description="Tileset type (vector, raster, pmtiles)")
+    format: str = Field(..., description="Tile format (pbf, png, jpg, webp, geojson)")
+    min_zoom: int = Field(0, ge=ZOOM_MIN, le=ZOOM_MAX, description="Minimum zoom level")
+    max_zoom: int = Field(22, ge=ZOOM_MIN, le=ZOOM_MAX, description="Maximum zoom level")
     bounds: Optional[List[float]] = Field(
-        None,
-        description="Bounding box [west, south, east, north]"
+        None, description="Bounding box [west, south, east, north]"
     )
     center: Optional[List[float]] = Field(
-        None,
-        description="Center point [longitude, latitude] or [longitude, latitude, zoom]"
+        None, description="Center point [longitude, latitude] or [longitude, latitude, zoom]"
     )
-    attribution: Optional[str] = Field(
-        None,
-        max_length=500,
-        description="Attribution text"
-    )
-    is_public: bool = Field(
-        False,
-        description="Whether the tileset is public"
-    )
-    metadata: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Additional metadata"
-    )
+    attribution: Optional[str] = Field(None, max_length=500, description="Attribution text")
+    is_public: bool = Field(False, description="Whether the tileset is public")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
-    @field_validator('type')
+    @field_validator("type")
     @classmethod
     def validate_type(cls, v: str) -> str:
         """Validate tileset type."""
@@ -194,7 +166,7 @@ class TilesetCreate(BaseModel):
             )
         return v_lower
 
-    @field_validator('format')
+    @field_validator("format")
     @classmethod
     def validate_format(cls, v: str) -> str:
         """Validate tile format."""
@@ -205,7 +177,7 @@ class TilesetCreate(BaseModel):
             )
         return v_lower
 
-    @field_validator('bounds')
+    @field_validator("bounds")
     @classmethod
     def validate_bounds(cls, v: Optional[List[float]]) -> Optional[List[float]]:
         """Validate bounding box."""
@@ -219,7 +191,7 @@ class TilesetCreate(BaseModel):
         # Normalize to floats
         return [float(x) for x in v]
 
-    @field_validator('center')
+    @field_validator("center")
     @classmethod
     def validate_center(cls, v: Optional[List[float]]) -> Optional[List[float]]:
         """Validate center point."""
@@ -233,8 +205,8 @@ class TilesetCreate(BaseModel):
         # Normalize to floats
         return [float(x) for x in v]
 
-    @model_validator(mode='after')
-    def validate_zoom_range(self) -> 'TilesetCreate':
+    @model_validator(mode="after")
+    def validate_zoom_range(self) -> "TilesetCreate":
         """Validate that min_zoom <= max_zoom."""
         if self.min_zoom > self.max_zoom:
             raise ValueError(
@@ -242,8 +214,8 @@ class TilesetCreate(BaseModel):
             )
         return self
 
-    @model_validator(mode='after')
-    def validate_center_in_bounds(self) -> 'TilesetCreate':
+    @model_validator(mode="after")
+    def validate_center_in_bounds(self) -> "TilesetCreate":
         """Warn if center is outside bounds (not an error, just validation)."""
         if self.bounds is not None and self.center is not None:
             west, south, east, north = self.bounds
@@ -268,6 +240,7 @@ class TilesetCreate(BaseModel):
 # Tileset Update Model
 # ============================================================================
 
+
 class TilesetUpdate(BaseModel):
     """
     Request model for updating a tileset.
@@ -285,52 +258,26 @@ class TilesetUpdate(BaseModel):
         is_public: Whether the tileset is publicly accessible
         metadata: Additional metadata as JSON object
     """
-    name: Optional[str] = Field(
-        None,
-        min_length=1,
-        max_length=255,
-        description="Tileset name"
-    )
-    description: Optional[str] = Field(
-        None,
-        max_length=2000,
-        description="Tileset description"
-    )
+
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Tileset name")
+    description: Optional[str] = Field(None, max_length=2000, description="Tileset description")
     min_zoom: Optional[int] = Field(
-        None,
-        ge=ZOOM_MIN,
-        le=ZOOM_MAX,
-        description="Minimum zoom level"
+        None, ge=ZOOM_MIN, le=ZOOM_MAX, description="Minimum zoom level"
     )
     max_zoom: Optional[int] = Field(
-        None,
-        ge=ZOOM_MIN,
-        le=ZOOM_MAX,
-        description="Maximum zoom level"
+        None, ge=ZOOM_MIN, le=ZOOM_MAX, description="Maximum zoom level"
     )
     bounds: Optional[List[float]] = Field(
-        None,
-        description="Bounding box [west, south, east, north]"
+        None, description="Bounding box [west, south, east, north]"
     )
     center: Optional[List[float]] = Field(
-        None,
-        description="Center point [longitude, latitude] or [longitude, latitude, zoom]"
+        None, description="Center point [longitude, latitude] or [longitude, latitude, zoom]"
     )
-    attribution: Optional[str] = Field(
-        None,
-        max_length=500,
-        description="Attribution text"
-    )
-    is_public: Optional[bool] = Field(
-        None,
-        description="Whether the tileset is public"
-    )
-    metadata: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Additional metadata"
-    )
+    attribution: Optional[str] = Field(None, max_length=500, description="Attribution text")
+    is_public: Optional[bool] = Field(None, description="Whether the tileset is public")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
-    @field_validator('bounds')
+    @field_validator("bounds")
     @classmethod
     def validate_bounds(cls, v: Optional[List[float]]) -> Optional[List[float]]:
         """Validate bounding box."""
@@ -344,7 +291,7 @@ class TilesetUpdate(BaseModel):
         # Normalize to floats
         return [float(x) for x in v]
 
-    @field_validator('center')
+    @field_validator("center")
     @classmethod
     def validate_center(cls, v: Optional[List[float]]) -> Optional[List[float]]:
         """Validate center point."""
@@ -358,8 +305,8 @@ class TilesetUpdate(BaseModel):
         # Normalize to floats
         return [float(x) for x in v]
 
-    @model_validator(mode='after')
-    def validate_zoom_range(self) -> 'TilesetUpdate':
+    @model_validator(mode="after")
+    def validate_zoom_range(self) -> "TilesetUpdate":
         """Validate that min_zoom <= max_zoom if both are provided."""
         if self.min_zoom is not None and self.max_zoom is not None:
             if self.min_zoom > self.max_zoom:
@@ -373,8 +320,10 @@ class TilesetUpdate(BaseModel):
 # Tileset Response Model (for future use)
 # ============================================================================
 
+
 class TilesetResponse(BaseModel):
     """Response model for a tileset."""
+
     id: str
     name: str
     description: Optional[str] = None

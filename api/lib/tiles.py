@@ -283,7 +283,7 @@ def build_bbox_filter(
 
         return (
             f"{geometry_column} && ST_MakeEnvelope(%(minx)s, %(miny)s, %(maxx)s, %(maxy)s, {srid})",
-            {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
+            {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy},
         )
     except Exception:
         return "TRUE", {}
@@ -541,7 +541,7 @@ def generate_features_mvt(
             WHERE {layer_where}
             ORDER BY layer_name
             """,
-            layer_query_params
+            layer_query_params,
         )
         layer_names = [row[0] for row in cur.fetchall()]
 

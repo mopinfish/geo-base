@@ -217,7 +217,7 @@ class TestCalculateDelay:
         delay2 = calculate_delay(2, basic_config)
 
         assert delay1 == delay0 * basic_config.exponential_base
-        assert delay2 == delay0 * (basic_config.exponential_base ** 2)
+        assert delay2 == delay0 * (basic_config.exponential_base**2)
 
     def test_max_delay_cap(self, basic_config):
         """Test that delay is capped at max_delay."""
@@ -362,6 +362,7 @@ class TestWithDbRetryDecorator:
 
     def test_successful_db_operation(self):
         """Test successful database operation."""
+
         @with_db_retry(base_delay=0.001)
         def get_data(conn):
             return {"id": 1, "name": "test"}
@@ -617,6 +618,7 @@ class TestRetryableOperation:
 
     def test_successful_operation(self):
         """Test successful operation."""
+
         class SuccessOp(RetryableOperation):
             def execute(self):
                 return "success"
@@ -630,6 +632,7 @@ class TestRetryableOperation:
 
     def test_retry_then_success(self):
         """Test operation that fails then succeeds."""
+
         class EventualSuccess(RetryableOperation):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -690,6 +693,7 @@ class TestRetryableOperation:
 
     def test_custom_should_retry(self):
         """Test custom should_retry logic."""
+
         class CustomRetry(RetryableOperation):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -728,6 +732,7 @@ class TestRetryIntegration:
 
     def test_decorator_with_arguments(self):
         """Test decorator with arguments preserves function."""
+
         @with_db_retry(max_attempts=2, base_delay=0.001)
         def my_function(x, y, z=None):
             """Docstring for my_function."""

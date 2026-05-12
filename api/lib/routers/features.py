@@ -46,7 +46,9 @@ router = APIRouter(prefix="/api/features", tags=["features"])
 # ============================================================================
 
 
-def _update_tileset_bounds(tileset_id: str, conn) -> Tuple[bool, Optional[List[float]], Optional[List[float]]]:
+def _update_tileset_bounds(
+    tileset_id: str, conn
+) -> Tuple[bool, Optional[List[float]], Optional[List[float]]]:
     """
     Calculate and update tileset bounds from its features.
 
@@ -113,9 +115,7 @@ def _update_tileset_bounds(tileset_id: str, conn) -> Tuple[bool, Optional[List[f
 
 
 def _validate_features_for_import(
-    features: List[dict],
-    validate_geometry_flag: bool = True,
-    max_errors: int = 100
+    features: List[dict], validate_geometry_flag: bool = True, max_errors: int = 100
 ) -> Tuple[List[dict], List[str], List[str]]:
     """
     Validate features before import.
@@ -163,10 +163,12 @@ def _validate_features_for_import(
             if properties is None:
                 properties = {}
 
-            valid_features.append({
-                "geometry": json.dumps(geometry),
-                "properties": json.dumps(properties),
-            })
+            valid_features.append(
+                {
+                    "geometry": json.dumps(geometry),
+                    "properties": json.dumps(properties),
+                }
+            )
 
         except Exception as e:
             errors.append(f"Feature #{idx + 1}: {str(e)}")
@@ -219,7 +221,6 @@ def create_feature(
                     "Not authorized to add features to this tileset",
                     details={"tileset_id": str(row[0])},
                 )
-
 
             # Validate geometry
             geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
@@ -595,18 +596,20 @@ def list_features(
 
             features = []
             for row in rows:
-                features.append({
-                    "id": str(row[0]),
-                    "type": "Feature",
-                    "geometry": row[2],
-                    "properties": {
-                        **(row[3] if row[3] else {}),
-                        "layer_name": row[1],
-                        "tileset_id": str(row[4]),
-                        "created_at": row[5].isoformat() if row[5] else None,
-                        "updated_at": row[6].isoformat() if row[6] else None,
-                    },
-                })
+                features.append(
+                    {
+                        "id": str(row[0]),
+                        "type": "Feature",
+                        "geometry": row[2],
+                        "properties": {
+                            **(row[3] if row[3] else {}),
+                            "layer_name": row[1],
+                            "tileset_id": str(row[4]),
+                            "created_at": row[5].isoformat() if row[5] else None,
+                            "updated_at": row[6].isoformat() if row[6] else None,
+                        },
+                    }
+                )
 
             return {
                 "type": "FeatureCollection",
@@ -770,7 +773,9 @@ def update_feature(
 
             if feature.geometry is not None:
                 # Validate geometry
-                geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
+                geom_result = validate_geometry(
+                    feature.geometry, "geometry", check_coordinates=True
+                )
                 if not geom_result.valid:
                     raise api_error(
                         400,

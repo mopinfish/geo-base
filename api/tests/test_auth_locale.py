@@ -116,6 +116,7 @@ def test_update_locale_requires_auth(monkeypatch):
         "postgresql://postgres:postgres@localhost:5432/geo_base_e2e",
     )
     import lib.main as main_module
+
     importlib.reload(main_module)
     client = TestClient(main_module.app)
     res = client.patch(

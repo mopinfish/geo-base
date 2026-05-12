@@ -43,9 +43,7 @@ def aws_credentials(monkeypatch):
 def s3_bucket(aws_credentials):
     """moto で in-memory S3 を起動し、テスト bucket を作成して yield する。"""
     with mock_aws():
-        boto3.client("s3", region_name="us-east-1").create_bucket(
-            Bucket=TEST_BUCKET
-        )
+        boto3.client("s3", region_name="us-east-1").create_bucket(Bucket=TEST_BUCKET)
         yield TEST_BUCKET
 
 
@@ -190,10 +188,7 @@ class TestS3StorageClient:
             region="auto",
             public_base_url="https://cdn.example.com/tiles",
         )
-        assert (
-            client.get_public_url("a/b/c.tif")
-            == "https://cdn.example.com/tiles/a/b/c.tif"
-        )
+        assert client.get_public_url("a/b/c.tif") == "https://cdn.example.com/tiles/a/b/c.tif"
 
     def test_get_public_url_falls_back_to_endpoint_plus_bucket(self, s3_bucket):
         client = S3StorageClient(
@@ -235,6 +230,7 @@ class TestUrlHelpers:
 
     def test_get_s3_uri(self, s3_bucket):
         from lib.storage import S3StorageClient
+
         c = S3StorageClient(
             bucket=s3_bucket,
             endpoint_url="https://fly.storage.tigris.dev",
@@ -246,6 +242,7 @@ class TestUrlHelpers:
 
     def test_get_https_url_with_public_base(self, s3_bucket):
         from lib.storage import S3StorageClient
+
         c = S3StorageClient(
             bucket=s3_bucket,
             endpoint_url="https://fly.storage.tigris.dev",
@@ -256,6 +253,7 @@ class TestUrlHelpers:
 
     def test_get_https_url_default(self, s3_bucket):
         from lib.storage import S3StorageClient
+
         c = S3StorageClient(
             bucket=s3_bucket,
             endpoint_url="https://fly.storage.tigris.dev",
@@ -263,13 +261,13 @@ class TestUrlHelpers:
             public_base_url=None,
         )
         assert (
-            c.get_https_url("a/b/c.tif")
-            == f"https://fly.storage.tigris.dev/{s3_bucket}/a/b/c.tif"
+            c.get_https_url("a/b/c.tif") == f"https://fly.storage.tigris.dev/{s3_bucket}/a/b/c.tif"
         )
 
     def test_get_public_url_alias(self, s3_bucket):
         # 後方互換 alias は get_https_url と同じ結果を返す
         from lib.storage import S3StorageClient
+
         c = S3StorageClient(
             bucket=s3_bucket,
             endpoint_url="https://fly.storage.tigris.dev",
@@ -286,18 +284,21 @@ class TestValidatePmtilesFile:
 
     def test_accepts_valid_pmtiles(self):
         from lib.storage import validate_pmtiles_file
+
         ok, msg = validate_pmtiles_file(self._PMTILES_MIN)
         assert ok is True
         assert msg is None
 
     def test_rejects_empty(self):
         from lib.storage import validate_pmtiles_file
+
         ok, msg = validate_pmtiles_file(b"")
         assert ok is False
         assert msg == "File is empty"
 
     def test_rejects_oversize(self, monkeypatch):
         from lib.storage import validate_pmtiles_file
+
         monkeypatch.setattr("lib.storage.MAX_FILE_SIZE", 1024)
         big = b"PMTiles\x03" + b"\x00" * 2048
         ok, msg = validate_pmtiles_file(big)
@@ -306,12 +307,14 @@ class TestValidatePmtilesFile:
 
     def test_rejects_non_pmtiles_magic(self):
         from lib.storage import validate_pmtiles_file
+
         ok, msg = validate_pmtiles_file(b"PK\x03\x04not_pmtiles_at_all" + b"\x00" * 16)
         assert ok is False
         assert "magic bytes" in msg
 
     def test_rejects_too_short(self):
         from lib.storage import validate_pmtiles_file
+
         ok, msg = validate_pmtiles_file(b"PM")
         assert ok is False
         # 5 byte だと magic match しないので "magic bytes mismatch"
@@ -319,6 +322,7 @@ class TestValidatePmtilesFile:
 
     def test_is_pmtiles_file_helper(self):
         from lib.storage import is_pmtiles_file
+
         assert is_pmtiles_file(self._PMTILES_MIN) is True
         assert is_pmtiles_file(b"PMTilez\x03" + b"\x00" * 16) is False  # 1 char different
         assert is_pmtiles_file(b"PMTiles") is False  # < 8 bytes
@@ -330,19 +334,23 @@ class TestS3UriToGdalPath:
 
     def test_translates_s3_to_vsis3(self):
         from lib.storage import s3_uri_to_gdal_path
+
         assert s3_uri_to_gdal_path("s3://bucket/key/path.tif") == "/vsis3/bucket/key/path.tif"
 
     def test_passthrough_https(self):
         from lib.storage import s3_uri_to_gdal_path
+
         url = "https://example.com/file.tif"
         assert s3_uri_to_gdal_path(url) == url
 
     def test_passthrough_local_path(self):
         from lib.storage import s3_uri_to_gdal_path
+
         assert s3_uri_to_gdal_path("/tmp/file.tif") == "/tmp/file.tif"
 
     def test_passthrough_already_vsis3(self):
         from lib.storage import s3_uri_to_gdal_path
+
         assert s3_uri_to_gdal_path("/vsis3/bucket/key.tif") == "/vsis3/bucket/key.tif"
 
 
@@ -367,30 +375,36 @@ class TestSetupGdalS3Env:
 
     def test_https_url_with_explicit_scheme(self, monkeypatch):
         from lib.storage import _setup_gdal_s3_env
+
         self._clean_env(monkeypatch)
         monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://fly.storage.tigris.dev")
         _setup_gdal_s3_env()
         import os
+
         assert os.environ["AWS_S3_ENDPOINT"] == "fly.storage.tigris.dev"
         assert os.environ["AWS_HTTPS"] == "YES"
         assert os.environ["AWS_VIRTUAL_HOSTING"] == "FALSE"
 
     def test_http_url_explicit_scheme(self, monkeypatch):
         from lib.storage import _setup_gdal_s3_env
+
         self._clean_env(monkeypatch)
         monkeypatch.setenv("S3_ENDPOINT_URL", "http://localhost:9000")
         _setup_gdal_s3_env()
         import os
+
         assert os.environ["AWS_S3_ENDPOINT"] == "localhost:9000"
         assert os.environ["AWS_HTTPS"] == "NO"
 
     def test_schemeless_host_port(self, monkeypatch):
         """`localhost:9000` のようなスキーム無し endpoint も誤解析しない。"""
         from lib.storage import _setup_gdal_s3_env
+
         self._clean_env(monkeypatch)
         monkeypatch.setenv("S3_ENDPOINT_URL", "localhost:9000")
         _setup_gdal_s3_env()
         import os
+
         assert os.environ["AWS_S3_ENDPOINT"] == "localhost:9000"
         # スキーム不明 → HTTPS=YES を既定（production 大半が HTTPS）。
         # ローカル minio で http にしたい場合は AWS_HTTPS を明示で渡す前提。
@@ -398,17 +412,21 @@ class TestSetupGdalS3Env:
 
     def test_empty_env_does_nothing(self, monkeypatch):
         from lib.storage import _setup_gdal_s3_env
+
         self._clean_env(monkeypatch)
         _setup_gdal_s3_env()
         import os
+
         for key in self.GDAL_KEYS:
             assert key not in os.environ
 
     def test_existing_aws_s3_endpoint_not_overwritten(self, monkeypatch):
         from lib.storage import _setup_gdal_s3_env
+
         self._clean_env(monkeypatch)
         monkeypatch.setenv("AWS_S3_ENDPOINT", "preset.example.com")
         monkeypatch.setenv("AWS_ENDPOINT_URL_S3", "https://override.example.com")
         _setup_gdal_s3_env()
         import os
+
         assert os.environ["AWS_S3_ENDPOINT"] == "preset.example.com"

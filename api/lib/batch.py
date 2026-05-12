@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 class BatchStatus(str, Enum):
     """Status of a batch operation."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -44,6 +45,7 @@ class BatchStatus(str, Enum):
 @dataclass
 class BatchResult:
     """Result of a batch operation."""
+
     success_count: int = 0
     failed_count: int = 0
     total_count: int = 0
@@ -129,9 +131,7 @@ def export_features_geojson(
 
             if bbox:
                 minx, miny, maxx, maxy = bbox
-                conditions.append(
-                    "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend([minx, miny, maxx, maxy])
 
             if properties_filter:
@@ -174,7 +174,9 @@ def export_features_geojson(
             features = []
             tileset_ids_found = set()
             for row in rows:
-                feature_id, feat_tileset_id, layer, geometry, properties, created_at, updated_at = row
+                feature_id, feat_tileset_id, layer, geometry, properties, created_at, updated_at = (
+                    row
+                )
                 tileset_ids_found.add(str(feat_tileset_id))
 
                 feature_props = properties.copy() if properties else {}
@@ -186,12 +188,14 @@ def export_features_geojson(
                     feature_props["_created_at"] = created_at.isoformat() if created_at else None
                     feature_props["_updated_at"] = updated_at.isoformat() if updated_at else None
 
-                features.append({
-                    "type": "Feature",
-                    "id": str(feature_id),
-                    "geometry": geometry,
-                    "properties": feature_props,
-                })
+                features.append(
+                    {
+                        "type": "Feature",
+                        "id": str(feature_id),
+                        "geometry": geometry,
+                        "properties": feature_props,
+                    }
+                )
 
             result = {
                 "type": "FeatureCollection",
@@ -256,9 +260,7 @@ def export_features_geojson_streaming(
 
             if bbox:
                 minx, miny, maxx, maxy = bbox
-                conditions.append(
-                    "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend([minx, miny, maxx, maxy])
 
             where_clause = " AND ".join(conditions)
@@ -359,9 +361,7 @@ def export_features_csv(
 
             if bbox:
                 minx, miny, maxx, maxy = bbox
-                conditions.append(
-                    "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend([minx, miny, maxx, maxy])
 
             where_clause = " AND ".join(conditions) if conditions else "TRUE"
@@ -572,9 +572,7 @@ def batch_update_by_filter(
 
             if "bbox" in filter_conditions:
                 bbox = filter_conditions["bbox"]
-                conditions.append(
-                    "ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend(bbox)
 
             if "properties" in filter_conditions:
@@ -740,9 +738,7 @@ def batch_delete_by_filter(
 
             if "bbox" in filter_conditions:
                 bbox = filter_conditions["bbox"]
-                conditions.append(
-                    "ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
-                )
+                conditions.append("ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))")
                 params.extend(bbox)
 
             if "properties" in filter_conditions:

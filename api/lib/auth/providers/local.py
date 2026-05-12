@@ -1,4 +1,5 @@
 """LocalAuthProvider - geo-base が users テーブルを所有し JWT を発行する実装。"""
+
 import asyncio
 import hashlib
 import logging
@@ -84,8 +85,12 @@ class LocalAuthProvider(AuthProvider):
                 if not row:
                     return None
                 return User(
-                    id=str(row[0]), email=row[1], name=row[2], role=row[3],
-                    app_metadata=row[4] or {}, user_metadata=row[5] or {},
+                    id=str(row[0]),
+                    email=row[1],
+                    name=row[2],
+                    role=row[3],
+                    app_metadata=row[4] or {},
+                    user_metadata=row[5] or {},
                     email_verified=row[6] is not None,
                     preferred_locale=row[8],
                 )
@@ -106,8 +111,12 @@ class LocalAuthProvider(AuthProvider):
                 if not row:
                     return None
                 return User(
-                    id=str(row[0]), email=row[1], name=row[2], role=row[3],
-                    app_metadata=row[4] or {}, user_metadata=row[5] or {},
+                    id=str(row[0]),
+                    email=row[1],
+                    name=row[2],
+                    role=row[3],
+                    app_metadata=row[4] or {},
+                    user_metadata=row[5] or {},
                     email_verified=row[6] is not None,
                     preferred_locale=row[7],
                 )
@@ -121,9 +130,7 @@ class LocalAuthProvider(AuthProvider):
         ip: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> TokenPair:
-        return await asyncio.to_thread(
-            self._authenticate_sync, email, password, ip, user_agent
-        )
+        return await asyncio.to_thread(self._authenticate_sync, email, password, ip, user_agent)
 
     def _authenticate_sync(self, email, password, ip, user_agent) -> TokenPair:
         with get_db_connection() as conn:
@@ -141,14 +148,18 @@ class LocalAuthProvider(AuthProvider):
             if row is None:
                 # タイミング攻撃対策: ユーザー不存在でも bcrypt 検証
                 verify_password(password, _DUMMY_HASH)
-                record_login_attempt(
-                    conn, email=email, success=False, ip=ip, user_agent=user_agent
-                )
+                record_login_attempt(conn, email=email, success=False, ip=ip, user_agent=user_agent)
                 raise InvalidCredentials("Invalid email or password")
 
             (
-                user_id, password_hash, name, role,
-                app_meta, user_meta, db_email, email_verified_at,
+                user_id,
+                password_hash,
+                name,
+                role,
+                app_meta,
+                user_meta,
+                db_email,
+                email_verified_at,
                 preferred_locale,
             ) = row
 
@@ -164,8 +175,12 @@ class LocalAuthProvider(AuthProvider):
             conn.commit()
 
             user = User(
-                id=str(user_id), email=db_email, name=name, role=role,
-                app_metadata=app_meta or {}, user_metadata=user_meta or {},
+                id=str(user_id),
+                email=db_email,
+                name=name,
+                role=role,
+                app_metadata=app_meta or {},
+                user_metadata=user_meta or {},
                 email_verified=email_verified_at is not None,
                 preferred_locale=preferred_locale,
             )
@@ -177,9 +192,7 @@ class LocalAuthProvider(AuthProvider):
                 issuer=self._settings.jwt_issuer,
                 ttl_seconds=self._settings.access_token_ttl_seconds,
             )
-            refresh_token = issue_refresh_token(
-                conn, str(user_id), ip=ip, user_agent=user_agent
-            )
+            refresh_token = issue_refresh_token(conn, str(user_id), ip=ip, user_agent=user_agent)
 
             return TokenPair(
                 access_token=access_token,
@@ -193,9 +206,7 @@ class LocalAuthProvider(AuthProvider):
         ip: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> TokenPair:
-        return await asyncio.to_thread(
-            self._refresh_tokens_sync, refresh_token, ip, user_agent
-        )
+        return await asyncio.to_thread(self._refresh_tokens_sync, refresh_token, ip, user_agent)
 
     def _refresh_tokens_sync(self, refresh_token, ip, user_agent) -> TokenPair:
         with get_db_connection() as conn:
@@ -242,14 +253,21 @@ class LocalAuthProvider(AuthProvider):
     ) -> User:
         check_password_policy(password)
         return await asyncio.to_thread(
-            self._create_user_sync, email, password, name,
-            email_verified, role, app_metadata, user_metadata,
+            self._create_user_sync,
+            email,
+            password,
+            name,
+            email_verified,
+            role,
+            app_metadata,
+            user_metadata,
         )
 
     def _create_user_sync(
         self, email, password, name, email_verified, role, app_meta, user_meta
     ) -> User:
         import json
+
         password_hash_str = hash_password(password)
         email_lower = email.lower()
 
@@ -271,7 +289,9 @@ class LocalAuthProvider(AuthProvider):
                                      user_metadata, email_verified_at,
                                      preferred_locale""",
                         (
-                            email_lower, password_hash_str, name,
+                            email_lower,
+                            password_hash_str,
+                            name,
                             datetime.now(timezone.utc) if email_verified else None,
                             json.dumps(app_meta or {}),
                             json.dumps(user_meta or {}),
@@ -287,7 +307,10 @@ class LocalAuthProvider(AuthProvider):
                                      user_metadata, email_verified_at,
                                      preferred_locale""",
                         (
-                            email_lower, password_hash_str, name, role,
+                            email_lower,
+                            password_hash_str,
+                            name,
+                            role,
                             datetime.now(timezone.utc) if email_verified else None,
                             json.dumps(app_meta or {}),
                             json.dumps(user_meta or {}),
@@ -297,8 +320,12 @@ class LocalAuthProvider(AuthProvider):
             conn.commit()
 
         return User(
-            id=str(row[0]), email=row[1], name=row[2], role=row[3],
-            app_metadata=row[4] or {}, user_metadata=row[5] or {},
+            id=str(row[0]),
+            email=row[1],
+            name=row[2],
+            role=row[3],
+            app_metadata=row[4] or {},
+            user_metadata=row[5] or {},
             email_verified=row[6] is not None,
             preferred_locale=row[7],
         )
@@ -317,6 +344,7 @@ class LocalAuthProvider(AuthProvider):
 
     def _update_user_sync(self, user_id, name, email, role, user_metadata) -> User:
         import json
+
         updates = []
         params = []
         if name is not None:
@@ -360,8 +388,12 @@ class LocalAuthProvider(AuthProvider):
             conn.commit()
 
         return User(
-            id=str(row[0]), email=row[1], name=row[2], role=row[3],
-            app_metadata=row[4] or {}, user_metadata=row[5] or {},
+            id=str(row[0]),
+            email=row[1],
+            name=row[2],
+            role=row[3],
+            app_metadata=row[4] or {},
+            user_metadata=row[5] or {},
             email_verified=row[6] is not None,
             preferred_locale=row[7],
         )
@@ -380,7 +412,9 @@ class LocalAuthProvider(AuthProvider):
         (lib/routers/auth.py:update_my_locale) で行う。
         """
         return await asyncio.to_thread(
-            self._update_preferred_locale_sync, user_id, preferred_locale,
+            self._update_preferred_locale_sync,
+            user_id,
+            preferred_locale,
         )
 
     def _update_preferred_locale_sync(self, user_id, preferred_locale) -> User:
@@ -400,8 +434,12 @@ class LocalAuthProvider(AuthProvider):
             conn.commit()
 
         return User(
-            id=str(row[0]), email=row[1], name=row[2], role=row[3],
-            app_metadata=row[4] or {}, user_metadata=row[5] or {},
+            id=str(row[0]),
+            email=row[1],
+            name=row[2],
+            role=row[3],
+            app_metadata=row[4] or {},
+            user_metadata=row[5] or {},
             email_verified=row[6] is not None,
             preferred_locale=row[7],
         )
@@ -461,7 +499,9 @@ class LocalAuthProvider(AuthProvider):
         # メール送信（同期コンテキストから coroutine を実行するため新規 event loop で実行）
         reset_url = f"{self._settings.invitation_base_url}/password-reset/confirm?token={token}"
         subject, body = render_password_reset_email(
-            user_name=user_name, reset_url=reset_url, expires_at=expires_at,
+            user_name=user_name,
+            reset_url=reset_url,
+            expires_at=expires_at,
         )
         backend = get_email_backend()
         loop = asyncio.new_event_loop()
@@ -525,8 +565,12 @@ class LocalAuthProvider(AuthProvider):
             conn.commit()
 
         return User(
-            id=str(user_row[0]), email=user_row[1], name=user_row[2], role=user_row[3],
-            app_metadata=user_row[4] or {}, user_metadata=user_row[5] or {},
+            id=str(user_row[0]),
+            email=user_row[1],
+            name=user_row[2],
+            role=user_row[3],
+            app_metadata=user_row[4] or {},
+            user_metadata=user_row[5] or {},
             email_verified=user_row[6] is not None,
             preferred_locale=user_row[7],
         )

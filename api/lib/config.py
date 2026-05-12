@@ -116,19 +116,12 @@ class Settings(BaseSettings):
     @property
     def is_serverless(self) -> bool:
         """Check if running in a serverless environment (Vercel, Lambda, etc.)."""
-        return (
-            self.is_vercel
-            or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
-        )
+        return self.is_vercel or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
 
     @property
     def is_production(self) -> bool:
         """Check if running in production."""
-        return (
-            self.environment == "production"
-            or self.is_vercel
-            or self.is_fly
-        )
+        return self.environment == "production" or self.is_vercel or self.is_fly
 
     @property
     def deployment_platform(self) -> str:
@@ -164,15 +157,14 @@ class Settings(BaseSettings):
         """
         return self.jwt_secret
 
-    @model_validator(mode='after')
-    def validate_auth_config(self) -> 'Settings':
+    @model_validator(mode="after")
+    def validate_auth_config(self) -> "Settings":
         if self.auth_provider == "local":
             if not self.jwt_secret:
                 raise ValueError("AUTH_PROVIDER=local requires JWT_SECRET")
         else:
             raise ValueError(
-                f"Unknown AUTH_PROVIDER: {self.auth_provider} "
-                "(only 'local' is supported)"
+                f"Unknown AUTH_PROVIDER: {self.auth_provider} " "(only 'local' is supported)"
             )
 
         if self.email_backend == "smtp":

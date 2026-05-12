@@ -484,7 +484,9 @@ def execute_values(
 # =============================================================================
 
 
-def get_tileset_by_id(conn, tileset_id: str, config: Optional[RetryConfig] = None) -> Optional[dict]:
+def get_tileset_by_id(
+    conn, tileset_id: str, config: Optional[RetryConfig] = None
+) -> Optional[dict]:
     """
     Get a tileset by ID with retry support.
 

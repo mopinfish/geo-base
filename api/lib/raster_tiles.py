@@ -26,6 +26,7 @@ try:
     from rio_tiler.errors import TileOutsideBounds
     from rio_tiler.io import Reader as COGReader
     from rio_tiler.profiles import img_profiles
+
     RASTERIO_AVAILABLE = True
 except ImportError:
     RASTERIO_AVAILABLE = False
@@ -37,6 +38,7 @@ except ImportError:
 # Try to import numpy for custom colormaps
 try:
     import numpy as np
+
     NUMPY_AVAILABLE = True
 except ImportError:
     NUMPY_AVAILABLE = False
@@ -69,83 +71,81 @@ DEFAULT_RESAMPLING = "bilinear"
 # NDVI (Normalized Difference Vegetation Index)
 # -1 to 1, typically rescaled to 0-255 where 127 = 0
 NDVI_COLORMAP = {
-    0: (165, 0, 38, 255),      # Dark red (-1.0)
-    32: (215, 48, 39, 255),    # Red (-0.75)
-    64: (244, 109, 67, 255),   # Orange (-0.5)
-    96: (253, 174, 97, 255),   # Light orange (-0.25)
-    127: (255, 255, 191, 255), # Yellow (0.0)
-    159: (166, 217, 106, 255), # Light green (0.25)
+    0: (165, 0, 38, 255),  # Dark red (-1.0)
+    32: (215, 48, 39, 255),  # Red (-0.75)
+    64: (244, 109, 67, 255),  # Orange (-0.5)
+    96: (253, 174, 97, 255),  # Light orange (-0.25)
+    127: (255, 255, 191, 255),  # Yellow (0.0)
+    159: (166, 217, 106, 255),  # Light green (0.25)
     191: (102, 189, 99, 255),  # Green (0.5)
-    223: (26, 152, 80, 255),   # Dark green (0.75)
-    255: (0, 104, 55, 255),    # Very dark green (1.0)
+    223: (26, 152, 80, 255),  # Dark green (0.75)
+    255: (0, 104, 55, 255),  # Very dark green (1.0)
 }
 
 # Terrain/Elevation colormap (for DEMs)
 TERRAIN_COLORMAP = {
-    0: (0, 97, 71, 255),       # Deep green (low)
-    25: (16, 122, 47, 255),    # Green
-    51: (79, 163, 51, 255),    # Light green
-    76: (170, 203, 85, 255),   # Yellow-green
-    102: (254, 254, 172, 255), # Pale yellow
-    127: (254, 226, 145, 255), # Light brown
+    0: (0, 97, 71, 255),  # Deep green (low)
+    25: (16, 122, 47, 255),  # Green
+    51: (79, 163, 51, 255),  # Light green
+    76: (170, 203, 85, 255),  # Yellow-green
+    102: (254, 254, 172, 255),  # Pale yellow
+    127: (254, 226, 145, 255),  # Light brown
     153: (221, 162, 76, 255),  # Brown
     178: (186, 117, 68, 255),  # Darker brown
     204: (160, 100, 80, 255),  # Rocky brown
-    229: (200, 200, 200, 255), # Gray (high altitude)
-    255: (255, 255, 255, 255), # White (snow caps)
+    229: (200, 200, 200, 255),  # Gray (high altitude)
+    255: (255, 255, 255, 255),  # White (snow caps)
 }
 
 # Temperature colormap (coolwarm)
 TEMPERATURE_COLORMAP = {
-    0: (59, 76, 192, 255),     # Cold blue
-    32: (99, 125, 206, 255),   # Blue
+    0: (59, 76, 192, 255),  # Cold blue
+    32: (99, 125, 206, 255),  # Blue
     64: (141, 160, 203, 255),  # Light blue
     96: (186, 197, 227, 255),  # Pale blue
-    127: (238, 238, 238, 255), # White/neutral
-    159: (246, 197, 179, 255), # Light pink
-    191: (239, 149, 116, 255), # Light red
-    223: (213, 96, 80, 255),   # Red
-    255: (180, 4, 38, 255),    # Hot red
+    127: (238, 238, 238, 255),  # White/neutral
+    159: (246, 197, 179, 255),  # Light pink
+    191: (239, 149, 116, 255),  # Light red
+    223: (213, 96, 80, 255),  # Red
+    255: (180, 4, 38, 255),  # Hot red
 }
 
 # Precipitation colormap (blues to purple)
 PRECIPITATION_COLORMAP = {
-    0: (255, 255, 255, 255),   # White (no rain)
+    0: (255, 255, 255, 255),  # White (no rain)
     25: (240, 249, 255, 255),  # Very light blue
     51: (198, 219, 239, 255),  # Light blue
     76: (158, 202, 225, 255),  # Blue
-    102: (107, 174, 214, 255), # Medium blue
+    102: (107, 174, 214, 255),  # Medium blue
     127: (66, 146, 198, 255),  # Darker blue
     153: (33, 113, 181, 255),  # Dark blue
-    178: (8, 81, 156, 255),    # Very dark blue
-    204: (8, 48, 107, 255),    # Navy
-    229: (75, 0, 130, 255),    # Indigo
-    255: (128, 0, 128, 255),   # Purple (extreme)
+    178: (8, 81, 156, 255),  # Very dark blue
+    204: (8, 48, 107, 255),  # Navy
+    229: (75, 0, 130, 255),  # Indigo
+    255: (128, 0, 128, 255),  # Purple (extreme)
 }
 
 # Ocean depth colormap (bathymetry)
 BATHYMETRY_COLORMAP = {
-    0: (8, 29, 88, 255),       # Deep ocean
-    51: (37, 52, 148, 255),    # Deep blue
-    102: (34, 94, 168, 255),   # Medium blue
+    0: (8, 29, 88, 255),  # Deep ocean
+    51: (37, 52, 148, 255),  # Deep blue
+    102: (34, 94, 168, 255),  # Medium blue
     153: (65, 182, 196, 255),  # Light blue
-    204: (127, 205, 187, 255), # Turquoise
-    229: (199, 233, 180, 255), # Light green (shallow)
-    255: (237, 248, 177, 255), # Very shallow
+    204: (127, 205, 187, 255),  # Turquoise
+    229: (199, 233, 180, 255),  # Light green (shallow)
+    255: (237, 248, 177, 255),  # Very shallow
 }
 
 # Grayscale/Hillshade
-GRAYSCALE_COLORMAP = {
-    i: (i, i, i, 255) for i in range(0, 256, 16)
-}
+GRAYSCALE_COLORMAP = {i: (i, i, i, 255) for i in range(0, 256, 16)}
 GRAYSCALE_COLORMAP[255] = (255, 255, 255, 255)
 
 # Viridis-like colormap (perceptually uniform)
 VIRIDIS_COLORMAP = {
-    0: (68, 1, 84, 255),       # Dark purple
-    32: (72, 35, 116, 255),    # Purple
-    64: (64, 67, 135, 255),    # Blue-purple
-    96: (52, 94, 141, 255),    # Blue
+    0: (68, 1, 84, 255),  # Dark purple
+    32: (72, 35, 116, 255),  # Purple
+    64: (64, 67, 135, 255),  # Blue-purple
+    96: (52, 94, 141, 255),  # Blue
     127: (41, 120, 142, 255),  # Teal
     159: (32, 144, 140, 255),  # Green-teal
     191: (53, 183, 121, 255),  # Green
@@ -158,13 +158,13 @@ COLORMAP_PRESETS = {
     "ndvi": NDVI_COLORMAP,
     "terrain": TERRAIN_COLORMAP,
     "elevation": TERRAIN_COLORMAP,  # Alias
-    "dem": TERRAIN_COLORMAP,        # Alias
+    "dem": TERRAIN_COLORMAP,  # Alias
     "temperature": TEMPERATURE_COLORMAP,
     "coolwarm": TEMPERATURE_COLORMAP,  # Alias
     "precipitation": PRECIPITATION_COLORMAP,
     "rainfall": PRECIPITATION_COLORMAP,  # Alias
     "bathymetry": BATHYMETRY_COLORMAP,
-    "ocean": BATHYMETRY_COLORMAP,    # Alias
+    "ocean": BATHYMETRY_COLORMAP,  # Alias
     "grayscale": GRAYSCALE_COLORMAP,
     "hillshade": GRAYSCALE_COLORMAP,  # Alias
     "viridis": VIRIDIS_COLORMAP,
@@ -259,8 +259,7 @@ def interpolate_colormap(colormap: dict, num_values: int = 256) -> dict:
             lower_color = colormap[lower_key]
             upper_color = colormap[upper_key]
             result[i] = tuple(
-                int(lower_color[j] + t * (upper_color[j] - lower_color[j]))
-                for j in range(4)
+                int(lower_color[j] + t * (upper_color[j] - lower_color[j])) for j in range(4)
             )
 
     return result
@@ -324,7 +323,9 @@ def get_raster_tile(
 
             # Read tile data
             imgdata = cog.tile(
-                x, y, z,
+                x,
+                y,
+                z,
                 indexes=indexes,
                 tilesize=tile_size,
                 resampling_method=resampling,
@@ -346,8 +347,12 @@ def get_raster_tile(
                     final_scale_max = final_scale_max if final_scale_max is not None else 255
                 else:
                     # Single-band or other data types - use default scale
-                    final_scale_min = final_scale_min if final_scale_min is not None else DEFAULT_SCALE_MIN
-                    final_scale_max = final_scale_max if final_scale_max is not None else DEFAULT_SCALE_MAX
+                    final_scale_min = (
+                        final_scale_min if final_scale_min is not None else DEFAULT_SCALE_MIN
+                    )
+                    final_scale_max = (
+                        final_scale_max if final_scale_max is not None else DEFAULT_SCALE_MAX
+                    )
 
             # Rescale values to 0-255
             imgdata.rescale(((final_scale_min, final_scale_max),))
@@ -370,8 +375,7 @@ def get_raster_tile(
 
             # Render to bytes
             return imgdata.render(
-                img_format=img_format.upper().replace("JPG", "JPEG"),
-                **render_options
+                img_format=img_format.upper().replace("JPG", "JPEG"), **render_options
             )
 
     except TileOutsideBounds:
@@ -393,10 +397,7 @@ async def get_raster_tile_async(
     Runs the tile generation in a thread pool to avoid blocking.
     """
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None,
-        lambda: get_raster_tile(cog_url, z, x, y, **kwargs)
-    )
+    return await loop.run_in_executor(None, lambda: get_raster_tile(cog_url, z, x, y, **kwargs))
 
 
 # =============================================================================
@@ -450,8 +451,12 @@ def get_raster_preview(
                     final_scale_min = final_scale_min if final_scale_min is not None else 0
                     final_scale_max = final_scale_max if final_scale_max is not None else 255
                 else:
-                    final_scale_min = final_scale_min if final_scale_min is not None else DEFAULT_SCALE_MIN
-                    final_scale_max = final_scale_max if final_scale_max is not None else DEFAULT_SCALE_MAX
+                    final_scale_min = (
+                        final_scale_min if final_scale_min is not None else DEFAULT_SCALE_MIN
+                    )
+                    final_scale_max = (
+                        final_scale_max if final_scale_max is not None else DEFAULT_SCALE_MAX
+                    )
 
             imgdata.rescale(((final_scale_min, final_scale_max),))
 
@@ -470,8 +475,7 @@ def get_raster_preview(
                     render_options["colormap"] = cmap_data
 
             return imgdata.render(
-                img_format=img_format.upper().replace("JPG", "JPEG"),
-                **render_options
+                img_format=img_format.upper().replace("JPG", "JPEG"), **render_options
             )
 
     except Exception as e:
@@ -486,10 +490,7 @@ async def get_raster_preview_async(
     Async wrapper for get_raster_preview.
     """
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None,
-        lambda: get_raster_preview(cog_url, **kwargs)
-    )
+    return await loop.run_in_executor(None, lambda: get_raster_preview(cog_url, **kwargs))
 
 
 # =============================================================================
@@ -557,8 +558,7 @@ def get_raster_part(
                     render_options["colormap"] = cmap_data
 
             return imgdata.render(
-                img_format=img_format.upper().replace("JPG", "JPEG"),
-                **render_options
+                img_format=img_format.upper().replace("JPG", "JPEG"), **render_options
             )
 
     except Exception as e:
@@ -601,32 +601,32 @@ def get_cog_info(cog_url: str) -> dict[str, Any]:
             # Build result with safe attribute access
             result = {
                 "bounds": geographic_bounds,  # WGS84 bounds for web maps
-                "native_bounds": getattr(info, 'bounds', None),  # Original CRS bounds
-                "crs": str(info.crs) if getattr(info, 'crs', None) else None,
-                "band_metadata": getattr(info, 'band_metadata', []),
-                "band_descriptions": getattr(info, 'band_descriptions', []),
-                "dtype": getattr(info, 'dtype', None),
-                "nodata_type": getattr(info, 'nodata_type', None),
-                "colorinterp": getattr(info, 'colorinterp', None),
-                "count": getattr(info, 'count', None),
-                "band_count": getattr(info, 'count', None),  # Alias for band count
-                "width": getattr(info, 'width', None),
-                "height": getattr(info, 'height', None),
-                "driver": getattr(info, 'driver', None),
+                "native_bounds": getattr(info, "bounds", None),  # Original CRS bounds
+                "crs": str(info.crs) if getattr(info, "crs", None) else None,
+                "band_metadata": getattr(info, "band_metadata", []),
+                "band_descriptions": getattr(info, "band_descriptions", []),
+                "dtype": getattr(info, "dtype", None),
+                "nodata_type": getattr(info, "nodata_type", None),
+                "colorinterp": getattr(info, "colorinterp", None),
+                "count": getattr(info, "count", None),
+                "band_count": getattr(info, "count", None),  # Alias for band count
+                "width": getattr(info, "width", None),
+                "height": getattr(info, "height", None),
+                "driver": getattr(info, "driver", None),
             }
 
             # minzoom/maxzoom may not exist in all rio-tiler versions
             # Try to get from info, otherwise calculate from the reader
-            if hasattr(info, 'minzoom'):
+            if hasattr(info, "minzoom"):
                 result["minzoom"] = info.minzoom
-            elif hasattr(cog, 'minzoom'):
+            elif hasattr(cog, "minzoom"):
                 result["minzoom"] = cog.minzoom
             else:
                 result["minzoom"] = 0
 
-            if hasattr(info, 'maxzoom'):
+            if hasattr(info, "maxzoom"):
                 result["maxzoom"] = info.maxzoom
-            elif hasattr(cog, 'maxzoom'):
+            elif hasattr(cog, "maxzoom"):
                 result["maxzoom"] = cog.maxzoom
             else:
                 result["maxzoom"] = 22

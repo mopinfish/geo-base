@@ -24,8 +24,10 @@ VALID_SCOPES = {"read", "write", "delete", "admin"}
 # Enums
 # =============================================================================
 
+
 class ApiKeyScope(str, Enum):
     """API key permission scopes."""
+
     READ = "read"
     WRITE = "write"
     DELETE = "delete"
@@ -37,7 +39,9 @@ class ApiKeyScope(str, Enum):
         try:
             return cls(value.lower())
         except ValueError:
-            raise ValueError(f"Invalid scope '{value}'. Must be one of: {', '.join(s.value for s in cls)}")
+            raise ValueError(
+                f"Invalid scope '{value}'. Must be one of: {', '.join(s.value for s in cls)}"
+            )
 
     def includes(self, other: "ApiKeyScope") -> bool:
         """Check if this scope includes another scope."""
@@ -52,6 +56,7 @@ class ApiKeyScope(str, Enum):
 
 class ApiKeyEnvironment(str, Enum):
     """API key environment types."""
+
     LIVE = "live"
     TEST = "test"
 
@@ -60,7 +65,10 @@ class ApiKeyEnvironment(str, Enum):
 # Helper Functions
 # =============================================================================
 
-def generate_api_key(environment: ApiKeyEnvironment = ApiKeyEnvironment.LIVE) -> tuple[str, str, str]:
+
+def generate_api_key(
+    environment: ApiKeyEnvironment = ApiKeyEnvironment.LIVE,
+) -> tuple[str, str, str]:
     """
     Generate a new API key.
 
@@ -98,22 +106,33 @@ def mask_api_key(prefix: str) -> str:
 # Request Models
 # =============================================================================
 
+
 class ApiKeyCreate(BaseModel):
     """Model for creating a new API key."""
-    name: str = Field(..., min_length=1, max_length=255, description="Human-readable name for the key")
+
+    name: str = Field(
+        ..., min_length=1, max_length=255, description="Human-readable name for the key"
+    )
     description: Optional[str] = Field(None, max_length=1000, description="Optional description")
     team_id: Optional[str] = Field(None, description="Optional team to associate the key with")
     scopes: List[ApiKeyScope] = Field(
-        default=[ApiKeyScope.READ],
-        description="Permission scopes for this key"
+        default=[ApiKeyScope.READ], description="Permission scopes for this key"
     )
-    rate_limit_per_minute: int = Field(default=60, ge=1, le=10000, description="Requests per minute limit")
-    rate_limit_per_day: int = Field(default=10000, ge=1, le=1000000, description="Requests per day limit")
-    expires_in_days: Optional[int] = Field(None, ge=1, le=365, description="Days until expiration (optional)")
-    environment: ApiKeyEnvironment = Field(default=ApiKeyEnvironment.LIVE, description="Key environment")
+    rate_limit_per_minute: int = Field(
+        default=60, ge=1, le=10000, description="Requests per minute limit"
+    )
+    rate_limit_per_day: int = Field(
+        default=10000, ge=1, le=1000000, description="Requests per day limit"
+    )
+    expires_in_days: Optional[int] = Field(
+        None, ge=1, le=365, description="Days until expiration (optional)"
+    )
+    environment: ApiKeyEnvironment = Field(
+        default=ApiKeyEnvironment.LIVE, description="Key environment"
+    )
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
-    @field_validator('scopes')
+    @field_validator("scopes")
     @classmethod
     def validate_scopes(cls, v: List[ApiKeyScope]) -> List[ApiKeyScope]:
         """Ensure at least one scope is provided."""
@@ -121,8 +140,8 @@ class ApiKeyCreate(BaseModel):
             return [ApiKeyScope.READ]
         return list(set(v))  # Remove duplicates
 
-    @model_validator(mode='after')
-    def validate_rate_limits(self) -> 'ApiKeyCreate':
+    @model_validator(mode="after")
+    def validate_rate_limits(self) -> "ApiKeyCreate":
         """Ensure rate limits are sensible."""
         if self.rate_limit_per_minute * 60 * 24 < self.rate_limit_per_day:
             # This is fine - daily limit is less restrictive
@@ -132,6 +151,7 @@ class ApiKeyCreate(BaseModel):
 
 class ApiKeyUpdate(BaseModel):
     """Model for updating an API key."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=1000)
     scopes: Optional[List[ApiKeyScope]] = None
@@ -140,13 +160,20 @@ class ApiKeyUpdate(BaseModel):
     is_active: Optional[bool] = None
     metadata: Optional[Dict[str, Any]] = None
 
-    @model_validator(mode='after')
-    def check_at_least_one_field(self) -> 'ApiKeyUpdate':
+    @model_validator(mode="after")
+    def check_at_least_one_field(self) -> "ApiKeyUpdate":
         """Ensure at least one field is provided for update."""
         if all(
             getattr(self, field) is None
-            for field in ['name', 'description', 'scopes', 'rate_limit_per_minute',
-                         'rate_limit_per_day', 'is_active', 'metadata']
+            for field in [
+                "name",
+                "description",
+                "scopes",
+                "rate_limit_per_minute",
+                "rate_limit_per_day",
+                "is_active",
+                "metadata",
+            ]
         ):
             raise ValueError("At least one field must be provided for update")
         return self
@@ -154,6 +181,7 @@ class ApiKeyUpdate(BaseModel):
 
 class ApiKeyRevoke(BaseModel):
     """Model for revoking an API key."""
+
     reason: Optional[str] = Field(None, max_length=500, description="Reason for revocation")
 
 
@@ -161,8 +189,10 @@ class ApiKeyRevoke(BaseModel):
 # Response Models
 # =============================================================================
 
+
 class ApiKeyResponse(BaseModel):
     """Response model for API key (without the actual key)."""
+
     id: str
     name: str
     description: Optional[str] = None
@@ -185,8 +215,8 @@ class ApiKeyResponse(BaseModel):
     is_revoked: bool = False
     masked_key: str = ""
 
-    @model_validator(mode='after')
-    def compute_fields(self) -> 'ApiKeyResponse':
+    @model_validator(mode="after")
+    def compute_fields(self) -> "ApiKeyResponse":
         """Compute derived fields.
 
         `expires_at` は DB の TIMESTAMPTZ から tz-aware datetime として復元される
@@ -210,6 +240,7 @@ class ApiKeyResponse(BaseModel):
 
 class ApiKeyCreatedResponse(ApiKeyResponse):
     """Response model when creating a new API key (includes the actual key)."""
+
     key: str = Field(..., description="The full API key - only shown once!")
 
     model_config = {"from_attributes": True}
@@ -217,6 +248,7 @@ class ApiKeyCreatedResponse(ApiKeyResponse):
 
 class ApiKeyListResponse(BaseModel):
     """Response model for listing API keys."""
+
     keys: List[ApiKeyResponse]
     total: int
     page: int = 1
@@ -227,8 +259,10 @@ class ApiKeyListResponse(BaseModel):
 # Usage Statistics Models
 # =============================================================================
 
+
 class ApiKeyUsageDay(BaseModel):
     """Usage statistics for a single day."""
+
     date: str
     requests: int
     errors: int
@@ -237,6 +271,7 @@ class ApiKeyUsageDay(BaseModel):
 
 class ApiKeyUsageStats(BaseModel):
     """Usage statistics for an API key."""
+
     key_id: str
     total_requests: int
     avg_response_time_ms: float
@@ -247,6 +282,7 @@ class ApiKeyUsageStats(BaseModel):
 
 class ApiKeyUsageLogEntry(BaseModel):
     """Single usage log entry."""
+
     id: str
     endpoint: str
     method: str
@@ -258,6 +294,7 @@ class ApiKeyUsageLogEntry(BaseModel):
 
 class ApiKeyUsageLogResponse(BaseModel):
     """Response model for usage logs."""
+
     logs: List[ApiKeyUsageLogEntry]
     total: int
     key_id: str
@@ -267,8 +304,10 @@ class ApiKeyUsageLogResponse(BaseModel):
 # Rate Limit Models
 # =============================================================================
 
+
 class RateLimitStatus(BaseModel):
     """Current rate limit status for an API key."""
+
     key_id: str
     minute_limit: int
     minute_used: int
@@ -278,8 +317,8 @@ class RateLimitStatus(BaseModel):
     day_remaining: int
     is_limited: bool = False
 
-    @model_validator(mode='after')
-    def compute_is_limited(self) -> 'RateLimitStatus':
+    @model_validator(mode="after")
+    def compute_is_limited(self) -> "RateLimitStatus":
         """Check if rate limited."""
         self.is_limited = self.minute_remaining <= 0 or self.day_remaining <= 0
         return self
@@ -289,14 +328,19 @@ class RateLimitStatus(BaseModel):
 # Validation Models
 # =============================================================================
 
+
 class ApiKeyValidationRequest(BaseModel):
     """Request to validate an API key."""
+
     key: str = Field(..., min_length=20, description="The API key to validate")
-    required_scope: Optional[ApiKeyScope] = Field(None, description="Required scope for the operation")
+    required_scope: Optional[ApiKeyScope] = Field(
+        None, description="Required scope for the operation"
+    )
 
 
 class ApiKeyValidationResponse(BaseModel):
     """Response from API key validation."""
+
     valid: bool
     key_id: Optional[str] = None
     user_id: Optional[str] = None

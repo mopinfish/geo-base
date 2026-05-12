@@ -1,4 +1,5 @@
 """Tests for api_key_auth module."""
+
 import hashlib
 from datetime import datetime, timedelta, timezone
 
@@ -12,10 +13,18 @@ from lib.auth.errors import RateLimited
 def make_api_key(db_conn, clean_auth_tables):
     """API キーを発行するファクトリ"""
     import secrets
+
     created_keys = []
 
-    def _make(scopes=None, team_id=None, rate_limit_per_minute=60, rate_limit_per_day=10000,
-              is_active=True, expires_at=None, revoked_at=None):
+    def _make(
+        scopes=None,
+        team_id=None,
+        rate_limit_per_minute=60,
+        rate_limit_per_day=10000,
+        is_active=True,
+        expires_at=None,
+        revoked_at=None,
+    ):
         scopes = scopes or ["read"]
         random_part = secrets.token_urlsafe(32)
         full_key = f"gb_test_{random_part}"
@@ -31,8 +40,19 @@ def make_api_key(db_conn, clean_auth_tables):
                        rate_limit_per_minute, rate_limit_per_day, is_active, expires_at, revoked_at)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    RETURNING id""",
-                ("test", prefix, key_hash, user_id, team_id, scopes,
-                 rate_limit_per_minute, rate_limit_per_day, is_active, expires_at, revoked_at),
+                (
+                    "test",
+                    prefix,
+                    key_hash,
+                    user_id,
+                    team_id,
+                    scopes,
+                    rate_limit_per_minute,
+                    rate_limit_per_day,
+                    is_active,
+                    expires_at,
+                    revoked_at,
+                ),
             )
             key_id = cur.fetchone()[0]
         db_conn.commit()

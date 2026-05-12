@@ -180,12 +180,8 @@ def api_error(
         )
     """
     if not isinstance(code, ErrorCode):
-        raise TypeError(
-            f"api_error code must be ErrorCode enum, got {type(code).__name__}"
-        )
-    envelope: dict[str, Any] = {
-        ENVELOPE_MARKER_KEY: {"code": code.value, "message": message}
-    }
+        raise TypeError(f"api_error code must be ErrorCode enum, got {type(code).__name__}")
+    envelope: dict[str, Any] = {ENVELOPE_MARKER_KEY: {"code": code.value, "message": message}}
     if details:
         envelope[ENVELOPE_MARKER_KEY]["details"] = details
     return HTTPException(status_code=status_code, detail=envelope)

@@ -19,6 +19,7 @@ from fix_bounds import (
 # Bounds Validation Tests
 # ============================================================================
 
+
 class TestValidateBounds:
     """Tests for bounds validation."""
 
@@ -76,13 +77,13 @@ class TestValidateBounds:
 
     def test_invalid_bounds_nan(self):
         """Test bounds with NaN."""
-        is_valid, error = validate_bounds([float('nan'), 35.5, 140.0, 36.0])
+        is_valid, error = validate_bounds([float("nan"), 35.5, 140.0, 36.0])
         assert is_valid is False
         assert "NaN" in error
 
     def test_invalid_bounds_infinity(self):
         """Test bounds with infinity."""
-        is_valid, error = validate_bounds([float('inf'), 35.5, 140.0, 36.0])
+        is_valid, error = validate_bounds([float("inf"), 35.5, 140.0, 36.0])
         assert is_valid is False
         assert "infinite" in error
 
@@ -90,6 +91,7 @@ class TestValidateBounds:
 # ============================================================================
 # Center Validation Tests
 # ============================================================================
+
 
 class TestValidateCenter:
     """Tests for center validation."""
@@ -130,13 +132,13 @@ class TestValidateCenter:
 
     def test_invalid_center_nan(self):
         """Test center with NaN."""
-        is_valid, error = validate_center([float('nan'), 35.7])
+        is_valid, error = validate_center([float("nan"), 35.7])
         assert is_valid is False
         assert "NaN" in error
 
     def test_invalid_center_infinity(self):
         """Test center with infinity."""
-        is_valid, error = validate_center([float('inf'), 35.7])
+        is_valid, error = validate_center([float("inf"), 35.7])
         assert is_valid is False
         assert "infinite" in error
 
@@ -144,6 +146,7 @@ class TestValidateCenter:
 # ============================================================================
 # Center in Bounds Tests
 # ============================================================================
+
 
 class TestIsCenterInBounds:
     """Tests for center-in-bounds check."""
@@ -206,6 +209,7 @@ class TestIsCenterInBounds:
 # Data Class Tests
 # ============================================================================
 
+
 class TestBoundsIssue:
     """Tests for BoundsIssue data class."""
 
@@ -215,7 +219,7 @@ class TestBoundsIssue:
             tileset_id="test-id",
             tileset_name="Test Tileset",
             issue_type="invalid_bounds",
-            description="west out of range"
+            description="west out of range",
         )
         assert issue.tileset_id == "test-id"
         assert issue.issue_type == "invalid_bounds"
@@ -229,7 +233,7 @@ class TestBoundsIssue:
             issue_type="bounds_mismatch",
             description="Bounds differ from calculated",
             current_value=str(sample_bounds_tokyo),
-            suggested_value="[139.4, 35.4, 140.1, 36.1]"
+            suggested_value="[139.4, 35.4, 140.1, 36.1]",
         )
         assert issue.current_value is not None
         assert issue.suggested_value is not None
@@ -246,7 +250,7 @@ class TestFixResult:
             action="applied",
             old_bounds=sample_bounds_tokyo,
             new_bounds=[139.4, 35.4, 140.1, 36.1],
-            feature_count=100
+            feature_count=100,
         )
         assert result.success is True
         assert result.error is None
@@ -258,7 +262,7 @@ class TestFixResult:
             tileset_name="Test Tileset",
             action="applied",
             success=False,
-            error="Database error"
+            error="Database error",
         )
         assert result.success is False
         assert result.error == "Database error"
@@ -277,17 +281,14 @@ class TestScanReport:
     def test_report_with_issues(self):
         """Test report with issues."""
         report = ScanReport(
-            total_tilesets=10,
-            vector_tilesets=5,
-            raster_tilesets=3,
-            pmtiles_tilesets=2
+            total_tilesets=10, vector_tilesets=5, raster_tilesets=3, pmtiles_tilesets=2
         )
 
         issue = BoundsIssue(
             tileset_id="test-id",
             tileset_name="Test",
             issue_type="invalid_bounds",
-            description="test"
+            description="test",
         )
         report.issues.append(issue)
 
@@ -299,6 +300,7 @@ class TestScanReport:
 # Integration Tests (require database)
 # ============================================================================
 
+
 class TestDatabaseIntegration:
     """Integration tests requiring database connection."""
 
@@ -307,11 +309,7 @@ class TestDatabaseIntegration:
         """Test scanning tilesets in dry-run mode."""
         from fix_bounds import scan_and_fix
 
-        report = scan_and_fix(
-            database_url=database_url,
-            dry_run=True,
-            fix_issues=True
-        )
+        report = scan_and_fix(database_url=database_url, dry_run=True, fix_issues=True)
 
         assert report.total_tilesets >= 0
         # No changes should be made in dry-run

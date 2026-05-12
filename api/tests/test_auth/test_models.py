@@ -1,4 +1,5 @@
 """Tests for auth.models module."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -13,9 +14,14 @@ class TestUser:
         assert u.email_verified is False
 
     def test_full_construction(self):
-        u = User(id="abc", email="x@y.com", role="authenticated",
-                 name="Alice", email_verified=True,
-                 app_metadata={"provider": "local"})
+        u = User(
+            id="abc",
+            email="x@y.com",
+            role="authenticated",
+            name="Alice",
+            email_verified=True,
+            app_metadata={"provider": "local"},
+        )
         assert u.email == "x@y.com"
         assert u.app_metadata == {"provider": "local"}
 

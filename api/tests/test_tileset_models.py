@@ -23,6 +23,7 @@ from lib.models.tileset import (
 # Helper Function Tests
 # ============================================================================
 
+
 class TestBoundsValidation:
     """Tests for bounds validation helper."""
 
@@ -116,16 +117,13 @@ class TestCenterValidation:
 # TilesetCreate Model Tests
 # ============================================================================
 
+
 class TestTilesetCreate:
     """Tests for TilesetCreate model."""
 
     def test_valid_minimal(self):
         """Test minimal valid tileset creation."""
-        tileset = TilesetCreate(
-            name="Test Tileset",
-            type="vector",
-            format="pbf"
-        )
+        tileset = TilesetCreate(name="Test Tileset", type="vector", format="pbf")
         assert tileset.name == "Test Tileset"
         assert tileset.type == "vector"
         assert tileset.format == "pbf"
@@ -169,10 +167,7 @@ class TestTilesetCreate:
         """Test invalid bounds."""
         with pytest.raises(ValidationError) as exc_info:
             TilesetCreate(
-                name="Test",
-                type="vector",
-                format="pbf",
-                bounds=invalid_bounds_south_greater
+                name="Test", type="vector", format="pbf", bounds=invalid_bounds_south_greater
             )
         assert "south" in str(exc_info.value)
 
@@ -180,32 +175,20 @@ class TestTilesetCreate:
         """Test invalid center."""
         with pytest.raises(ValidationError) as exc_info:
             TilesetCreate(
-                name="Test",
-                type="vector",
-                format="pbf",
-                center=invalid_center_out_of_range
+                name="Test", type="vector", format="pbf", center=invalid_center_out_of_range
             )
         assert "longitude" in str(exc_info.value)
 
     def test_min_zoom_greater_than_max_zoom(self):
         """Test that min_zoom > max_zoom is rejected."""
         with pytest.raises(ValidationError) as exc_info:
-            TilesetCreate(
-                name="Test",
-                type="vector",
-                format="pbf",
-                min_zoom=15,
-                max_zoom=10
-            )
+            TilesetCreate(name="Test", type="vector", format="pbf", min_zoom=15, max_zoom=10)
         assert "min_zoom" in str(exc_info.value) and "max_zoom" in str(exc_info.value)
 
     def test_bounds_normalized_to_floats(self):
         """Test that bounds are normalized to floats."""
         tileset = TilesetCreate(
-            name="Test",
-            type="vector",
-            format="pbf",
-            bounds=[139, 35, 140, 36]  # Integers
+            name="Test", type="vector", format="pbf", bounds=[139, 35, 140, 36]  # Integers
         )
         assert tileset.bounds == [139.0, 35.0, 140.0, 36.0]
         assert all(isinstance(x, float) for x in tileset.bounds)
@@ -213,10 +196,7 @@ class TestTilesetCreate:
     def test_center_normalized_to_floats(self):
         """Test that center is normalized to floats."""
         tileset = TilesetCreate(
-            name="Test",
-            type="vector",
-            format="pbf",
-            center=[139, 35]  # Integers
+            name="Test", type="vector", format="pbf", center=[139, 35]  # Integers
         )
         assert tileset.center == [139.0, 35.0]
         assert all(isinstance(x, float) for x in tileset.center)
@@ -235,6 +215,7 @@ class TestTilesetCreate:
 # ============================================================================
 # TilesetUpdate Model Tests
 # ============================================================================
+
 
 class TestTilesetUpdate:
     """Tests for TilesetUpdate model."""
@@ -291,6 +272,7 @@ class TestTilesetUpdate:
 # TilesetResponse Model Tests
 # ============================================================================
 
+
 class TestTilesetResponse:
     """Tests for TilesetResponse model."""
 
@@ -303,7 +285,7 @@ class TestTilesetResponse:
             format="pbf",
             min_zoom=0,
             max_zoom=22,
-            is_public=True
+            is_public=True,
         )
         assert response.id == "123e4567-e89b-12d3-a456-426614174000"
         assert response.name == "Test Tileset"
@@ -325,7 +307,7 @@ class TestTilesetResponse:
             user_id="user-uuid",
             metadata={"key": "value"},
             created_at="2024-01-01T00:00:00Z",
-            updated_at="2024-01-02T00:00:00Z"
+            updated_at="2024-01-02T00:00:00Z",
         )
         assert response.bounds == sample_bounds_tokyo
         assert response.metadata == {"key": "value"}

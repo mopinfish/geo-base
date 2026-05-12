@@ -1,4 +1,5 @@
 """Tests for auth.email_backends.templates."""
+
 from datetime import datetime, timezone
 
 from lib.auth.email_backends.templates import (

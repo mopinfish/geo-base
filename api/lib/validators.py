@@ -72,6 +72,7 @@ LAT_MIN, LAT_MAX = -90.0, 90.0
 # Coordinate Validation
 # ============================================================
 
+
 def validate_longitude(value: Any, field_name: str = "longitude") -> ValidationResult:
     """
     Validate longitude value (-180 to 180).
@@ -128,10 +129,7 @@ def validate_latitude(value: Any, field_name: str = "latitude") -> ValidationRes
     return ValidationResult(valid=True, value=lat)
 
 
-def validate_coordinate_pair(
-    coords: Any,
-    field_name: str = "coordinate"
-) -> ValidationResult:
+def validate_coordinate_pair(coords: Any, field_name: str = "coordinate") -> ValidationResult:
     """
     Validate a coordinate pair [longitude, latitude].
 
@@ -171,10 +169,8 @@ def validate_coordinate_pair(
 # Bounding Box Validation
 # ============================================================
 
-def validate_bounds(
-    bounds: Any,
-    field_name: str = "bounds"
-) -> ValidationResult:
+
+def validate_bounds(bounds: Any, field_name: str = "bounds") -> ValidationResult:
     """
     Validate a bounding box [west, south, east, north].
 
@@ -247,10 +243,7 @@ def validate_bounds(
     return result
 
 
-def validate_center(
-    center: Any,
-    field_name: str = "center"
-) -> ValidationResult:
+def validate_center(center: Any, field_name: str = "center") -> ValidationResult:
     """
     Validate a center point [longitude, latitude] or [longitude, latitude, zoom].
 
@@ -306,10 +299,9 @@ def validate_center(
 # GeoJSON Geometry Validation
 # ============================================================
 
+
 def validate_geometry(
-    geometry: Any,
-    field_name: str = "geometry",
-    check_coordinates: bool = True
+    geometry: Any, field_name: str = "geometry", check_coordinates: bool = True
 ) -> ValidationResult:
     """
     Validate a GeoJSON geometry object.
@@ -371,9 +363,7 @@ def validate_geometry(
 
 
 def _validate_geometry_collection(
-    geometry: dict,
-    field_name: str,
-    check_coordinates: bool
+    geometry: dict, field_name: str, check_coordinates: bool
 ) -> ValidationResult:
     """Validate a GeometryCollection."""
     geometries = geometry.get("geometries")
@@ -402,10 +392,7 @@ def _validate_geometry_collection(
 
 
 def _validate_coordinates(
-    coords: Any,
-    geom_type: str,
-    field_name: str,
-    check_values: bool
+    coords: Any, geom_type: str, field_name: str, check_values: bool
 ) -> ValidationResult:
     """Validate coordinate structure based on geometry type."""
 
@@ -435,11 +422,7 @@ def _validate_coordinates(
     return result
 
 
-def _validate_point_coords(
-    coords: Any,
-    field_name: str,
-    check_values: bool
-) -> ValidationResult:
+def _validate_point_coords(coords: Any, field_name: str, check_values: bool) -> ValidationResult:
     """Validate Point coordinates [lng, lat] or [lng, lat, alt]."""
     if not isinstance(coords, (list, tuple)):
         return ValidationResult(
@@ -466,9 +449,7 @@ def _validate_point_coords(
 
 
 def _validate_linestring_coords(
-    coords: Any,
-    field_name: str,
-    check_values: bool
+    coords: Any, field_name: str, check_values: bool
 ) -> ValidationResult:
     """Validate LineString coordinates [[lng, lat], ...]."""
     if not isinstance(coords, list):
@@ -496,11 +477,7 @@ def _validate_linestring_coords(
     return result
 
 
-def _validate_polygon_coords(
-    coords: Any,
-    field_name: str,
-    check_values: bool
-) -> ValidationResult:
+def _validate_polygon_coords(coords: Any, field_name: str, check_values: bool) -> ValidationResult:
     """Validate Polygon coordinates [[[lng, lat], ...], ...]."""
     if not isinstance(coords, list):
         return ValidationResult(
@@ -547,9 +524,7 @@ def _validate_polygon_coords(
 
 
 def _validate_multipoint_coords(
-    coords: Any,
-    field_name: str,
-    check_values: bool
+    coords: Any, field_name: str, check_values: bool
 ) -> ValidationResult:
     """Validate MultiPoint coordinates [[lng, lat], ...]."""
     if not isinstance(coords, list):
@@ -569,9 +544,7 @@ def _validate_multipoint_coords(
 
 
 def _validate_multilinestring_coords(
-    coords: Any,
-    field_name: str,
-    check_values: bool
+    coords: Any, field_name: str, check_values: bool
 ) -> ValidationResult:
     """Validate MultiLineString coordinates [[[lng, lat], ...], ...]."""
     if not isinstance(coords, list):
@@ -583,7 +556,9 @@ def _validate_multilinestring_coords(
     result = ValidationResult(valid=True)
 
     for i, line in enumerate(coords):
-        line_result = _validate_linestring_coords(line, f"{field_name} MultiLineString[{i}]", check_values)
+        line_result = _validate_linestring_coords(
+            line, f"{field_name} MultiLineString[{i}]", check_values
+        )
         if not line_result.valid:
             for error in line_result.errors or [line_result.error]:
                 result.add_error(error)
@@ -592,9 +567,7 @@ def _validate_multilinestring_coords(
 
 
 def _validate_multipolygon_coords(
-    coords: Any,
-    field_name: str,
-    check_values: bool
+    coords: Any, field_name: str, check_values: bool
 ) -> ValidationResult:
     """Validate MultiPolygon coordinates [[[[lng, lat], ...], ...], ...]."""
     if not isinstance(coords, list):
@@ -606,7 +579,9 @@ def _validate_multipolygon_coords(
     result = ValidationResult(valid=True)
 
     for i, polygon in enumerate(coords):
-        poly_result = _validate_polygon_coords(polygon, f"{field_name} MultiPolygon[{i}]", check_values)
+        poly_result = _validate_polygon_coords(
+            polygon, f"{field_name} MultiPolygon[{i}]", check_values
+        )
         if not poly_result.valid:
             for error in poly_result.errors or [poly_result.error]:
                 result.add_error(error)
@@ -619,10 +594,9 @@ def _validate_multipolygon_coords(
 # GeoJSON Feature Validation
 # ============================================================
 
+
 def validate_feature(
-    feature: Any,
-    field_name: str = "feature",
-    check_coordinates: bool = True
+    feature: Any, field_name: str = "feature", check_coordinates: bool = True
 ) -> ValidationResult:
     """
     Validate a GeoJSON Feature object.
@@ -673,7 +647,7 @@ def validate_feature_collection(
     fc: Any,
     field_name: str = "featureCollection",
     check_coordinates: bool = True,
-    max_features: int = 10000
+    max_features: int = 10000,
 ) -> ValidationResult:
     """
     Validate a GeoJSON FeatureCollection object.
@@ -734,10 +708,9 @@ def validate_feature_collection(
 # Database-Level Validation (PostGIS)
 # ============================================================
 
+
 def validate_geometry_with_postgis(
-    geometry_json: str,
-    conn,
-    fix_invalid: bool = False
+    geometry_json: str, conn, fix_invalid: bool = False
 ) -> ValidationResult:
     """
     Validate geometry using PostGIS ST_IsValid.
@@ -795,7 +768,9 @@ def validate_geometry_with_postgis(
                     fixed_row = cur.fetchone()
 
                     if fixed_row and fixed_row[1]:
-                        result.add_warning(f"Geometry was invalid ({reason}), fixed with ST_MakeValid")
+                        result.add_warning(
+                            f"Geometry was invalid ({reason}), fixed with ST_MakeValid"
+                        )
                         result.value = json.loads(fixed_row[0])
                     else:
                         result.add_error(f"Invalid geometry: {reason} (could not be fixed)")
@@ -812,8 +787,7 @@ def validate_geometry_with_postgis(
 
 
 def calculate_bounds_from_geometry(
-    geometry_json: str,
-    conn
+    geometry_json: str, conn
 ) -> Optional[Tuple[float, float, float, float]]:
     """
     Calculate bounding box from a geometry using PostGIS.
@@ -848,10 +822,7 @@ def calculate_bounds_from_geometry(
     return None
 
 
-def calculate_centroid_from_geometry(
-    geometry_json: str,
-    conn
-) -> Optional[Tuple[float, float]]:
+def calculate_centroid_from_geometry(geometry_json: str, conn) -> Optional[Tuple[float, float]]:
     """
     Calculate centroid from a geometry using PostGIS.
 
@@ -887,10 +858,9 @@ def calculate_centroid_from_geometry(
 # Bulk Validation Utilities
 # ============================================================
 
+
 def validate_features_batch(
-    features: List[dict],
-    check_coordinates: bool = True,
-    max_errors: int = 100
+    features: List[dict], check_coordinates: bool = True, max_errors: int = 100
 ) -> Tuple[List[dict], List[dict]]:
     """
     Validate a batch of GeoJSON features.
@@ -912,12 +882,14 @@ def validate_features_batch(
         if result.valid:
             valid_features.append(feature)
         else:
-            invalid_features.append({
-                "index": i,
-                "feature": feature,
-                "errors": result.errors or [result.error],
-                "warnings": result.warnings,
-            })
+            invalid_features.append(
+                {
+                    "index": i,
+                    "feature": feature,
+                    "errors": result.errors or [result.error],
+                    "warnings": result.warnings,
+                }
+            )
 
             if len(invalid_features) >= max_errors:
                 break
@@ -928,6 +900,7 @@ def validate_features_batch(
 # ============================================================
 # Convenience Functions
 # ============================================================
+
 
 def is_valid_geometry(geometry: dict) -> bool:
     """Quick check if a geometry is structurally valid."""

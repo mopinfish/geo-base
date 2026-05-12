@@ -76,6 +76,7 @@ def safe_json_parse(value: Any) -> Any:
 
 class COGUploadResponse(BaseModel):
     """Response model for COG upload."""
+
     id: str
     tileset_id: str
     type: str = "cog"
@@ -94,6 +95,7 @@ class COGUploadResponse(BaseModel):
 
 class PMTilesUploadResponse(BaseModel):
     """Response model for PMTiles upload (Issue #101)."""
+
     id: str
     tileset_id: str
     type: str = "pmtiles"
@@ -157,25 +159,27 @@ def list_datasources(
                 )
 
                 for row in cur.fetchall():
-                    datasources.append({
-                        "id": str(row[0]),
-                        "tileset_id": str(row[1]),
-                        "type": "pmtiles",
-                        "url": row[2],
-                        "storage_provider": row[3],
-                        "tile_type": row[4],
-                        "compression": row[5],
-                        "min_zoom": row[6],
-                        "max_zoom": row[7],
-                        "bounds": safe_json_parse(row[8]),
-                        "center": safe_json_parse(row[9]),
-                        "metadata": safe_json_parse(row[10]),
-                        "created_at": row[11].isoformat() if row[11] else None,
-                        "updated_at": row[12].isoformat() if row[12] else None,
-                        "tileset_name": row[13],
-                        "is_public": row[14],
-                        "user_id": str(row[15]) if row[15] else None,
-                    })
+                    datasources.append(
+                        {
+                            "id": str(row[0]),
+                            "tileset_id": str(row[1]),
+                            "type": "pmtiles",
+                            "url": row[2],
+                            "storage_provider": row[3],
+                            "tile_type": row[4],
+                            "compression": row[5],
+                            "min_zoom": row[6],
+                            "max_zoom": row[7],
+                            "bounds": safe_json_parse(row[8]),
+                            "center": safe_json_parse(row[9]),
+                            "metadata": safe_json_parse(row[10]),
+                            "created_at": row[11].isoformat() if row[11] else None,
+                            "updated_at": row[12].isoformat() if row[12] else None,
+                            "tileset_name": row[13],
+                            "is_public": row[14],
+                            "user_id": str(row[15]) if row[15] else None,
+                        }
+                    )
 
             # Get COG sources
             if type is None or type == "cog":
@@ -194,23 +198,25 @@ def list_datasources(
                 )
 
                 for row in cur.fetchall():
-                    datasources.append({
-                        "id": str(row[0]),
-                        "tileset_id": str(row[1]),
-                        "type": "cog",
-                        "url": row[2],
-                        "storage_provider": row[3],
-                        "band_count": row[4],
-                        "native_crs": row[5],
-                        "min_zoom": row[6],
-                        "max_zoom": row[7],
-                        "metadata": safe_json_parse(row[8]),
-                        "created_at": row[9].isoformat() if row[9] else None,
-                        "updated_at": row[10].isoformat() if row[10] else None,
-                        "tileset_name": row[11],
-                        "is_public": row[12],
-                        "user_id": str(row[13]) if row[13] else None,
-                    })
+                    datasources.append(
+                        {
+                            "id": str(row[0]),
+                            "tileset_id": str(row[1]),
+                            "type": "cog",
+                            "url": row[2],
+                            "storage_provider": row[3],
+                            "band_count": row[4],
+                            "native_crs": row[5],
+                            "min_zoom": row[6],
+                            "max_zoom": row[7],
+                            "metadata": safe_json_parse(row[8]),
+                            "created_at": row[9].isoformat() if row[9] else None,
+                            "updated_at": row[10].isoformat() if row[10] else None,
+                            "tileset_name": row[11],
+                            "is_public": row[12],
+                            "user_id": str(row[13]) if row[13] else None,
+                        }
+                    )
 
         # Sort by created_at descending
         datasources.sort(key=lambda x: x.get("created_at") or "", reverse=True)
@@ -533,8 +539,7 @@ async def _create_pmtiles_datasource(datasource: DatasourceCreate, metadata_json
 
     # Update parent tileset with bounds/center/zoom if available
     _update_tileset_from_metadata(
-        cur, datasource.tileset_id,
-        source_bounds, source_center, source_min_zoom, source_max_zoom
+        cur, datasource.tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
     )
 
     conn.commit()
@@ -592,7 +597,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
                     source_center = [
                         (cog_bounds[0] + cog_bounds[2]) / 2,
                         (cog_bounds[1] + cog_bounds[3]) / 2,
-                        10
+                        10,
                     ]
                 source_min_zoom = cog_info.get("minzoom")
                 source_max_zoom = cog_info.get("maxzoom")
@@ -638,8 +643,7 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
 
     # Update parent tileset with bounds/center/zoom if available
     _update_tileset_from_metadata(
-        cur, datasource.tileset_id,
-        source_bounds, source_center, source_min_zoom, source_max_zoom
+        cur, datasource.tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
     )
 
     conn.commit()
@@ -663,7 +667,9 @@ async def _create_cog_datasource(datasource: DatasourceCreate, metadata_json, co
     }
 
 
-def _update_tileset_from_metadata(cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom):
+def _update_tileset_from_metadata(
+    cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
+):
     """Update parent tileset with metadata from datasource."""
     if source_bounds or source_center or source_min_zoom is not None or source_max_zoom is not None:
         update_parts = []
@@ -855,7 +861,7 @@ async def upload_cog(
                         source_center = [
                             (cog_bounds[0] + cog_bounds[2]) / 2,
                             (cog_bounds[1] + cog_bounds[3]) / 2,
-                            10
+                            10,
                         ]
                     source_min_zoom = cog_info.get("minzoom")
                     source_max_zoom = cog_info.get("maxzoom")
@@ -902,8 +908,7 @@ async def upload_cog(
 
             # Update parent tileset with bounds/center/zoom
             _update_tileset_from_metadata(
-                cur, tileset_id,
-                source_bounds, source_center, source_min_zoom, source_max_zoom
+                cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
             )
 
             conn.commit()
@@ -1036,7 +1041,9 @@ async def upload_pmtiles(
         #   - 空 / dot-only fallback で `data.pmtiles` に
         # ファイル種別 (PMTiles magic) は上流の validate_pmtiles_file で確認済み。
         # `pmtiles/<tileset_id>/<YYYYMMDD>_<uuid8>_<filename>` で衝突回避。
-        original_filename = (file.filename or "upload.pmtiles").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        original_filename = (
+            (file.filename or "upload.pmtiles").rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        )
         safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", original_filename)
         if not safe_filename or safe_filename.startswith("."):
             safe_filename = "data.pmtiles"
@@ -1113,8 +1120,7 @@ async def upload_pmtiles(
             row = cur.fetchone()
 
             _update_tileset_from_metadata(
-                cur, tileset_id,
-                source_bounds, source_center, source_min_zoom, source_max_zoom
+                cur, tileset_id, source_bounds, source_center, source_min_zoom, source_max_zoom
             )
 
             conn.commit()

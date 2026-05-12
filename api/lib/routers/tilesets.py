@@ -42,16 +42,13 @@ def get_base_url(request: Request) -> str:
     """
     # Get protocol - prefer x-forwarded-proto, also check fly-forwarded-proto
     forwarded_proto = (
-        request.headers.get("x-forwarded-proto") or
-        request.headers.get("fly-forwarded-proto") or
-        "http"
+        request.headers.get("x-forwarded-proto")
+        or request.headers.get("fly-forwarded-proto")
+        or "http"
     )
 
     # Get host - prefer x-forwarded-host, fallback to host header
-    forwarded_host = (
-        request.headers.get("x-forwarded-host") or
-        request.headers.get("host")
-    )
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
 
     if forwarded_host:
         # Force HTTPS for non-localhost hosts
@@ -63,7 +60,11 @@ def get_base_url(request: Request) -> str:
     base_url = str(request.base_url).rstrip("/")
 
     # Force HTTPS for production URLs
-    if base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
+    if (
+        base_url.startswith("http://")
+        and "localhost" not in base_url
+        and "127.0.0.1" not in base_url
+    ):
         base_url = base_url.replace("http://", "https://", 1)
 
     return base_url
@@ -79,7 +80,9 @@ def list_tilesets(
     conn=Depends(get_connection),
     user: Optional[User] = Depends(get_current_user),
     include_private: bool = Query(False, description="Include private tilesets (requires auth)"),
-    type: Optional[str] = Query(None, description="Filter by tileset type (vector, raster, pmtiles)"),
+    type: Optional[str] = Query(
+        None, description="Filter by tileset type (vector, raster, pmtiles)"
+    ),
 ):
     """
     List all accessible tilesets.
@@ -246,7 +249,9 @@ def get_tileset(
 def get_tileset_tilejson(
     tileset_id: str,
     request: Request,
-    layer: Optional[str] = Query(None, description="Filter to specific layer name for QGIS compatibility"),
+    layer: Optional[str] = Query(
+        None, description="Filter to specific layer name for QGIS compatibility"
+    ),
     conn=Depends(get_connection),
     auth: Optional[AuthContext] = Depends(get_auth_context_optional),
 ):
@@ -350,8 +355,19 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
             details={"tileset_id": tileset_id},
         )
 
-    (name, description, min_zoom, max_zoom, attribution,
-     xmin, ymin, xmax, ymax, center_x, center_y) = row
+    (
+        name,
+        description,
+        min_zoom,
+        max_zoom,
+        attribution,
+        xmin,
+        ymin,
+        xmax,
+        ymax,
+        center_x,
+        center_y,
+    ) = row
 
     # Get vector_layers information from features
     vector_layers = []
@@ -412,23 +428,27 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
                     else:
                         fields[key] = "String"
 
-            vector_layers.append({
-                "id": db_layer_name,
-                "fields": fields,
-                "minzoom": min_zoom or 0,
-                "maxzoom": max_zoom or 22,
-                "description": ""
-            })
+            vector_layers.append(
+                {
+                    "id": db_layer_name,
+                    "fields": fields,
+                    "minzoom": min_zoom or 0,
+                    "maxzoom": max_zoom or 22,
+                    "description": "",
+                }
+            )
 
     if not vector_layers:
         db_layer_names = ["default"]
-        vector_layers.append({
-            "id": "default",
-            "fields": {},
-            "minzoom": min_zoom or 0,
-            "maxzoom": max_zoom or 22,
-            "description": ""
-        })
+        vector_layers.append(
+            {
+                "id": "default",
+                "fields": {},
+                "minzoom": min_zoom or 0,
+                "maxzoom": max_zoom or 22,
+                "description": "",
+            }
+        )
 
     # Build tiles URL
     if layer:
@@ -485,8 +505,18 @@ def _get_pmtiles_tilejson(tileset_id: str, conn, base_url: str):
             details={"tileset_id": tileset_id},
         )
 
-    (pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers,
-     name, description, attribution) = row
+    (
+        pmtiles_url,
+        tile_type,
+        min_zoom,
+        max_zoom,
+        bounds,
+        center,
+        layers,
+        name,
+        description,
+        attribution,
+    ) = row
 
     metadata = {
         "tile_type": tile_type or "mvt",
@@ -532,8 +562,21 @@ def _get_raster_tilejson(tileset_id: str, conn, base_url: str):
             details={"tileset_id": tileset_id},
         )
 
-    (name, description, tile_format, min_zoom, max_zoom, attribution, cog_url,
-     xmin, ymin, xmax, ymax, center_x, center_y) = row
+    (
+        name,
+        description,
+        tile_format,
+        min_zoom,
+        max_zoom,
+        attribution,
+        cog_url,
+        xmin,
+        ymin,
+        xmax,
+        ymax,
+        center_x,
+        center_y,
+    ) = row
 
     bounds = None
     if xmin is not None and ymin is not None and xmax is not None and ymax is not None:
@@ -706,9 +749,7 @@ def calculate_tileset_bounds(
                 )
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-            if not check_tileset_write_access_v2(
-                conn, tileset_for_access, ctx, "update"
-            ):
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "update"):
                 raise api_error(
                     403,
                     ErrorCode.TILESET_FORBIDDEN,
@@ -830,9 +871,7 @@ def update_tileset(
                 )
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-            if not check_tileset_write_access_v2(
-                conn, tileset_for_access, ctx, "update"
-            ):
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "update"):
                 raise api_error(
                     403,
                     ErrorCode.TILESET_FORBIDDEN,
@@ -863,9 +902,7 @@ def update_tileset(
                 # f-string 連結だと NaN/Infinity で SQL 構文エラー / 将来の型変更時に
                 # インジェクション経路となるため、プレースホルダで bind する
                 west, south, east, north = tileset.bounds
-                updates.append(
-                    "bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
-                )
+                updates.append("bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326)")
                 params.extend([west, south, east, north])
 
             if tileset.center is not None and len(tileset.center) >= 2:
@@ -981,9 +1018,7 @@ def delete_tileset(
                 )
 
             tileset_for_access = {"id": tileset_id, "user_id": row[1]}
-            if not check_tileset_write_access_v2(
-                conn, tileset_for_access, ctx, "delete"
-            ):
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
                 raise api_error(
                     403,
                     ErrorCode.TILESET_FORBIDDEN,

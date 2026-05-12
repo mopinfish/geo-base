@@ -1,4 +1,5 @@
 """Tests for auth.email_backends."""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,9 +47,12 @@ class TestSMTPBackend:
             mock_smtp.return_value.__enter__.return_value = mock_server
 
             b = SMTPEmailBackend(
-                host="smtp.example.com", port=587,
-                username="user", password="pass",
-                from_addr="no-reply@example.com", use_tls=True,
+                host="smtp.example.com",
+                port=587,
+                username="user",
+                password="pass",
+                from_addr="no-reply@example.com",
+                use_tls=True,
             )
             await b.send("to@example.com", "Hi", "Body")
 

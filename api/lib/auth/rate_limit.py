@@ -2,6 +2,7 @@
 
 email または IP の **どちらか** が閾値超過でロック。
 """
+
 import os
 from typing import Optional
 

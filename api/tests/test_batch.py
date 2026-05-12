@@ -254,8 +254,7 @@ class TestExportFeaturesCsv:
         conn, cursor = mock_conn
         # Modify sample to have None for WKT
         rows_no_wkt = [
-            (row[0], row[1], row[2], row[3], row[4], None, row[6])
-            for row in sample_csv_rows
+            (row[0], row[1], row[2], row[3], row[4], None, row[6]) for row in sample_csv_rows
         ]
         cursor.fetchall.return_value = rows_no_wkt
 

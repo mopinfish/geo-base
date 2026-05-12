@@ -78,15 +78,14 @@ class RetryConfig:
         retryable_exceptions: Tuple of exception types to retry on
         on_retry: Optional callback function called on each retry
     """
+
     max_attempts: int = field(
         default_factory=lambda: int(os.environ.get("RETRY_MAX_ATTEMPTS", "3"))
     )
     base_delay: float = field(
         default_factory=lambda: float(os.environ.get("RETRY_BASE_DELAY", "0.5"))
     )
-    max_delay: float = field(
-        default_factory=lambda: float(os.environ.get("RETRY_MAX_DELAY", "10"))
-    )
+    max_delay: float = field(default_factory=lambda: float(os.environ.get("RETRY_MAX_DELAY", "10")))
     exponential_base: float = 2.0
     jitter: bool = True
     jitter_range: float = 0.1
@@ -142,10 +141,13 @@ def is_retryable_error(error: Exception) -> bool:
         True if the error is retryable, False otherwise
     """
     # Check exception type first
-    if isinstance(error, (
-        psycopg2.OperationalError,
-        psycopg2.InterfaceError,
-    )):
+    if isinstance(
+        error,
+        (
+            psycopg2.OperationalError,
+            psycopg2.InterfaceError,
+        ),
+    ):
         error_msg = str(error).lower()
         return any(pattern in error_msg for pattern in RETRYABLE_ERROR_PATTERNS)
 
@@ -171,7 +173,7 @@ def calculate_delay(
         Delay in seconds
     """
     # Calculate exponential delay
-    delay = config.base_delay * (config.exponential_base ** attempt)
+    delay = config.base_delay * (config.exponential_base**attempt)
 
     # Cap at max_delay
     delay = min(delay, config.max_delay)
@@ -235,6 +237,7 @@ def with_retry(
     Returns:
         Decorated function with retry logic
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
@@ -327,6 +330,7 @@ def with_db_retry(
         def important_query(conn, tileset_id):
             # ...
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
@@ -399,8 +403,7 @@ def execute_with_retry(
             if not should_retry or attempt >= retry_config.max_attempts - 1:
                 # Not retryable or last attempt - raise
                 logger.error(
-                    f"Operation failed after {attempt + 1} attempt(s): "
-                    f"{type(e).__name__}: {e}"
+                    f"Operation failed after {attempt + 1} attempt(s): " f"{type(e).__name__}: {e}"
                 )
                 raise
 
@@ -461,9 +464,7 @@ def execute_db_operation(
 
             # Check if error is retryable using DB-specific logic
             if not is_retryable_error(e):
-                logger.error(
-                    f"Non-retryable database error: {type(e).__name__}: {e}"
-                )
+                logger.error(f"Non-retryable database error: {type(e).__name__}: {e}")
                 raise
 
             if attempt >= retry_config.max_attempts - 1:
@@ -562,8 +563,7 @@ class RetryContext:
     def succeeded(self) -> bool:
         """Check if the operation succeeded (no errors recorded on last attempt)."""
         return self.last_error is None or (
-            self.attempt < self.config.max_attempts and
-            not self.should_retry()
+            self.attempt < self.config.max_attempts and not self.should_retry()
         )
 
 

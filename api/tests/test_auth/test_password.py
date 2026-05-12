@@ -1,4 +1,5 @@
 """Tests for auth.password module."""
+
 import pytest
 
 from lib.auth.errors import WeakPassword

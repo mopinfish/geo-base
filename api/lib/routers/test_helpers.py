@@ -95,9 +95,7 @@ def reset_database():
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             for table in _RESETTABLE_TABLES:
-                cur.execute(
-                    f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE"
-                )
+                cur.execute(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE")
                 truncated.append(table)
         conn.commit()
     return {"truncated": truncated}

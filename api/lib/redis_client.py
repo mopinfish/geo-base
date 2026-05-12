@@ -75,14 +75,10 @@ class RedisConfig:
         # Connection pool settings
         self.max_connections = int(os.environ.get("REDIS_MAX_CONNECTIONS", "10"))
         self.socket_timeout = float(os.environ.get("REDIS_SOCKET_TIMEOUT", "5.0"))
-        self.socket_connect_timeout = float(
-            os.environ.get("REDIS_CONNECT_TIMEOUT", "5.0")
-        )
+        self.socket_connect_timeout = float(os.environ.get("REDIS_CONNECT_TIMEOUT", "5.0"))
 
         # Retry settings
-        self.retry_on_timeout = os.environ.get(
-            "REDIS_RETRY_ON_TIMEOUT", "true"
-        ).lower() == "true"
+        self.retry_on_timeout = os.environ.get("REDIS_RETRY_ON_TIMEOUT", "true").lower() == "true"
 
         # Key prefix for namespacing
         self.key_prefix = os.environ.get("REDIS_KEY_PREFIX", "geo-base:")
@@ -126,9 +122,7 @@ def _create_redis_client():
     try:
         import redis
     except ImportError:
-        logger.warning(
-            "Redis package not installed. Install with: pip install redis"
-        )
+        logger.warning("Redis package not installed. Install with: pip install redis")
         return None
 
     config = get_redis_config()
@@ -155,8 +149,7 @@ def _create_redis_client():
         client.ping()
 
         logger.info(
-            f"Redis connected: {config.host}:{config.port}/{config.db} "
-            f"(SSL: {config.ssl})"
+            f"Redis connected: {config.host}:{config.port}/{config.db} " f"(SSL: {config.ssl})"
         )
 
         return client
@@ -436,6 +429,7 @@ def redis_get_binary(key: str) -> Optional[bytes]:
     try:
         # Need to get raw client for binary data
         import redis
+
         config = get_redis_config()
 
         # Create a client without decode_responses for binary data
@@ -467,6 +461,7 @@ def redis_set_binary(
     """
     try:
         import redis
+
         config = get_redis_config()
 
         # Create a client without decode_responses for binary data

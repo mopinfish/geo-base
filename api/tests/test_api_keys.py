@@ -30,6 +30,7 @@ from lib.models.api_key import (
 # ApiKeyScope Tests
 # =============================================================================
 
+
 class TestApiKeyScope:
     """Tests for ApiKeyScope enum."""
 
@@ -87,6 +88,7 @@ class TestApiKeyEnvironment:
 # =============================================================================
 # Helper Function Tests
 # =============================================================================
+
 
 class TestHelperFunctions:
     """Tests for helper functions."""
@@ -149,6 +151,7 @@ class TestHelperFunctions:
 # ApiKeyCreate Tests
 # =============================================================================
 
+
 class TestApiKeyCreate:
     """Tests for ApiKeyCreate model."""
 
@@ -176,7 +179,7 @@ class TestApiKeyCreate:
             rate_limit_per_day=50000,
             expires_in_days=90,
             environment=ApiKeyEnvironment.LIVE,
-            metadata={"purpose": "integration"}
+            metadata={"purpose": "integration"},
         )
 
         assert key.name == "Production API Key"
@@ -207,8 +210,7 @@ class TestApiKeyCreate:
     def test_duplicate_scopes_removed(self):
         """Test that duplicate scopes are removed."""
         key = ApiKeyCreate(
-            name="Test",
-            scopes=[ApiKeyScope.READ, ApiKeyScope.READ, ApiKeyScope.WRITE]
+            name="Test", scopes=[ApiKeyScope.READ, ApiKeyScope.READ, ApiKeyScope.WRITE]
         )
         assert len(key.scopes) == 2
 
@@ -245,6 +247,7 @@ class TestApiKeyCreate:
 # ApiKeyUpdate Tests
 # =============================================================================
 
+
 class TestApiKeyUpdate:
     """Tests for ApiKeyUpdate model."""
 
@@ -260,10 +263,7 @@ class TestApiKeyUpdate:
 
     def test_valid_update_rate_limits(self):
         """Test valid rate limit update."""
-        update = ApiKeyUpdate(
-            rate_limit_per_minute=120,
-            rate_limit_per_day=20000
-        )
+        update = ApiKeyUpdate(rate_limit_per_minute=120, rate_limit_per_day=20000)
         assert update.rate_limit_per_minute == 120
         assert update.rate_limit_per_day == 20000
 
@@ -281,6 +281,7 @@ class TestApiKeyUpdate:
 # =============================================================================
 # ApiKeyRevoke Tests
 # =============================================================================
+
 
 class TestApiKeyRevoke:
     """Tests for ApiKeyRevoke model."""
@@ -305,6 +306,7 @@ class TestApiKeyRevoke:
 # Response Model Tests
 # =============================================================================
 
+
 class TestApiKeyResponse:
     """Tests for ApiKeyResponse model."""
 
@@ -321,7 +323,7 @@ class TestApiKeyResponse:
             rate_limit_per_day=10000,
             is_active=True,
             created_at=now,
-            updated_at=now
+            updated_at=now,
         )
 
         assert response.id == "key-123"
@@ -344,7 +346,7 @@ class TestApiKeyResponse:
             is_active=True,
             expires_at=past,
             created_at=past,
-            updated_at=past
+            updated_at=past,
         )
 
         assert response.is_expired is True
@@ -363,7 +365,7 @@ class TestApiKeyResponse:
             is_active=False,
             revoked_at=now,
             created_at=now,
-            updated_at=now
+            updated_at=now,
         )
 
         assert response.is_revoked is True
@@ -386,7 +388,7 @@ class TestApiKeyCreatedResponse:
             is_active=True,
             created_at=now,
             updated_at=now,
-            key="gb_live_fullkeyvalue1234567890"
+            key="gb_live_fullkeyvalue1234567890",
         )
 
         assert response.key == "gb_live_fullkeyvalue1234567890"
@@ -395,6 +397,7 @@ class TestApiKeyCreatedResponse:
 # =============================================================================
 # RateLimitStatus Tests
 # =============================================================================
+
 
 class TestRateLimitStatus:
     """Tests for RateLimitStatus model."""
@@ -408,7 +411,7 @@ class TestRateLimitStatus:
             minute_remaining=30,
             day_limit=10000,
             day_used=5000,
-            day_remaining=5000
+            day_remaining=5000,
         )
 
         assert status.is_limited is False
@@ -422,7 +425,7 @@ class TestRateLimitStatus:
             minute_remaining=0,
             day_limit=10000,
             day_used=100,
-            day_remaining=9900
+            day_remaining=9900,
         )
 
         assert status.is_limited is True
@@ -436,7 +439,7 @@ class TestRateLimitStatus:
             minute_remaining=50,
             day_limit=10000,
             day_used=10000,
-            day_remaining=0
+            day_remaining=0,
         )
 
         assert status.is_limited is True
@@ -445,6 +448,7 @@ class TestRateLimitStatus:
 # =============================================================================
 # ApiKeyUsageStats Tests
 # =============================================================================
+
 
 class TestApiKeyUsageStats:
     """Tests for ApiKeyUsageStats model."""
@@ -457,7 +461,7 @@ class TestApiKeyUsageStats:
             avg_response_time_ms=45.5,
             error_count=10,
             success_rate=99.0,
-            requests_by_day=[]
+            requests_by_day=[],
         )
 
         assert stats.total_requests == 1000
@@ -469,6 +473,7 @@ class TestApiKeyUsageStats:
 # =============================================================================
 # Permission Matrix Tests
 # =============================================================================
+
 
 class TestPermissionMatrix:
     """Tests for permission hierarchy."""

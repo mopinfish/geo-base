@@ -294,7 +294,7 @@ export default function ApiKeysPage() {
                             期限切れ
                           </Badge>
                         ) : key.is_active ? (
-                          <Badge variant="secondary" className="text-green-600">
+                          <Badge variant="secondary" className="text-green-800">
                             有効
                           </Badge>
                         ) : (
@@ -310,7 +310,12 @@ export default function ApiKeysPage() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="アクションメニューを開く"
+                        >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>

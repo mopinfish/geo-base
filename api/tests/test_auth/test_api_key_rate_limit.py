@@ -6,6 +6,7 @@
 Phase 1 (refactor): DbRateLimiter の挙動が旧 inline 実装と一致する確認。
 Phase 2 (Redis): RedisRateLimiter の per-minute / per-day カウンタ + fail-open。
 """
+
 import concurrent.futures
 import threading
 import uuid
@@ -174,6 +175,7 @@ class TestMakeRateLimiter:
         """既定 (`RATE_LIMIT_BACKEND` 未設定) は DbRateLimiter。"""
         monkeypatch.delenv("RATE_LIMIT_BACKEND", raising=False)
         from lib.config import get_settings
+
         get_settings.cache_clear()
         try:
             limiter = make_rate_limiter(db_conn)
@@ -184,6 +186,7 @@ class TestMakeRateLimiter:
     def test_explicit_db_backend(self, db_conn, monkeypatch, local_auth_settings):
         monkeypatch.setenv("RATE_LIMIT_BACKEND", "db")
         from lib.config import get_settings
+
         get_settings.cache_clear()
         try:
             limiter = make_rate_limiter(db_conn)
@@ -191,10 +194,13 @@ class TestMakeRateLimiter:
         finally:
             get_settings.cache_clear()
 
-    def test_redis_backend_returns_redis_rate_limiter(self, db_conn, monkeypatch, local_auth_settings):
+    def test_redis_backend_returns_redis_rate_limiter(
+        self, db_conn, monkeypatch, local_auth_settings
+    ):
         """Phase 2: `RATE_LIMIT_BACKEND=redis` で RedisRateLimiter を返す。"""
         monkeypatch.setenv("RATE_LIMIT_BACKEND", "redis")
         from lib.config import get_settings
+
         get_settings.cache_clear()
         try:
             limiter = make_rate_limiter(db_conn)
@@ -202,18 +208,20 @@ class TestMakeRateLimiter:
         finally:
             get_settings.cache_clear()
 
-    def test_unknown_backend_falls_back_to_db(self, db_conn, monkeypatch, caplog, local_auth_settings):
+    def test_unknown_backend_falls_back_to_db(
+        self, db_conn, monkeypatch, caplog, local_auth_settings
+    ):
         monkeypatch.setenv("RATE_LIMIT_BACKEND", "memcached")
         from lib.config import get_settings
+
         get_settings.cache_clear()
         try:
             import logging
+
             with caplog.at_level(logging.WARNING, logger="lib.auth.api_key_rate_limit"):
                 limiter = make_rate_limiter(db_conn)
             assert isinstance(limiter, DbRateLimiter)
-            assert any(
-                "Unknown RATE_LIMIT_BACKEND" in r.message for r in caplog.records
-            )
+            assert any("Unknown RATE_LIMIT_BACKEND" in r.message for r in caplog.records)
         finally:
             get_settings.cache_clear()
 
@@ -242,6 +250,7 @@ def redis_limiter(monkeypatch):
     # `reset_redis()` は内部実装変更に追従するため、private な
     # `_redis_client` / `_redis_available` を直接触らない。
     from lib.redis_client import get_redis, get_redis_config, reset_redis
+
     reset_redis()
     get_redis_config.cache_clear()
 
@@ -324,6 +333,7 @@ class TestRedisRateLimiter:
     def test_fail_open_when_redis_unavailable(self, monkeypatch, caplog):
         """`get_redis()` が None を返した場合、raise せず warn ログのみ。"""
         import logging
+
         # `RedisRateLimiter.check_and_increment` 内の `from lib.redis_client import get_redis`
         # を None 返却にパッチ
         monkeypatch.setattr("lib.redis_client.get_redis", lambda: None)
@@ -344,9 +354,7 @@ class TestRedisRateLimiter:
         limiter = RedisRateLimiter()
         with caplog.at_level(logging.WARNING, logger="lib.auth.api_key_rate_limit"):
             limiter.check_and_increment(str(uuid.uuid4()), rl_min=5, rl_day=1000)
-        assert any(
-            "Redis rate limit operation failed" in r.message for r in caplog.records
-        )
+        assert any("Redis rate limit operation failed" in r.message for r in caplog.records)
 
     @pytest.mark.parametrize("limit_value", [None, 0, -1])
     def test_unlimited_skips_check(self, redis_limiter, limit_value):
@@ -354,9 +362,7 @@ class TestRedisRateLimiter:
         key_id = str(uuid.uuid4())
         # rl_day も無制限にして per-day 経路も skip
         for _ in range(20):
-            redis_limiter.check_and_increment(
-                key_id, rl_min=limit_value, rl_day=limit_value
-            )
+            redis_limiter.check_and_increment(key_id, rl_min=limit_value, rl_day=limit_value)
 
     def test_default_prefix_includes_global_redis_prefix(self):
         """key_prefix 未指定時は REDIS_KEY_PREFIX (既定 `geo-base:`) を含む。"""
@@ -371,8 +377,7 @@ class TestRedisRateLimiter:
             f"got {limiter._key_prefix!r}"
         )
         assert limiter._key_prefix.endswith("rate:apikey"), (
-            f"Expected key_prefix to end with 'rate:apikey', "
-            f"got {limiter._key_prefix!r}"
+            f"Expected key_prefix to end with 'rate:apikey', " f"got {limiter._key_prefix!r}"
         )
 
     def test_expire_set_on_first_increment(self, redis_limiter):
@@ -507,7 +512,11 @@ class TestConcurrency:
         key_id = str(uuid.uuid4())
 
         results = self._run_concurrent_calls(
-            redis_limiter, key_id, rl_min=100, rl_day=10000, n=self.NUM_CONCURRENT,
+            redis_limiter,
+            key_id,
+            rl_min=100,
+            rl_day=10000,
+            n=self.NUM_CONCURRENT,
         )
         assert all(results), "All 100 requests within limit should pass"
         assert sum(results) == 100
@@ -529,7 +538,11 @@ class TestConcurrency:
         key_id = str(uuid.uuid4())
 
         results = self._run_concurrent_calls(
-            redis_limiter, key_id, rl_min=50, rl_day=10000, n=self.NUM_CONCURRENT,
+            redis_limiter,
+            key_id,
+            rl_min=50,
+            rl_day=10000,
+            n=self.NUM_CONCURRENT,
         )
         passed = sum(results)
         # ちょうど 50 通過 (INCR atomic なので race condition はない)

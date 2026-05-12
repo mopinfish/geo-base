@@ -43,6 +43,7 @@ def mock_redis():
 def reset_redis_module():
     """Reset the Redis module state before and after test."""
     from lib import redis_client
+
     redis_client._redis_client = None
     redis_client._redis_available = None
     yield
@@ -168,6 +169,7 @@ class TestConnectionManagement:
         with patch.dict("os.environ", {"REDIS_ENABLED": "false"}):
             # Clear cache
             from lib.redis_client import get_redis_config
+
             get_redis_config.cache_clear()
 
             from lib.redis_client import get_redis, redis_available
@@ -180,6 +182,7 @@ class TestConnectionManagement:
         """Test redis_available returns False on connection error."""
         with patch.dict("os.environ", {"REDIS_ENABLED": "true"}):
             from lib.redis_client import get_redis_config
+
             get_redis_config.cache_clear()
 
             with patch("lib.redis_client._create_redis_client", return_value=None):
@@ -192,6 +195,7 @@ class TestConnectionManagement:
         # This test verifies the creation logic without actually connecting
         with patch.dict("os.environ", {"REDIS_ENABLED": "true"}):
             from lib.redis_client import get_redis_config, redis_available
+
             get_redis_config.cache_clear()
 
             # Mock the creation to avoid actual connection
@@ -223,6 +227,7 @@ class TestSafeOperations:
 
         with patch("lib.redis_client.get_redis", return_value=mock_redis):
             from lib.redis_client import get_redis_config, safe_redis_get
+
             get_redis_config.cache_clear()
 
             with patch.dict("os.environ", {"REDIS_KEY_PREFIX": "test:"}):
@@ -245,6 +250,7 @@ class TestSafeOperations:
         """Test safe_redis_set with TTL."""
         with patch("lib.redis_client.get_redis", return_value=mock_redis):
             from lib.redis_client import get_redis_config, safe_redis_set
+
             get_redis_config.cache_clear()
 
             with patch.dict("os.environ", {"REDIS_KEY_PREFIX": "test:"}):
@@ -268,6 +274,7 @@ class TestSafeOperations:
 
         with patch("lib.redis_client.get_redis", return_value=mock_redis):
             from lib.redis_client import get_redis_config, safe_redis_exists
+
             get_redis_config.cache_clear()
 
             with patch.dict("os.environ", {"REDIS_KEY_PREFIX": "test:"}):
@@ -283,6 +290,7 @@ class TestSafeOperations:
 
         with patch("lib.redis_client.get_redis", return_value=mock_redis):
             from lib.redis_client import get_redis_config, safe_redis_delete_pattern
+
             get_redis_config.cache_clear()
 
             with patch.dict("os.environ", {"REDIS_KEY_PREFIX": "test:"}):
@@ -363,6 +371,7 @@ class TestHealthCheck:
         """Test health check when Redis is disabled."""
         with patch.dict("os.environ", {"REDIS_ENABLED": "false"}):
             from lib.redis_client import check_redis_health, get_redis_config
+
             get_redis_config.cache_clear()
 
             result = check_redis_health()
@@ -374,6 +383,7 @@ class TestHealthCheck:
         """Test health check when Redis is unavailable."""
         with patch.dict("os.environ", {"REDIS_ENABLED": "true"}):
             from lib.redis_client import get_redis_config
+
             get_redis_config.cache_clear()
 
             with patch("lib.redis_client.get_redis", return_value=None):
@@ -388,6 +398,7 @@ class TestHealthCheck:
         """Test health check when Redis is healthy."""
         with patch.dict("os.environ", {"REDIS_ENABLED": "true"}):
             from lib.redis_client import get_redis_config
+
             get_redis_config.cache_clear()
 
             with patch("lib.redis_client.get_redis", return_value=mock_redis):
