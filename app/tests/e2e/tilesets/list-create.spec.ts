@@ -48,8 +48,8 @@ test("TS-07 @smoke タイルセット新規作成 → 詳細ページへ遷移",
  * 既存 TS-01/07 とは別 describe にして beforeAll を分離する。各テストでは
  * `resetDatabase()` してから seeded データを作る方針 (テスト順序に依存しない)。
  *
- * type / public フィルタは shadcn (Radix) の Select なので `<select>` ではなく
- * Listbox ベース。`selectOption` ではなく click → option の role 経由で操作する。
+ * type / public フィルタはネイティブ `<select>` なので `selectOption` で操作する
+ * (Radix Portal × Playwright headless の相互作用問題を回避するため変更済み)。
  */
 test.describe("Tilesets list filtering and bulk operations", () => {
   test.beforeAll(async () => {
@@ -86,15 +86,13 @@ test.describe("Tilesets list filtering and bulk operations", () => {
       timeout: 10_000,
     });
 
-    // shadcn の Select は trigger を click すると listbox が開き、option を role で取得できる。
+    // ネイティブ select なので selectOption で直接操作する。
     // i18n catalog (PR #132) で "ベクター" / "ラスター" (長音記号あり) に統一済み。
-    await page.getByTestId("tileset-filter-type").click();
-    await page.getByRole("option", { name: "ベクター" }).click();
+    await page.getByTestId("tileset-filter-type").selectOption({ label: "ベクター" });
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("v1", { exact: true })).toBeVisible();
 
-    await page.getByTestId("tileset-filter-type").click();
-    await page.getByRole("option", { name: "ラスター" }).click();
+    await page.getByTestId("tileset-filter-type").selectOption({ label: "ラスター" });
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("r1", { exact: true })).toBeVisible();
   });
@@ -114,13 +112,11 @@ test.describe("Tilesets list filtering and bulk operations", () => {
       timeout: 10_000,
     });
 
-    await page.getByTestId("tileset-filter-public").click();
-    await page.getByRole("option", { name: "公開", exact: true }).click();
+    await page.getByTestId("tileset-filter-public").selectOption({ label: "公開" });
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("public-1", { exact: true })).toBeVisible();
 
-    await page.getByTestId("tileset-filter-public").click();
-    await page.getByRole("option", { name: "非公開", exact: true }).click();
+    await page.getByTestId("tileset-filter-public").selectOption({ label: "非公開" });
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("private-1", { exact: true })).toBeVisible();
   });
@@ -139,11 +135,8 @@ test.describe("Tilesets list filtering and bulk operations", () => {
     await page.getByTestId("tileset-select-all").click();
     await page.getByTestId("tileset-bulk-delete").click();
 
-    // AlertDialog の確定ボタンは「{N}件を削除」というラベル。
-    await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: /件を削除/ })
-      .click();
+    // AlertDialog の確定ボタンは data-testid で直接取得する（Radix Portal 回避）。
+    await page.getByTestId("tileset-bulk-delete-confirm").click();
 
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(0, {
       timeout: 10_000,

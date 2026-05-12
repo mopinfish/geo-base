@@ -115,6 +115,7 @@ API キーは別系統の認証パス（Phase 3 / Step 3.3-A）：`lib/routers/a
 
 - **`docs/INFRA_MIGRATION_INVESTIGATION.md`**: 2026-05-08 にインフラ集約を検討した経緯と結論。本番 DB と Auth は 2026-05-10 に Supabase から完全離脱した（Fly Postgres 移行 + local provider 一本化）。
 - **`docs/POSTGRES_SETUP.md`**: 2026-05-10 に Supabase Free Plan の長期 paused 復旧不能を機に、本番 DB を **Fly Machine 上の自前 PostGIS（`geo-base-pg` app）** に移行した記録と運用手順。Supabase の DB / Auth 双方への依存をこのタイミングで完全に廃止（Issue #72）。
+- **`docs/superpowers/specs/2026-05-12-radix-portal-playwright-pitfall.md`**: shadcn/ui (Radix) の `Select` / `AlertDialog` など Portal 系コンポーネントが Playwright headless で `getByRole` selector を間欠的に timeout させる罠と回避策（ネイティブ `<select>` 化、`<AlertDialogAction>` への `data-testid` 付与）。新規 E2E を書く際は最初から testid 設計にすること。
 
 ## 知っておくべき規約
 
