@@ -10,7 +10,11 @@
 
 ## 共通の前提
 
-- ローカル開発環境で `npm run dev` を起動し、`http://localhost:3000` で実施
+- ローカル開発環境で以下を起動した状態で実施 (詳細は `CLAUDE.md` の「ローカルポート」表参照):
+  - PostGIS + Redis: `cd docker && docker compose up -d`
+  - API (FastAPI, :8000): `cd api && uv run uvicorn lib.main:app --reload --port 8000`
+  - Admin UI (Next.js, :3000): `cd app && npm run dev`
+- 検証 URL: `http://localhost:3000`
 - ログインは admin user で行う (`app/tests/e2e/utils/session.ts` の `E2E_ADMIN_EMAIL` = `e2e-admin@example.com` 参照)
 - **キーボードのみで操作** (マウス使わない)
 - VoiceOver (macOS): Cmd+F5 で起動 / 終了。Ctrl+Option+→ で次の要素読み上げ
