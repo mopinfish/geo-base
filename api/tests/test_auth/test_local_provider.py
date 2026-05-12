@@ -1,14 +1,16 @@
 """Tests for LocalAuthProvider."""
-import pytest
-import secrets
-from unittest.mock import AsyncMock, patch
 
-from lib.auth.providers.local import LocalAuthProvider
-from lib.auth.errors import (
-    InvalidCredentials, RateLimited, UserAlreadyExists,
-    InvalidToken, WeakPassword,
-)
+import pytest
+
 from lib.auth.email_backends import NullEmailBackend
+from lib.auth.errors import (
+    InvalidCredentials,
+    InvalidToken,
+    RateLimited,
+    UserAlreadyExists,
+    WeakPassword,
+)
+from lib.auth.providers.local import LocalAuthProvider
 
 
 @pytest.fixture

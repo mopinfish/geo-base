@@ -8,7 +8,6 @@ from typing import Sequence
 from starlette.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-
 AUTH_PATH_PREFIX = "/api/auth/"
 
 

@@ -13,14 +13,12 @@ from moto import mock_aws
 import lib.storage as storage_module
 from lib.storage import (
     COG_EXTENSIONS,
-    MAX_FILE_SIZE,
     S3StorageClient,
     UploadResult,
     is_cloud_optimized,
     validate_cog_file,
     validate_cog_filename,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers / Fixtures

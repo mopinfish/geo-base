@@ -13,38 +13,38 @@ from fastmcp import FastMCP
 
 from config import get_settings
 from logger import get_logger
-from tools.tilesets import (
-    list_tilesets,
-    get_tileset,
-    get_tileset_tilejson,
-)
-from tools.features import (
-    search_features,
-    get_feature,
-)
-from tools.geocoding import (
-    geocode,
-    reverse_geocode,
-)
-from tools.crud import (
-    create_tileset,
-    update_tileset,
-    delete_tileset,
-    create_feature,
-    update_feature,
-    delete_feature,
-)
-from tools.stats import (
-    get_tileset_stats,
-    get_feature_distribution,
-    get_layer_stats,
-    get_area_stats,
-)
 from tools.analysis import (
     analyze_area,
     calculate_distance,
     find_nearest_features,
     get_buffer_zone_features,
+)
+from tools.crud import (
+    create_feature,
+    create_tileset,
+    delete_feature,
+    delete_tileset,
+    update_feature,
+    update_tileset,
+)
+from tools.features import (
+    get_feature,
+    search_features,
+)
+from tools.geocoding import (
+    geocode,
+    reverse_geocode,
+)
+from tools.stats import (
+    get_area_stats,
+    get_feature_distribution,
+    get_layer_stats,
+    get_tileset_stats,
+)
+from tools.tilesets import (
+    get_tileset,
+    get_tileset_tilejson,
+    list_tilesets,
 )
 
 # Initialize settings and logger
@@ -61,6 +61,7 @@ mcp = FastMCP(
 # ============================================================
 # Tileset Tools
 # ============================================================
+
 
 @mcp.tool()
 async def tool_list_tilesets(
@@ -116,6 +117,7 @@ async def tool_get_tileset_tilejson(tileset_id: str) -> dict:
 # Feature Tools
 # ============================================================
 
+
 @mcp.tool()
 async def tool_search_features(
     bbox: str | None = None,
@@ -168,6 +170,7 @@ async def tool_get_feature(feature_id: str) -> dict:
 # Tile Tools
 # ============================================================
 
+
 @mcp.tool()
 async def tool_get_tile_url(
     tileset_id: str,
@@ -213,6 +216,7 @@ async def tool_get_tile_url(
 # ============================================================
 # Utility Tools
 # ============================================================
+
 
 @mcp.tool()
 async def tool_health_check() -> dict:
@@ -271,6 +275,7 @@ async def tool_get_server_info() -> dict:
 # ============================================================
 # Geocoding Tools
 # ============================================================
+
 
 @mcp.tool()
 async def tool_geocode(
@@ -830,13 +835,13 @@ if __name__ == "__main__":
     #          "sse" (for remote HTTP connections via Fly.io)
     #          "streamable-http" (alternative HTTP transport)
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
-    
+
     # Get host and port for HTTP transports
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_PORT", "8080"))
-    
+
     logger.info(f"Using transport: {transport}")
-    
+
     if transport == "stdio":
         # Run with stdio transport (default for Claude Desktop local)
         mcp.run()

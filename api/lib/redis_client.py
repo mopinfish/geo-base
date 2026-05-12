@@ -37,11 +37,11 @@ Usage:
     value = safe_redis_get("key")  # Returns None if Redis unavailable
 """
 
+import json
 import logging
 import os
 from functools import lru_cache
-from typing import Any, Optional, Union
-import json
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,46 +57,46 @@ _redis_available: Optional[bool] = None
 
 class RedisConfig:
     """Redis configuration loaded from environment variables."""
-    
+
     def __init__(self):
         # Check if Redis is enabled
         self.enabled = os.environ.get("REDIS_ENABLED", "true").lower() == "true"
-        
+
         # Get Redis URL (takes precedence over individual settings)
         self.url = os.environ.get("REDIS_URL")
-        
+
         # Individual settings (used if REDIS_URL not set)
         self.host = os.environ.get("REDIS_HOST", "localhost")
         self.port = int(os.environ.get("REDIS_PORT", "6379"))
         self.password = os.environ.get("REDIS_PASSWORD")
         self.db = int(os.environ.get("REDIS_DB", "0"))
         self.ssl = os.environ.get("REDIS_SSL", "false").lower() == "true"
-        
+
         # Connection pool settings
         self.max_connections = int(os.environ.get("REDIS_MAX_CONNECTIONS", "10"))
         self.socket_timeout = float(os.environ.get("REDIS_SOCKET_TIMEOUT", "5.0"))
         self.socket_connect_timeout = float(
             os.environ.get("REDIS_CONNECT_TIMEOUT", "5.0")
         )
-        
+
         # Retry settings
         self.retry_on_timeout = os.environ.get(
             "REDIS_RETRY_ON_TIMEOUT", "true"
         ).lower() == "true"
-        
+
         # Key prefix for namespacing
         self.key_prefix = os.environ.get("REDIS_KEY_PREFIX", "geo-base:")
-    
+
     def get_connection_url(self) -> str:
         """Get the full Redis connection URL."""
         if self.url:
             return self.url
-        
+
         # Build URL from individual settings
         scheme = "rediss" if self.ssl else "redis"
         auth = f":{self.password}@" if self.password else ""
         return f"{scheme}://{auth}{self.host}:{self.port}/{self.db}"
-    
+
     def __repr__(self) -> str:
         """Return string representation (without password)."""
         return (
@@ -119,7 +119,7 @@ def get_redis_config() -> RedisConfig:
 def _create_redis_client():
     """
     Create a Redis client with connection pooling.
-    
+
     Returns:
         Redis client instance or None if creation fails
     """
@@ -130,13 +130,13 @@ def _create_redis_client():
             "Redis package not installed. Install with: pip install redis"
         )
         return None
-    
+
     config = get_redis_config()
-    
+
     if not config.enabled:
         logger.info("Redis is disabled by configuration")
         return None
-    
+
     try:
         # Create connection pool
         pool = redis.ConnectionPool.from_url(
@@ -147,20 +147,20 @@ def _create_redis_client():
             retry_on_timeout=config.retry_on_timeout,
             decode_responses=True,  # Return strings instead of bytes
         )
-        
+
         # Create client with pool
         client = redis.Redis(connection_pool=pool)
-        
+
         # Test connection
         client.ping()
-        
+
         logger.info(
             f"Redis connected: {config.host}:{config.port}/{config.db} "
             f"(SSL: {config.ssl})"
         )
-        
+
         return client
-        
+
     except redis.ConnectionError as e:
         logger.warning(f"Failed to connect to Redis: {e}")
         return None
@@ -172,40 +172,40 @@ def _create_redis_client():
 def get_redis():
     """
     Get the Redis client instance.
-    
+
     Returns lazily initialized client, or None if Redis is unavailable.
-    
+
     Returns:
         Redis client or None
     """
     global _redis_client, _redis_available
-    
+
     if _redis_client is None and _redis_available is not False:
         _redis_client = _create_redis_client()
         _redis_available = _redis_client is not None
-    
+
     return _redis_client
 
 
 def redis_available() -> bool:
     """
     Check if Redis is available.
-    
+
     Returns:
         True if Redis is connected and responding
     """
     global _redis_available
-    
+
     if _redis_available is None:
         get_redis()  # Triggers initialization
-    
+
     return _redis_available or False
 
 
 def close_redis() -> None:
     """Close the Redis connection."""
     global _redis_client, _redis_available
-    
+
     if _redis_client is not None:
         try:
             _redis_client.close()
@@ -220,7 +220,7 @@ def close_redis() -> None:
 def reset_redis() -> None:
     """
     Reset the Redis client (for reconnection after errors).
-    
+
     Call this if you suspect the connection is broken.
     """
     global _redis_client, _redis_available
@@ -242,19 +242,19 @@ def _make_key(key: str) -> str:
 def safe_redis_get(key: str) -> Optional[str]:
     """
     Safely get a value from Redis.
-    
+
     Returns None if Redis is unavailable or on error.
-    
+
     Args:
         key: Cache key (prefix will be added automatically)
-        
+
     Returns:
         Cached value or None
     """
     client = get_redis()
     if client is None:
         return None
-    
+
     try:
         return client.get(_make_key(key))
     except Exception as e:
@@ -269,21 +269,21 @@ def safe_redis_set(
 ) -> bool:
     """
     Safely set a value in Redis.
-    
+
     Returns False if Redis is unavailable or on error.
-    
+
     Args:
         key: Cache key (prefix will be added automatically)
         value: Value to cache
         ttl: Time-to-live in seconds (optional)
-        
+
     Returns:
         True if successful, False otherwise
     """
     client = get_redis()
     if client is None:
         return False
-    
+
     try:
         if ttl is not None:
             client.set(_make_key(key), value, ex=ttl)
@@ -298,19 +298,19 @@ def safe_redis_set(
 def safe_redis_delete(key: str) -> bool:
     """
     Safely delete a value from Redis.
-    
+
     Returns False if Redis is unavailable or on error.
-    
+
     Args:
         key: Cache key (prefix will be added automatically)
-        
+
     Returns:
         True if key was deleted, False otherwise
     """
     client = get_redis()
     if client is None:
         return False
-    
+
     try:
         return client.delete(_make_key(key)) > 0
     except Exception as e:
@@ -321,17 +321,17 @@ def safe_redis_delete(key: str) -> bool:
 def safe_redis_delete_pattern(pattern: str) -> int:
     """
     Safely delete all keys matching a pattern.
-    
+
     Args:
         pattern: Key pattern with wildcards (e.g., "tileset:*")
-        
+
     Returns:
         Number of keys deleted
     """
     client = get_redis()
     if client is None:
         return 0
-    
+
     try:
         full_pattern = _make_key(pattern)
         keys = client.keys(full_pattern)
@@ -346,17 +346,17 @@ def safe_redis_delete_pattern(pattern: str) -> int:
 def safe_redis_exists(key: str) -> bool:
     """
     Safely check if a key exists in Redis.
-    
+
     Args:
         key: Cache key (prefix will be added automatically)
-        
+
     Returns:
         True if key exists, False otherwise
     """
     client = get_redis()
     if client is None:
         return False
-    
+
     try:
         return client.exists(_make_key(key)) > 0
     except Exception as e:
@@ -372,17 +372,17 @@ def safe_redis_exists(key: str) -> bool:
 def redis_get_json(key: str) -> Optional[Any]:
     """
     Get a JSON value from Redis.
-    
+
     Args:
         key: Cache key
-        
+
     Returns:
         Parsed JSON value or None
     """
     value = safe_redis_get(key)
     if value is None:
         return None
-    
+
     try:
         return json.loads(value)
     except json.JSONDecodeError as e:
@@ -397,12 +397,12 @@ def redis_set_json(
 ) -> bool:
     """
     Set a JSON value in Redis.
-    
+
     Args:
         key: Cache key
         value: Value to cache (will be JSON serialized)
         ttl: Time-to-live in seconds (optional)
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -422,22 +422,22 @@ def redis_set_json(
 def redis_get_binary(key: str) -> Optional[bytes]:
     """
     Get a binary value from Redis.
-    
+
     Args:
         key: Cache key
-        
+
     Returns:
         Binary data or None
     """
     client = get_redis()
     if client is None:
         return None
-    
+
     try:
         # Need to get raw client for binary data
         import redis
         config = get_redis_config()
-        
+
         # Create a client without decode_responses for binary data
         binary_client = redis.Redis.from_url(
             config.get_connection_url(),
@@ -456,25 +456,25 @@ def redis_set_binary(
 ) -> bool:
     """
     Set a binary value in Redis.
-    
+
     Args:
         key: Cache key
         value: Binary data to cache
         ttl: Time-to-live in seconds (optional)
-        
+
     Returns:
         True if successful, False otherwise
     """
     try:
         import redis
         config = get_redis_config()
-        
+
         # Create a client without decode_responses for binary data
         binary_client = redis.Redis.from_url(
             config.get_connection_url(),
             decode_responses=False,
         )
-        
+
         if ttl is not None:
             binary_client.set(_make_key(key), value, ex=ttl)
         else:
@@ -493,21 +493,21 @@ def redis_set_binary(
 def check_redis_health() -> dict:
     """
     Check Redis health and return status info.
-    
+
     Returns:
         Dict with health status
     """
     config = get_redis_config()
-    
+
     if not config.enabled:
         return {
             "status": "disabled",
             "enabled": False,
             "message": "Redis is disabled by configuration",
         }
-    
+
     client = get_redis()
-    
+
     if client is None:
         return {
             "status": "unavailable",
@@ -516,12 +516,12 @@ def check_redis_health() -> dict:
             "host": config.host,
             "port": config.port,
         }
-    
+
     try:
         # Get server info
         info = client.info("server")
         memory = client.info("memory")
-        
+
         return {
             "status": "healthy",
             "enabled": True,
@@ -550,26 +550,26 @@ def check_redis_health() -> dict:
 def get_redis_stats() -> dict:
     """
     Get Redis cache statistics.
-    
+
     Returns:
         Dict with cache statistics
     """
     client = get_redis()
     config = get_redis_config()
-    
+
     if client is None:
         return {
             "available": False,
             "enabled": config.enabled,
         }
-    
+
     try:
         info = client.info()
-        
+
         # Count keys with our prefix
         pattern = f"{config.key_prefix}*"
         key_count = len(client.keys(pattern))
-        
+
         return {
             "available": True,
             "enabled": True,

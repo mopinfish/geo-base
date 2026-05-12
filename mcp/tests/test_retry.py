@@ -9,21 +9,22 @@ This module tests:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
+
 import httpx
+import pytest
 
 from retry import (
+    RETRY_MAX_ATTEMPTS,
+    RETRY_MAX_WAIT,
+    RETRY_MIN_WAIT,
+    RETRYABLE_EXCEPTIONS,
+    RetryableClient,
+    _create_retry_config,
+    delete_with_retry,
     fetch_with_retry,
     post_with_retry,
     put_with_retry,
-    delete_with_retry,
-    RetryableClient,
-    RETRY_MAX_ATTEMPTS,
-    RETRY_MIN_WAIT,
-    RETRY_MAX_WAIT,
-    RETRYABLE_EXCEPTIONS,
-    _create_retry_config,
 )
 
 
@@ -68,6 +69,7 @@ class TestFetchWithRetry:
 
     def test_successful_fetch(self):
         """fetch_with_retry should return data on success."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"data": "test"}
@@ -89,6 +91,7 @@ class TestFetchWithRetry:
 
     def test_fetch_with_params(self):
         """fetch_with_retry should pass params to request."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"data": "test"}
@@ -113,6 +116,7 @@ class TestFetchWithRetry:
 
     def test_fetch_with_headers(self):
         """fetch_with_retry should pass headers to request."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"data": "test"}
@@ -137,6 +141,7 @@ class TestFetchWithRetry:
 
     def test_fetch_retries_on_timeout(self):
         """fetch_with_retry should retry on timeout."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"data": "test"}
@@ -172,6 +177,7 @@ class TestFetchWithRetry:
 
     def test_fetch_raises_after_max_retries(self):
         """fetch_with_retry should raise after max retries."""
+
         async def run_test():
             with patch("retry.httpx.AsyncClient") as mock_client:
                 mock_instance = AsyncMock()
@@ -195,6 +201,7 @@ class TestPostWithRetry:
 
     def test_successful_post(self):
         """post_with_retry should return data on success."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"id": "123"}
@@ -219,6 +226,7 @@ class TestPostWithRetry:
 
     def test_post_with_json(self):
         """post_with_retry should pass json to request."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"id": "123"}
@@ -247,6 +255,7 @@ class TestPutWithRetry:
 
     def test_successful_put(self):
         """put_with_retry should return data on success."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"updated": True}
@@ -274,6 +283,7 @@ class TestDeleteWithRetry:
 
     def test_successful_delete(self):
         """delete_with_retry should return data on success."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"deleted": True}
@@ -295,6 +305,7 @@ class TestDeleteWithRetry:
 
     def test_delete_no_content(self):
         """delete_with_retry should handle 204 No Content."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.status_code = 204
@@ -319,6 +330,7 @@ class TestRetryableClient:
 
     def test_client_context_manager(self):
         """RetryableClient should work as context manager."""
+
         async def run_test():
             with patch("retry.httpx.AsyncClient") as mock_client:
                 mock_instance = AsyncMock()
@@ -331,6 +343,7 @@ class TestRetryableClient:
 
     def test_client_get(self):
         """RetryableClient.get should make GET request."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"data": "test"}
@@ -350,6 +363,7 @@ class TestRetryableClient:
 
     def test_client_post(self):
         """RetryableClient.post should make POST request."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"id": "123"}
@@ -372,6 +386,7 @@ class TestRetryableClient:
 
     def test_client_not_initialized_error(self):
         """RetryableClient should raise error when not in context."""
+
         async def run_test():
             client = RetryableClient()
 
@@ -382,6 +397,7 @@ class TestRetryableClient:
 
     def test_client_with_default_headers(self):
         """RetryableClient should use default headers."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"data": "test"}
@@ -392,9 +408,7 @@ class TestRetryableClient:
                 mock_instance.get.return_value = mock_response
                 mock_client.return_value = mock_instance
 
-                async with RetryableClient(
-                    headers={"Authorization": "Bearer token"}
-                ) as client:
+                async with RetryableClient(headers={"Authorization": "Bearer token"}) as client:
                     await client.get("https://example.com/api")
 
                 # Check that AsyncClient was called with headers

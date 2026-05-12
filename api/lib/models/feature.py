@@ -2,7 +2,8 @@
 Pydantic models for Feature operations.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -26,13 +27,13 @@ class BulkFeatureCreate(BaseModel):
     tileset_id: str = Field(..., description="Parent tileset UUID")
     layer_name: str = Field("default", description="Layer name for all features")
     features: List[Dict[str, Any]] = Field(
-        ..., 
+        ...,
         description="List of GeoJSON features to import",
         min_length=1,
         max_length=10000  # Maximum 10000 features at once
     )
     update_bounds: bool = Field(
-        True, 
+        True,
         description="Automatically update tileset bounds after import"
     )
     validate_geometry: bool = Field(
@@ -50,11 +51,11 @@ class BulkFeatureResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list, description="List of warning messages")
     bounds_updated: bool = Field(False, description="Whether tileset bounds were updated")
     bounds: Optional[List[float]] = Field(
-        None, 
+        None,
         description="Updated bounds [west, south, east, north]"
     )
     center: Optional[List[float]] = Field(
-        None, 
+        None,
         description="Updated center [longitude, latitude]"
     )
 

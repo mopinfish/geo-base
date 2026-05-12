@@ -1,18 +1,17 @@
 """Tests for auth.tokens module - refresh token rotation + reuse detection."""
-import uuid
 import hashlib
-import pytest
-from datetime import datetime, timedelta, timezone
+import uuid
 
-from lib.auth.tokens import (
-    issue_refresh_token,
-    verify_and_rotate_refresh_token,
-    revoke_refresh_token,
-    revoke_all_user_tokens,
-    cleanup_expired_tokens,
-    REFRESH_TOKEN_TTL_DAYS,
-)
+import pytest
+
 from lib.auth.errors import InvalidToken
+from lib.auth.tokens import (
+    cleanup_expired_tokens,
+    issue_refresh_token,
+    revoke_all_user_tokens,
+    revoke_refresh_token,
+    verify_and_rotate_refresh_token,
+)
 
 
 def _hash(token: str) -> str:

@@ -10,18 +10,16 @@ This module tests:
 """
 
 import asyncio
-import math
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 from tools.stats import (
-    get_tileset_stats,
+    _calculate_bbox_area_km2,
+    _count_coordinates,
+    _extract_geometry_type,
+    get_area_stats,
     get_feature_distribution,
     get_layer_stats,
-    get_area_stats,
-    _calculate_bbox_area_km2,
-    _extract_geometry_type,
-    _count_coordinates,
+    get_tileset_stats,
 )
 from validators import validate_bbox
 
@@ -45,10 +43,10 @@ class TestHelperFunctions:
         """validate_bbox should return invalid for bad input."""
         result = validate_bbox("invalid")
         assert not result.valid
-        
+
         result = validate_bbox("1,2,3")
         assert not result.valid
-        
+
         result = validate_bbox("")
         assert not result.valid
 
@@ -93,12 +91,7 @@ class TestHelperFunctions:
 
     def test_count_coordinates_linestring(self):
         """_count_coordinates should count LineString coordinates."""
-        feature = {
-            "geometry": {
-                "type": "LineString",
-                "coordinates": [[0, 0], [1, 1], [2, 2]]
-            }
-        }
+        feature = {"geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1], [2, 2]]}}
         assert _count_coordinates(feature) == 3
 
     def test_count_coordinates_polygon(self):
@@ -106,7 +99,7 @@ class TestHelperFunctions:
         feature = {
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]
+                "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
             }
         }
         assert _count_coordinates(feature) == 5
@@ -117,6 +110,7 @@ class TestGetTilesetStats:
 
     def test_successful_stats(self):
         """get_tileset_stats should return comprehensive statistics."""
+
         async def run_test():
             tileset_data = {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -164,6 +158,7 @@ class TestGetTilesetStats:
 
     def test_invalid_tileset_id(self):
         """get_tileset_stats should return error for invalid tileset_id."""
+
         async def run_test():
             result = await get_tileset_stats("invalid-id")
             assert "error" in result
@@ -173,6 +168,7 @@ class TestGetTilesetStats:
 
     def test_stats_with_http_error(self):
         """get_tileset_stats should handle HTTP errors gracefully."""
+
         async def run_test():
             import httpx
 
@@ -196,6 +192,7 @@ class TestGetFeatureDistribution:
 
     def test_distribution_calculation(self):
         """get_feature_distribution should calculate correct percentages."""
+
         async def run_test():
             features_data = {
                 "features": [
@@ -221,13 +218,16 @@ class TestGetFeatureDistribution:
 
     def test_distribution_with_tileset_filter(self):
         """get_feature_distribution should pass tileset_id to API."""
+
         async def run_test():
             features_data = {"features": []}
 
             with patch("tools.stats.fetch_with_retry") as mock_fetch:
                 mock_fetch.return_value = features_data
 
-                result = await get_feature_distribution(tileset_id="550e8400-e29b-41d4-a716-446655440000")
+                result = await get_feature_distribution(
+                    tileset_id="550e8400-e29b-41d4-a716-446655440000"
+                )
 
                 # Check that tileset_id was in the query
                 assert result["query"]["tileset_id"] == "550e8400-e29b-41d4-a716-446655440000"
@@ -236,6 +236,7 @@ class TestGetFeatureDistribution:
 
     def test_distribution_with_invalid_tileset_id(self):
         """get_feature_distribution should return error for invalid tileset_id."""
+
         async def run_test():
             result = await get_feature_distribution(tileset_id="invalid-id")
             assert "error" in result
@@ -249,12 +250,25 @@ class TestGetLayerStats:
 
     def test_layer_grouping(self):
         """get_layer_stats should group features by layer."""
+
         async def run_test():
             features_data = {
                 "features": [
-                    {"layer_name": "roads", "geometry": {"type": "LineString"}, "properties": {"name": "Main St"}},
-                    {"layer_name": "roads", "geometry": {"type": "LineString"}, "properties": {"name": "Oak Ave"}},
-                    {"layer_name": "buildings", "geometry": {"type": "Polygon"}, "properties": {"height": 10}},
+                    {
+                        "layer_name": "roads",
+                        "geometry": {"type": "LineString"},
+                        "properties": {"name": "Main St"},
+                    },
+                    {
+                        "layer_name": "roads",
+                        "geometry": {"type": "LineString"},
+                        "properties": {"name": "Oak Ave"},
+                    },
+                    {
+                        "layer_name": "buildings",
+                        "geometry": {"type": "Polygon"},
+                        "properties": {"height": 10},
+                    },
                 ]
             }
 
@@ -273,6 +287,7 @@ class TestGetLayerStats:
 
     def test_default_layer(self):
         """get_layer_stats should use 'default' for features without layer."""
+
         async def run_test():
             features_data = {
                 "features": [
@@ -291,6 +306,7 @@ class TestGetLayerStats:
 
     def test_invalid_tileset_id(self):
         """get_layer_stats should return error for invalid tileset_id."""
+
         async def run_test():
             result = await get_layer_stats("invalid-id")
             assert "error" in result
@@ -304,6 +320,7 @@ class TestGetAreaStats:
 
     def test_area_calculation(self):
         """get_area_stats should calculate area and density."""
+
         async def run_test():
             features_data = {
                 "features": [
@@ -328,6 +345,7 @@ class TestGetAreaStats:
 
     def test_invalid_bbox(self):
         """get_area_stats should return error for invalid bbox."""
+
         async def run_test():
             result = await get_area_stats("invalid-bbox")
 
@@ -338,6 +356,7 @@ class TestGetAreaStats:
 
     def test_bbox_parsing(self):
         """get_area_stats should correctly parse bbox."""
+
         async def run_test():
             features_data = {"features": []}
 
@@ -355,6 +374,7 @@ class TestGetAreaStats:
 
     def test_with_tileset_filter(self):
         """get_area_stats should filter by tileset_id."""
+
         async def run_test():
             features_data = {"features": []}
 
@@ -372,6 +392,7 @@ class TestGetAreaStats:
 
     def test_with_invalid_tileset_id(self):
         """get_area_stats should return error for invalid tileset_id."""
+
         async def run_test():
             result = await get_area_stats(
                 bbox="139.5,35.5,140.0,36.0",

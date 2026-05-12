@@ -3,15 +3,10 @@ Tilesets CRUD endpoints.
 """
 
 import json
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
-from lib.config import get_settings
-from lib.database import get_connection
-from lib.errors import ErrorCode, api_error
-from lib.models.tileset import TilesetCreate, TilesetUpdate
-from lib.cache import invalidate_tileset_cache
 from lib.auth import (
     AuthContext,
     User,
@@ -21,10 +16,13 @@ from lib.auth import (
     get_current_user,
     require_auth_context,
 )
-from lib.tiles import generate_tilejson
+from lib.cache import invalidate_tileset_cache
+from lib.config import get_settings
+from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
+from lib.models.tileset import TilesetCreate, TilesetUpdate
 from lib.pmtiles import generate_pmtiles_tilejson
 from lib.raster_tiles import generate_raster_tilejson
-
 
 router = APIRouter(prefix="/api/tilesets", tags=["tilesets"])
 settings = get_settings()
@@ -33,13 +31,13 @@ settings = get_settings()
 def get_base_url(request: Request) -> str:
     """
     Get base URL from request headers.
-    
+
     Handles various proxy configurations including Fly.io and Vercel.
     Priority:
     1. x-forwarded-host + x-forwarded-proto
     2. host header + x-forwarded-proto
     3. request.base_url (fallback)
-    
+
     Always uses HTTPS in production (non-localhost).
     """
     # Get protocol - prefer x-forwarded-proto, also check fly-forwarded-proto
@@ -48,26 +46,26 @@ def get_base_url(request: Request) -> str:
         request.headers.get("fly-forwarded-proto") or
         "http"
     )
-    
+
     # Get host - prefer x-forwarded-host, fallback to host header
     forwarded_host = (
         request.headers.get("x-forwarded-host") or
         request.headers.get("host")
     )
-    
+
     if forwarded_host:
         # Force HTTPS for non-localhost hosts
         if "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
             forwarded_proto = "https"
         return f"{forwarded_proto}://{forwarded_host}"
-    
+
     # Fallback to request.base_url
     base_url = str(request.base_url).rstrip("/")
-    
+
     # Force HTTPS for production URLs
     if base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
         base_url = base_url.replace("http://", "https://", 1)
-    
+
     return base_url
 
 
@@ -85,7 +83,7 @@ def list_tilesets(
 ):
     """
     List all accessible tilesets.
-    
+
     By default, only public tilesets are returned.
     With authentication and include_private=true, also returns user's private tilesets.
     Optionally filter by tileset type.
@@ -100,7 +98,7 @@ def list_tilesets(
                 f"Invalid type '{type}'. Must be one of: {', '.join(sorted(valid_types))}",
                 details={"type": type, "valid_types": sorted(valid_types)},
             )
-        
+
         with conn.cursor() as cur:
             # Build query dynamically based on parameters
             base_query = """
@@ -110,28 +108,28 @@ def list_tilesets(
                 WHERE 1=1
             """
             params = []
-            
+
             # Add visibility filter
             if include_private and user:
                 base_query += " AND (is_public = true OR user_id = %s)"
                 params.append(user.id)
             else:
                 base_query += " AND is_public = true"
-            
+
             # Add type filter if provided
             if type is not None:
                 base_query += " AND type = %s"
                 params.append(type.lower())
-            
+
             # Add ordering
             base_query += " ORDER BY created_at DESC"
-            
+
             # Execute query
             if params:
                 cur.execute(base_query, tuple(params))
             else:
                 cur.execute(base_query)
-            
+
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
 
@@ -343,7 +341,7 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
             (tileset_id,),
         )
         row = cur.fetchone()
-    
+
     if not row:
         raise api_error(
             404,
@@ -354,10 +352,10 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
 
     (name, description, min_zoom, max_zoom, attribution,
      xmin, ymin, xmax, ymax, center_x, center_y) = row
-    
+
     # Get vector_layers information from features
     vector_layers = []
-    
+
     with conn.cursor() as cur:
         if layer:
             cur.execute(
@@ -380,7 +378,7 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
                 (tileset_id,),
             )
         db_layer_names = [row[0] for row in cur.fetchall()]
-        
+
         if layer and not db_layer_names:
             raise api_error(
                 404,
@@ -388,7 +386,7 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
                 f"Layer '{layer}' not found in tileset",
                 details={"tileset_id": tileset_id, "layer": layer},
             )
-        
+
         for db_layer_name in db_layer_names:
             cur.execute(
                 """
@@ -400,7 +398,7 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
                 (tileset_id, db_layer_name),
             )
             props_row = cur.fetchone()
-            
+
             fields = {}
             if props_row and props_row[0]:
                 properties = props_row[0]
@@ -413,7 +411,7 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
                         fields[key] = "Number"
                     else:
                         fields[key] = "String"
-            
+
             vector_layers.append({
                 "id": db_layer_name,
                 "fields": fields,
@@ -421,7 +419,7 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
                 "maxzoom": max_zoom or 22,
                 "description": ""
             })
-    
+
     if not vector_layers:
         db_layer_names = ["default"]
         vector_layers.append({
@@ -431,13 +429,13 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
             "maxzoom": max_zoom or 22,
             "description": ""
         })
-    
+
     # Build tiles URL
     if layer:
         tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}&layer={layer}"
     else:
         tiles_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf?tileset_id={tileset_id}"
-    
+
     tilejson = {
         "tilejson": "3.0.0",
         "name": name,
@@ -446,20 +444,20 @@ def _get_vector_tilejson(tileset_id: str, layer: Optional[str], conn, base_url: 
         "maxzoom": max_zoom or 22,
         "vector_layers": vector_layers,
     }
-    
+
     if xmin is not None and ymin is not None and xmax is not None and ymax is not None:
         tilejson["bounds"] = [xmin, ymin, xmax, ymax]
-    
+
     if center_x is not None and center_y is not None:
         center_zoom = min_zoom if min_zoom else 10
         tilejson["center"] = [center_x, center_y, center_zoom]
-    
+
     if description:
         tilejson["description"] = description
-    
+
     if attribution:
         tilejson["attribution"] = attribution
-    
+
     return tilejson
 
 
@@ -478,7 +476,7 @@ def _get_pmtiles_tilejson(tileset_id: str, conn, base_url: str):
             (tileset_id,),
         )
         row = cur.fetchone()
-    
+
     if not row:
         raise api_error(
             404,
@@ -486,10 +484,10 @@ def _get_pmtiles_tilejson(tileset_id: str, conn, base_url: str):
             "PMTiles source not found",
             details={"tileset_id": tileset_id},
         )
-    
+
     (pmtiles_url, tile_type, min_zoom, max_zoom, bounds, center, layers,
      name, description, attribution) = row
-    
+
     metadata = {
         "tile_type": tile_type or "mvt",
         "min_zoom": min_zoom or 0,
@@ -498,7 +496,7 @@ def _get_pmtiles_tilejson(tileset_id: str, conn, base_url: str):
         "center": center,
         "layers": layers or [],
     }
-    
+
     return generate_pmtiles_tilejson(
         tileset_id=tileset_id,
         tileset_name=name,
@@ -525,7 +523,7 @@ def _get_raster_tilejson(tileset_id: str, conn, base_url: str):
             (tileset_id,),
         )
         row = cur.fetchone()
-    
+
     if not row:
         raise api_error(
             404,
@@ -533,19 +531,19 @@ def _get_raster_tilejson(tileset_id: str, conn, base_url: str):
             "Raster source not found",
             details={"tileset_id": tileset_id},
         )
-    
+
     (name, description, tile_format, min_zoom, max_zoom, attribution, cog_url,
      xmin, ymin, xmax, ymax, center_x, center_y) = row
-    
+
     bounds = None
     if xmin is not None and ymin is not None and xmax is not None and ymax is not None:
         bounds = [xmin, ymin, xmax, ymax]
-    
+
     center = None
     if center_x is not None and center_y is not None:
         center_zoom = min_zoom if min_zoom else 10
         center = [center_x, center_y, center_zoom]
-    
+
     return generate_raster_tilejson(
         tileset_id=tileset_id,
         name=name,
@@ -634,10 +632,10 @@ def create_tileset(
                     metadata_json,
                 ),
             )
-            
+
             row = cur.fetchone()
             conn.commit()
-            
+
             return {
                 "id": str(row[0]),
                 "name": row[1],
@@ -651,7 +649,7 @@ def create_tileset(
                 "created_at": row[9].isoformat() if row[9] else None,
                 "updated_at": row[10].isoformat() if row[10] else None,
             }
-            
+
     except HTTPException:
         raise
     except Exception as e:

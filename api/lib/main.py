@@ -16,19 +16,19 @@ from lib.config import get_settings
 from lib.cors_middleware import TwoTierCORSMiddleware
 from lib.database import close_pool
 from lib.errors import is_envelope_detail
+from lib.routers.api_keys import router as api_keys_router
 
 # Import all routers
 from lib.routers.auth import router as auth_router
-from lib.routers.health import router as health_router
-from lib.routers.tilesets import router as tilesets_router
-from lib.routers.features import router as features_router
 from lib.routers.batch_features import router as batch_features_router
-from lib.routers.datasources import router as datasources_router
 from lib.routers.colormaps import router as colormaps_router
+from lib.routers.datasources import router as datasources_router
+from lib.routers.features import router as features_router
+from lib.routers.health import router as health_router
 from lib.routers.stats import router as stats_router
-from lib.routers.tiles import router as tiles_router
 from lib.routers.teams import router as teams_router
-from lib.routers.api_keys import router as api_keys_router
+from lib.routers.tiles import router as tiles_router
+from lib.routers.tilesets import router as tilesets_router
 
 # E2E テスト用のルーター（環境変数 E2E_MODE=1 のときだけ登録される）。
 # 本番には絶対に出してはいけない。詳細は lib/routers/test_helpers.py を参照。
@@ -137,7 +137,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
     <div class="container">
         <h1>🗺️ geo-base Tile Server</h1>
         <p class="version">Version 0.4.6 | <a href="/docs">API Docs</a> | <a href="/redoc">ReDoc</a></p>
-        
+
         <div class="card">
             <h2>Core Endpoints</h2>
             <div class="endpoint-group">
@@ -146,7 +146,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
                 <div class="endpoint"><span class="method get">GET</span> <code>/api/features</code></div>
             </div>
         </div>
-        
+
         <div class="card new">
             <h2>🆕 Team Management (v0.4.5+)</h2>
             <div class="endpoint-group">
@@ -156,7 +156,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
                 <div class="endpoint"><span class="method post">POST</span> <code>/api/teams/{id}/invitations</code> - Invite member</div>
             </div>
         </div>
-        
+
         <div class="card new">
             <h2>🔑 API Key Management (v0.4.6+)</h2>
             <div class="endpoint-group">
@@ -166,7 +166,7 @@ PREVIEW_HTML = """<!DOCTYPE html>
                 <div class="endpoint"><span class="method post">POST</span> <code>/api/api-keys/{id}/revoke</code> - Revoke key</div>
             </div>
         </div>
-        
+
         <div class="card">
             <h2>Tile Endpoints</h2>
             <div class="endpoint-group">

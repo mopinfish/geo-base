@@ -1,6 +1,6 @@
 """Tests for auth CLI."""
-import subprocess
 import os
+import subprocess
 from pathlib import Path
 
 # api/tests/test_auth/test_cli.py → api/tests/test_auth → api/tests → api

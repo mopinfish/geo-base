@@ -9,7 +9,6 @@ Uses standard asyncio approach (not pytest-asyncio).
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
 from tools.geocoding import (
@@ -23,6 +22,7 @@ class TestGeocode:
 
     def test_geocode_tokyo_station(self):
         """geocode should return coordinates for Tokyo Station."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = [
@@ -54,6 +54,7 @@ class TestGeocode:
 
     def test_geocode_with_country_filter(self):
         """geocode should filter by country code."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = []
@@ -77,6 +78,7 @@ class TestGeocode:
 
     def test_geocode_with_limit(self):
         """geocode should respect limit parameter."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = [
@@ -101,6 +103,7 @@ class TestGeocode:
 
     def test_geocode_empty_query(self):
         """geocode with empty query should return error."""
+
         async def run_test():
             result = await geocode("")
             assert "error" in result or result.get("count", 1) == 0
@@ -109,6 +112,7 @@ class TestGeocode:
 
     def test_geocode_nonexistent_place(self):
         """geocode should handle no results gracefully."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = []
@@ -130,6 +134,7 @@ class TestGeocode:
 
     def test_geocode_network_error(self):
         """geocode should handle network errors."""
+
         async def run_test():
             import httpx
 
@@ -148,6 +153,7 @@ class TestGeocode:
 
     def test_geocode_language_parameter(self):
         """geocode should pass language parameter."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = [
@@ -174,6 +180,7 @@ class TestReverseGeocode:
 
     def test_reverse_geocode_tokyo_station(self):
         """reverse_geocode should return address for Tokyo Station coordinates."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -213,6 +220,7 @@ class TestReverseGeocode:
 
     def test_reverse_geocode_with_zoom(self):
         """reverse_geocode should respect zoom parameter."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -240,6 +248,7 @@ class TestReverseGeocode:
 
     def test_reverse_geocode_ocean(self):
         """reverse_geocode should handle ocean/empty locations."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {"error": "Unable to geocode"}
@@ -262,6 +271,7 @@ class TestReverseGeocode:
 
     def test_reverse_geocode_invalid_latitude(self):
         """reverse_geocode should handle invalid latitude."""
+
         async def run_test():
             # Latitude out of range
             result = await reverse_geocode(latitude=91, longitude=139.7671)
@@ -271,6 +281,7 @@ class TestReverseGeocode:
 
     def test_reverse_geocode_invalid_longitude(self):
         """reverse_geocode should handle invalid longitude."""
+
         async def run_test():
             # Longitude out of range
             result = await reverse_geocode(latitude=35.6812, longitude=181)
@@ -280,6 +291,7 @@ class TestReverseGeocode:
 
     def test_reverse_geocode_network_error(self):
         """reverse_geocode should handle network errors."""
+
         async def run_test():
             import httpx
 
@@ -302,6 +314,7 @@ class TestGeocodingIntegration:
 
     def test_geocode_then_reverse(self):
         """Should be able to geocode and then reverse geocode."""
+
         async def run_test():
             # Mock geocode response
             geocode_response = Mock()

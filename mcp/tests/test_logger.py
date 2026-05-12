@@ -4,20 +4,20 @@ Tests for the logging module.
 
 import logging
 import os
-import pytest
-from unittest.mock import patch
-
 import sys
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from logger import (
-    get_logger,
-    get_log_level,
     MCPFormatter,
     ToolCallLogger,
+    get_log_level,
+    get_logger,
 )
 
 
@@ -110,7 +110,7 @@ class TestMCPFormatter:
             exc_info=None,
         )
         formatted = formatter.format(record)
-        
+
         assert "test" in formatted
         assert "INFO" in formatted
         assert "Test message" in formatted
@@ -129,9 +129,9 @@ class TestMCPFormatter:
         )
         record.tool = "my_tool"
         record.elapsed_ms = "123.45"
-        
+
         formatted = formatter.format(record)
-        
+
         assert "tool=my_tool" in formatted
         assert "elapsed_ms=123.45" in formatted
 
@@ -142,16 +142,16 @@ class TestToolCallLogger:
     def test_context_manager_basic(self):
         """ToolCallLogger should work as context manager."""
         logger = get_logger("tool_call_test")
-        
+
         with ToolCallLogger(logger, "test_tool", param="value") as log:
             log.set_result({"success": True})
-        
+
         # No exception means success
 
     def test_result_summarization_dict_with_error(self):
         """Result summarization should handle error in dict."""
         logger = get_logger("summary_test_1")
-        
+
         with ToolCallLogger(logger, "test_tool") as log:
             result = {"error": "Something went wrong"}
             log.set_result(result)
@@ -161,7 +161,7 @@ class TestToolCallLogger:
     def test_result_summarization_dict_with_count(self):
         """Result summarization should handle count in dict."""
         logger = get_logger("summary_test_2")
-        
+
         with ToolCallLogger(logger, "test_tool") as log:
             result = {"count": 5, "items": []}
             log.set_result(result)
@@ -171,7 +171,7 @@ class TestToolCallLogger:
     def test_result_summarization_list(self):
         """Result summarization should handle list."""
         logger = get_logger("summary_test_3")
-        
+
         with ToolCallLogger(logger, "test_tool") as log:
             result = [1, 2, 3, 4, 5]
             log.set_result(result)
@@ -181,7 +181,7 @@ class TestToolCallLogger:
     def test_result_summarization_none(self):
         """Result summarization should handle None."""
         logger = get_logger("summary_test_4")
-        
+
         with ToolCallLogger(logger, "test_tool") as log:
             log.set_result(None)
             summary = log._summarize_result(None)
@@ -190,7 +190,7 @@ class TestToolCallLogger:
     def test_exception_handling(self):
         """ToolCallLogger should log exceptions and re-raise them."""
         logger = get_logger("exception_test")
-        
+
         with pytest.raises(ValueError):
             with ToolCallLogger(logger, "failing_tool"):
                 raise ValueError("Test error")

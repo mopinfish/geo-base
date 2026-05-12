@@ -7,20 +7,20 @@ This module tests:
 - Error code handling
 """
 
-import pytest
-import httpx
 from unittest.mock import Mock
 
+import httpx
+
 from errors import (
-    MCPError,
-    ValidationError,
     APIError,
     AuthenticationError,
-    NotFoundError,
-    NetworkError,
     ErrorCode,
-    handle_api_error,
+    MCPError,
+    NetworkError,
+    NotFoundError,
+    ValidationError,
     create_error_response,
+    handle_api_error,
 )
 
 
@@ -231,7 +231,7 @@ class TestHandleApiError:
         result = handle_api_error(error)
 
         assert result["code"] == "AUTH_REQUIRED"
-        assert "認証" in result["error"]
+        assert "Authentication" in result["error"]
 
     def test_handles_http_status_error_403(self):
         """handle_api_error should handle 403 errors."""
@@ -243,7 +243,7 @@ class TestHandleApiError:
         result = handle_api_error(error)
 
         assert result["code"] == "FORBIDDEN"
-        assert "権限" in result["error"]
+        assert "forbidden" in result["error"].lower()
 
     def test_handles_http_status_error_404(self):
         """handle_api_error should handle 404 errors."""
@@ -274,7 +274,7 @@ class TestHandleApiError:
         result = handle_api_error(error)
 
         assert result["code"] == "TIMEOUT"
-        assert "タイムアウト" in result["error"]
+        assert "timed out" in result["error"].lower()
 
     def test_handles_network_error(self):
         """handle_api_error should handle network errors."""
@@ -282,7 +282,7 @@ class TestHandleApiError:
         result = handle_api_error(error)
 
         assert result["code"] == "NETWORK_ERROR"
-        assert "ネットワーク" in result["error"]
+        assert "Network" in result["error"]
 
     def test_handles_unknown_exception(self):
         """handle_api_error should handle unknown exceptions."""

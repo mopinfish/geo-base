@@ -2,38 +2,36 @@
 Teams management CRUD endpoints.
 """
 
-from datetime import datetime, timedelta, timezone
 import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
 
+from lib.auth import User, require_auth
 from lib.config import get_settings
 from lib.database import get_connection
 from lib.errors import ErrorCode, api_error
-from lib.auth import User, get_current_user, require_auth
 from lib.models.team import (
-    TeamRole,
     InvitationStatus,
     TeamCreate,
-    TeamUpdate,
-    TeamResponse,
+    TeamInvitationAccept,
+    TeamInvitationCreate,
+    TeamInvitationListResponse,
+    TeamInvitationResponse,
     TeamListResponse,
     TeamMemberAdd,
-    TeamMemberUpdate,
-    TeamMemberResponse,
     TeamMemberListResponse,
-    TeamInvitationCreate,
-    TeamInvitationResponse,
-    TeamInvitationAccept,
-    TeamInvitationListResponse,
-    TeamTilesetAdd,
-    TeamTilesetResponse,
-    TeamTilesetListResponse,
+    TeamMemberResponse,
+    TeamMemberUpdate,
     TeamOwnershipTransfer,
+    TeamResponse,
+    TeamRole,
+    TeamTilesetAdd,
+    TeamTilesetListResponse,
+    TeamTilesetResponse,
+    TeamUpdate,
 )
-
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 settings = get_settings()
@@ -90,7 +88,7 @@ def get_team_or_404(conn, team_id: str) -> dict:
         )
         columns = [desc[0] for desc in cur.description]
         row = cur.fetchone()
-    
+
     if not row:
         raise api_error(
             404,
@@ -131,17 +129,17 @@ def create_team(
 ):
     """Create a new team."""
     import json
-    
+
     try:
         slug = team_data.slug or generate_slug(team_data.name)
         settings_json = json.dumps(team_data.settings) if team_data.settings else '{}'
-        
+
         with conn.cursor() as cur:
             # Check if slug already exists
             cur.execute("SELECT id FROM teams WHERE slug = %s", (slug,))
             if cur.fetchone():
                 slug = generate_slug(team_data.name)
-            
+
             # Create team
             cur.execute(
                 """INSERT INTO teams (name, slug, description, owner_id, settings)
@@ -152,7 +150,7 @@ def create_team(
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
             team = dict(zip(columns, row))
-            
+
             # Add creator as owner member (with conflict handling)
             cur.execute(
                 """INSERT INTO team_members (team_id, user_id, role)
@@ -160,14 +158,14 @@ def create_team(
                    ON CONFLICT (team_id, user_id) DO NOTHING""",
                 (team['id'], user.id)
             )
-        
+
         conn.commit()
-        
+
         result = serialize_team(team)
         result['member_count'] = 1
         result['tileset_count'] = 0
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -189,7 +187,7 @@ def list_teams(
     """List teams the user is a member of."""
     try:
         offset = (page - 1) * page_size
-        
+
         with conn.cursor() as cur:
             # Get total count
             cur.execute(
@@ -199,7 +197,7 @@ def list_teams(
                 (user.id,)
             )
             total = cur.fetchone()[0]
-            
+
             # Get teams with counts
             cur.execute(
                 """SELECT t.id, t.name, t.slug, t.description, t.owner_id, t.settings,
@@ -215,16 +213,16 @@ def list_teams(
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         teams = [serialize_team(dict(zip(columns, row))) for row in rows]
-        
+
         return {
             "teams": teams,
             "total": total,
             "page": page,
             "page_size": page_size
         }
-        
+
     except Exception as e:
         raise api_error(
             500,
@@ -242,7 +240,7 @@ def get_team(
     """Get team details."""
     try:
         team = get_team_or_404(conn, team_id)
-        
+
         # Check if user is a member
         if not check_team_permission(conn, team_id, user.id,
                                      [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
@@ -252,20 +250,20 @@ def get_team(
                 "You are not a member of this team",
                 details={"team_id": team_id},
             )
-        
+
         # Get counts
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM team_members WHERE team_id = %s", (team_id,))
             member_count = cur.fetchone()[0]
-            
+
             cur.execute("SELECT COUNT(*) FROM team_tilesets WHERE team_id = %s", (team_id,))
             tileset_count = cur.fetchone()[0]
-        
+
         result = serialize_team(team)
         result['member_count'] = member_count
         result['tileset_count'] = tileset_count
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -285,10 +283,10 @@ def update_team(
 ):
     """Update team details."""
     import json
-    
+
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise api_error(
                 403,
@@ -296,22 +294,22 @@ def update_team(
                 "Only owners and administrators can update team settings",
                 details={"team_id": team_id},
             )
-        
+
         updates = []
         params = []
-        
+
         if update_data.name is not None:
             updates.append("name = %s")
             params.append(update_data.name)
-        
+
         if update_data.description is not None:
             updates.append("description = %s")
             params.append(update_data.description)
-        
+
         if update_data.settings is not None:
             updates.append("settings = %s::jsonb")
             params.append(json.dumps(update_data.settings))
-        
+
         if not updates:
             raise api_error(
                 400,
@@ -330,11 +328,11 @@ def update_team(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         return serialize_team(dict(zip(columns, row)))
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -355,7 +353,7 @@ def delete_team(
     """Delete a team (owner only)."""
     try:
         team = get_team_or_404(conn, team_id)
-        
+
         if str(team['owner_id']) != user.id:
             raise api_error(
                 403,
@@ -393,7 +391,7 @@ def list_team_members(
     """List team members."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id,
                                      [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
             raise api_error(
@@ -433,13 +431,13 @@ def list_team_members(
                 "user_email": member.get('user_email'),
                 "user_name": member.get('user_name'),
             })
-        
+
         return {
             "members": members,
             "total": len(members),
             "team_id": team_id
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -460,7 +458,7 @@ def add_team_member(
     """Add a member to the team."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise api_error(
                 403,
@@ -482,20 +480,20 @@ def add_team_member(
                     "User is already a member of this team",
                     details={"team_id": team_id, "user_id": str(member_data.user_id)},
                 )
-            
+
             # Add member
             cur.execute(
                 """INSERT INTO team_members (team_id, user_id, role, notification_enabled)
                    VALUES (%s, %s, %s, %s)
                    RETURNING id, team_id, user_id, role, notification_enabled, joined_at, updated_at""",
-                (team_id, member_data.user_id, member_data.role or 'member', 
+                (team_id, member_data.user_id, member_data.role or 'member',
                  member_data.notification_enabled if member_data.notification_enabled is not None else True)
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         member = dict(zip(columns, row))
         return {
             "id": str(member['id']),
@@ -506,7 +504,7 @@ def add_team_member(
             "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
             "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -529,7 +527,7 @@ def update_team_member(
     """Update a team member's role or settings."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise api_error(
                 403,
@@ -559,18 +557,18 @@ def update_team_member(
                     "Cannot change owner's role. Transfer ownership first.",
                     details={"team_id": team_id, "user_id": user_id},
                 )
-        
+
         updates = []
         params = []
-        
+
         if update_data.role is not None:
             updates.append("role = %s")
             params.append(update_data.role.value)
-        
+
         if update_data.notification_enabled is not None:
             updates.append("notification_enabled = %s")
             params.append(update_data.notification_enabled)
-        
+
         if not updates:
             raise api_error(
                 400,
@@ -579,7 +577,7 @@ def update_team_member(
             )
 
         params.extend([team_id, user_id])
-        
+
         with conn.cursor() as cur:
             # list_team_members と同じく user_email / user_name を返して
             # クライアント側の state 更新で member.user_email が失われないようにする。
@@ -633,11 +631,11 @@ def remove_team_member(
     """Remove a member from the team."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         # User can remove themselves, or admin/owner can remove others
         is_self = user_id == user.id
         is_admin = check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR])
-        
+
         if not is_self and not is_admin:
             raise api_error(
                 403,
@@ -667,14 +665,14 @@ def remove_team_member(
                     "Cannot remove team owner. Transfer ownership first.",
                     details={"team_id": team_id, "user_id": user_id},
                 )
-            
+
             cur.execute(
                 "DELETE FROM team_members WHERE team_id = %s AND user_id = %s",
                 (team_id, user_id)
             )
-        
+
         conn.commit()
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -700,7 +698,7 @@ def list_team_invitations(
     """List team invitations."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise api_error(
                 403,
@@ -708,24 +706,24 @@ def list_team_invitations(
                 "Only owners and administrators can view invitations",
                 details={"team_id": team_id},
             )
-        
+
         query = """SELECT id, team_id, email, role, invited_by, message, token, status,
                           expires_at, accepted_at, created_at
                    FROM team_invitations
                    WHERE team_id = %s"""
         params = [team_id]
-        
+
         if status:
             query += " AND status = %s"
             params.append(status.value)
-        
+
         query += " ORDER BY created_at DESC"
-        
+
         with conn.cursor() as cur:
             cur.execute(query, tuple(params))
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         invitations = []
         for row in rows:
             inv = dict(zip(columns, row))
@@ -742,13 +740,13 @@ def list_team_invitations(
                 "accepted_at": inv['accepted_at'].isoformat() if inv['accepted_at'] else None,
                 "created_at": inv['created_at'].isoformat() if inv['created_at'] else None,
             })
-        
+
         return {
             "invitations": invitations,
             "total": len(invitations),
             "team_id": team_id
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -873,7 +871,7 @@ def accept_team_invitation(
                 (accept_data.token,)
             )
             row = cur.fetchone()
-            
+
             if not row:
                 raise api_error(
                     404,
@@ -934,7 +932,7 @@ def accept_team_invitation(
                     "You are already a member of this team",
                     details={"team_id": str(team_id)},
                 )
-            
+
             # Add as member
             cur.execute(
                 """INSERT INTO team_members (team_id, user_id, role)
@@ -944,15 +942,15 @@ def accept_team_invitation(
             )
             columns = [desc[0] for desc in cur.description]
             member_row = cur.fetchone()
-            
+
             # Update invitation status and clear token (#55: replay prevention)
             cur.execute(
                 "UPDATE team_invitations SET status = 'accepted', accepted_at = NOW(), token = NULL WHERE id = %s",
                 (inv_id,)
             )
-        
+
         conn.commit()
-        
+
         member = dict(zip(columns, member_row))
         return {
             "id": str(member['id']),
@@ -963,7 +961,7 @@ def accept_team_invitation(
             "joined_at": member['joined_at'].isoformat() if member['joined_at'] else None,
             "updated_at": member['updated_at'].isoformat() if member['updated_at'] else None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -985,7 +983,7 @@ def cancel_team_invitation(
     """Cancel a pending invitation."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise api_error(
                 403,
@@ -1037,7 +1035,7 @@ def list_team_tilesets(
     """List tilesets shared with the team."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id,
                                      [TeamRole.OWNER, TeamRole.ADMINISTRATOR, TeamRole.MEMBER, TeamRole.GUEST]):
             raise api_error(
@@ -1059,7 +1057,7 @@ def list_team_tilesets(
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         tilesets = []
         for row in rows:
             ts = dict(zip(columns, row))
@@ -1073,13 +1071,13 @@ def list_team_tilesets(
                 "tileset_name": ts['tileset_name'],
                 "tileset_type": ts['tileset_type'],
             })
-        
+
         return {
             "tilesets": tilesets,
             "total": len(tilesets),
             "team_id": team_id
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1137,9 +1135,9 @@ def add_team_tileset(
                     "Tileset not found",
                     details={"tileset_id": str(tileset_data.tileset_id)},
                 )
-            
+
             tileset_name, tileset_type = tileset[1], tileset[2]
-            
+
             cur.execute(
                 """INSERT INTO team_tilesets (team_id, tileset_id, added_by, permission_level)
                    VALUES (%s, %s, %s, %s)
@@ -1148,9 +1146,9 @@ def add_team_tileset(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         ts = dict(zip(columns, row))
         return {
             "id": str(ts['id']),
@@ -1162,7 +1160,7 @@ def add_team_tileset(
             "tileset_name": tileset_name,
             "tileset_type": tileset_type,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1184,7 +1182,7 @@ def remove_team_tileset(
     """Remove a tileset from the team."""
     try:
         get_team_or_404(conn, team_id)
-        
+
         if not check_team_permission(conn, team_id, user.id, [TeamRole.OWNER, TeamRole.ADMINISTRATOR]):
             raise api_error(
                 403,
@@ -1233,7 +1231,7 @@ def transfer_team_ownership(
     """Transfer team ownership to another member."""
     try:
         team = get_team_or_404(conn, team_id)
-        
+
         if str(team['owner_id']) != user.id:
             raise api_error(
                 403,
@@ -1257,13 +1255,13 @@ def transfer_team_ownership(
                     "New owner must be a team member",
                     details={"team_id": team_id, "user_id": str(new_owner_id)},
                 )
-            
+
             # Update team owner
             cur.execute(
                 "UPDATE teams SET owner_id = %s, updated_at = NOW() WHERE id = %s",
                 (new_owner_id, team_id)
             )
-            
+
             # Update member roles
             cur.execute(
                 "UPDATE team_members SET role = 'administrator' WHERE team_id = %s AND user_id = %s",
@@ -1273,7 +1271,7 @@ def transfer_team_ownership(
                 "UPDATE team_members SET role = 'owner' WHERE team_id = %s AND user_id = %s",
                 (team_id, new_owner_id)
             )
-            
+
             # Return updated team
             cur.execute(
                 """SELECT id, name, slug, description, owner_id, settings, created_at, updated_at
@@ -1282,11 +1280,11 @@ def transfer_team_ownership(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         return serialize_team(dict(zip(columns, row)))
-        
+
     except HTTPException:
         raise
     except Exception as e:

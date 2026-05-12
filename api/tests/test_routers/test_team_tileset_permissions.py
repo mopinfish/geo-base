@@ -18,7 +18,6 @@ from lib.auth import User, require_auth
 from lib.database import get_connection
 from lib.routers.teams import router as teams_router
 
-
 # ---------------------------------------------------------------------------
 # Test app + dependency overrides
 # ---------------------------------------------------------------------------

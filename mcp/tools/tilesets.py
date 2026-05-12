@@ -16,10 +16,10 @@ import httpx
 from tenacity import RetryError
 
 from config import get_settings
-from errors import handle_api_error, create_error_response, ErrorCode
-from logger import get_logger, ToolCallLogger
+from errors import ErrorCode, create_error_response, handle_api_error
+from logger import ToolCallLogger, get_logger
 from retry import fetch_with_retry
-from validators import validate_uuid, validate_tileset_type
+from validators import validate_tileset_type, validate_uuid
 
 # Initialize logger and settings
 logger = get_logger(__name__)
@@ -60,7 +60,7 @@ async def list_tilesets(
                 log.set_result(result)
                 return result
             type = type_result.value
-        
+
         tile_server_url = settings.tile_server_url.rstrip("/")
         url = f"{tile_server_url}/api/tilesets"
 
@@ -152,7 +152,7 @@ async def get_tileset(tileset_id: str) -> dict[str, Any]:
             log.set_result(result)
             return result
         validated_tileset_id = uuid_result.value
-        
+
         tile_server_url = settings.tile_server_url.rstrip("/")
         url = f"{tile_server_url}/api/tilesets/{validated_tileset_id}"
 
@@ -217,7 +217,7 @@ async def get_tileset(tileset_id: str) -> dict[str, Any]:
                 f"HTTP error getting tileset {validated_tileset_id}: {status_code}",
                 extra={"tileset_id": validated_tileset_id, "status_code": status_code},
             )
-            
+
             if status_code == 404:
                 result = create_error_response(
                     "Tileset not found",
@@ -240,7 +240,7 @@ async def get_tileset(tileset_id: str) -> dict[str, Any]:
                 )
             else:
                 result = handle_api_error(e, {"tileset_id": validated_tileset_id})
-            
+
             log.set_result(result)
             return result
         except (httpx.RequestError, RetryError) as e:
@@ -286,7 +286,7 @@ async def get_tileset_tilejson(tileset_id: str) -> dict[str, Any]:
             log.set_result(result)
             return result
         validated_tileset_id = uuid_result.value
-        
+
         tile_server_url = settings.tile_server_url.rstrip("/")
         url = f"{tile_server_url}/api/tilesets/{validated_tileset_id}/tilejson.json"
 
@@ -322,7 +322,7 @@ async def get_tileset_tilejson(tileset_id: str) -> dict[str, Any]:
                 f"HTTP error getting TileJSON for {validated_tileset_id}: {status_code}",
                 extra={"tileset_id": validated_tileset_id, "status_code": status_code},
             )
-            
+
             if status_code == 404:
                 result = create_error_response(
                     "TileJSON not found",
@@ -332,7 +332,7 @@ async def get_tileset_tilejson(tileset_id: str) -> dict[str, Any]:
                 )
             else:
                 result = handle_api_error(e, {"tileset_id": validated_tileset_id})
-            
+
             log.set_result(result)
             return result
         except (httpx.RequestError, RetryError) as e:

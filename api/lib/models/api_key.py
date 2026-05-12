@@ -3,13 +3,13 @@ Pydantic models for API Key operations.
 """
 
 import hashlib
-import secrets
 import re
-from datetime import datetime, timedelta, timezone
+import secrets
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator, model_validator
 
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # =============================================================================
 # Constants
@@ -30,7 +30,7 @@ class ApiKeyScope(str, Enum):
     WRITE = "write"
     DELETE = "delete"
     ADMIN = "admin"
-    
+
     @classmethod
     def from_string(cls, value: str) -> "ApiKeyScope":
         """Create scope from string."""
@@ -38,7 +38,7 @@ class ApiKeyScope(str, Enum):
             return cls(value.lower())
         except ValueError:
             raise ValueError(f"Invalid scope '{value}'. Must be one of: {', '.join(s.value for s in cls)}")
-    
+
     def includes(self, other: "ApiKeyScope") -> bool:
         """Check if this scope includes another scope."""
         hierarchy = {
@@ -63,7 +63,7 @@ class ApiKeyEnvironment(str, Enum):
 def generate_api_key(environment: ApiKeyEnvironment = ApiKeyEnvironment.LIVE) -> tuple[str, str, str]:
     """
     Generate a new API key.
-    
+
     Returns:
         Tuple of (full_key, prefix, key_hash)
     """
@@ -112,7 +112,7 @@ class ApiKeyCreate(BaseModel):
     expires_in_days: Optional[int] = Field(None, ge=1, le=365, description="Days until expiration (optional)")
     environment: ApiKeyEnvironment = Field(default=ApiKeyEnvironment.LIVE, description="Key environment")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
-    
+
     @field_validator('scopes')
     @classmethod
     def validate_scopes(cls, v: List[ApiKeyScope]) -> List[ApiKeyScope]:
@@ -120,7 +120,7 @@ class ApiKeyCreate(BaseModel):
         if not v:
             return [ApiKeyScope.READ]
         return list(set(v))  # Remove duplicates
-    
+
     @model_validator(mode='after')
     def validate_rate_limits(self) -> 'ApiKeyCreate':
         """Ensure rate limits are sensible."""
@@ -139,13 +139,13 @@ class ApiKeyUpdate(BaseModel):
     rate_limit_per_day: Optional[int] = Field(None, ge=1, le=1000000)
     is_active: Optional[bool] = None
     metadata: Optional[Dict[str, Any]] = None
-    
+
     @model_validator(mode='after')
     def check_at_least_one_field(self) -> 'ApiKeyUpdate':
         """Ensure at least one field is provided for update."""
         if all(
-            getattr(self, field) is None 
-            for field in ['name', 'description', 'scopes', 'rate_limit_per_minute', 
+            getattr(self, field) is None
+            for field in ['name', 'description', 'scopes', 'rate_limit_per_minute',
                          'rate_limit_per_day', 'is_active', 'metadata']
         ):
             raise ValueError("At least one field must be provided for update")
@@ -179,12 +179,12 @@ class ApiKeyResponse(BaseModel):
     revoked_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    
+
     # Computed fields
     is_expired: bool = False
     is_revoked: bool = False
     masked_key: str = ""
-    
+
     @model_validator(mode='after')
     def compute_fields(self) -> 'ApiKeyResponse':
         """Compute derived fields.
@@ -204,14 +204,14 @@ class ApiKeyResponse(BaseModel):
         self.is_revoked = self.revoked_at is not None
         self.masked_key = mask_api_key(self.prefix)
         return self
-    
+
     model_config = {"from_attributes": True}
 
 
 class ApiKeyCreatedResponse(ApiKeyResponse):
     """Response model when creating a new API key (includes the actual key)."""
     key: str = Field(..., description="The full API key - only shown once!")
-    
+
     model_config = {"from_attributes": True}
 
 
@@ -277,7 +277,7 @@ class RateLimitStatus(BaseModel):
     day_used: int
     day_remaining: int
     is_limited: bool = False
-    
+
     @model_validator(mode='after')
     def compute_is_limited(self) -> 'RateLimitStatus':
         """Check if rate limited."""

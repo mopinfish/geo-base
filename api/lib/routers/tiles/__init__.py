@@ -10,8 +10,8 @@ This module combines all tile-related routers:
 
 from fastapi import APIRouter
 
-from lib.routers.tiles.mbtiles import router as mbtiles_router
 from lib.routers.tiles.dynamic import router as dynamic_router
+from lib.routers.tiles.mbtiles import router as mbtiles_router
 from lib.routers.tiles.pmtiles import router as pmtiles_router
 from lib.routers.tiles.raster import router as raster_router
 

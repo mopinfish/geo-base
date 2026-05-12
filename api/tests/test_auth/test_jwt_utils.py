@@ -1,17 +1,16 @@
 """Tests for auth.jwt_utils module."""
-import pytest
+
 import jwt as pyjwt
-from datetime import datetime, timedelta, timezone
+import pytest
 from freezegun import freeze_time
 
+from lib.auth.errors import InvalidToken
 from lib.auth.jwt_utils import (
-    issue_access_token,
-    decode_access_token,
     claims_to_user,
+    decode_access_token,
+    issue_access_token,
 )
 from lib.auth.models import User
-from lib.auth.errors import InvalidToken
-
 
 SECRET = "test-secret-do-not-use-in-prod-" + "x" * 40
 AUD = "authenticated"

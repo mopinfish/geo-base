@@ -15,7 +15,6 @@
  */
 import { execSync } from "node:child_process";
 import path from "node:path";
-import type { FullConfig } from "@playwright/test";
 
 import { waitForServer } from "./utils/wait-for-server";
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./utils/session";
@@ -65,7 +64,7 @@ async function ensureAdminUser(): Promise<void> {
   }
 }
 
-export default async function globalSetup(_config: FullConfig): Promise<void> {
+export default async function globalSetup(): Promise<void> {
   await waitForServer(`${API_BASE}/api/health`);
   await waitForServer(APP_BASE);
   await ensureAdminUser();

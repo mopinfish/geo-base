@@ -1,5 +1,6 @@
 """Tests for AuthContext."""
 import pytest
+
 from lib.auth.context import AuthContext
 from lib.auth.models import User
 

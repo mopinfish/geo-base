@@ -24,8 +24,8 @@ def _build_client(monkeypatch) -> tuple[TestClient, MagicMock]:
     import lib.main as main_module
 
     importlib.reload(main_module)
-    from lib.auth.models import User
     from lib.auth import require_auth
+    from lib.auth.models import User
 
     fake_user = User(
         id="u-1",

@@ -9,16 +9,15 @@ Uses standard asyncio approach (not pytest-asyncio).
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
 from tools.crud import (
-    create_tileset,
-    update_tileset,
-    delete_tileset,
     create_feature,
-    update_feature,
+    create_tileset,
     delete_feature,
+    delete_tileset,
+    update_feature,
+    update_tileset,
 )
 
 
@@ -27,14 +26,17 @@ class TestCreateTileset:
 
     def test_create_tileset_success(self):
         """create_tileset should return created tileset."""
+
         async def run_test():
             mock_response = Mock()
-            mock_response.json = Mock(return_value={
-                "id": "new-tileset-id",
-                "name": "Test Tileset",
-                "type": "vector",
-                "format": "pbf",
-            })
+            mock_response.json = Mock(
+                return_value={
+                    "id": "new-tileset-id",
+                    "name": "Test Tileset",
+                    "type": "vector",
+                    "format": "pbf",
+                }
+            )
             mock_response.raise_for_status = Mock()
             mock_response.status_code = 201
 
@@ -59,9 +61,8 @@ class TestCreateTileset:
 
     def test_create_tileset_auth_required(self):
         """create_tileset should handle auth errors."""
-        async def run_test():
-            import httpx
 
+        async def run_test():
             mock_response = Mock()
             mock_response.status_code = 401
             mock_response.text = "Unauthorized"
@@ -85,9 +86,12 @@ class TestCreateTileset:
 
     def test_create_tileset_with_all_params(self):
         """create_tileset should handle all parameters."""
+
         async def run_test():
             mock_response = Mock()
-            mock_response.json = Mock(return_value={"id": "550e8400-e29b-41d4-a716-446655440010", "name": "Full Test"})
+            mock_response.json = Mock(
+                return_value={"id": "550e8400-e29b-41d4-a716-446655440010", "name": "Full Test"}
+            )
             mock_response.raise_for_status = Mock()
             mock_response.status_code = 201
 
@@ -122,6 +126,7 @@ class TestUpdateTileset:
 
     def test_update_tileset_success(self):
         """update_tileset should return updated tileset."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -148,6 +153,7 @@ class TestUpdateTileset:
 
     def test_update_tileset_not_found(self):
         """update_tileset should handle 404 errors."""
+
         async def run_test():
             import httpx
 
@@ -174,6 +180,7 @@ class TestUpdateTileset:
 
     def test_update_tileset_no_fields(self):
         """update_tileset with no fields should return error."""
+
         async def run_test():
             result = await update_tileset(tileset_id="550e8400-e29b-41d4-a716-446655440010")
             assert "error" in result
@@ -187,6 +194,7 @@ class TestDeleteTileset:
 
     def test_delete_tileset_success(self):
         """delete_tileset should return success message."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.status_code = 204
@@ -207,6 +215,7 @@ class TestDeleteTileset:
 
     def test_delete_tileset_not_found(self):
         """delete_tileset should handle 404 errors."""
+
         async def run_test():
             import httpx
 
@@ -234,6 +243,7 @@ class TestCreateFeature:
 
     def test_create_feature_success(self):
         """create_feature should return created feature."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -263,6 +273,7 @@ class TestCreateFeature:
 
     def test_create_feature_tileset_not_found(self):
         """create_feature should handle tileset not found."""
+
         async def run_test():
             import httpx
 
@@ -289,6 +300,7 @@ class TestCreateFeature:
 
     def test_create_feature_with_layer(self):
         """create_feature should accept layer_name."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -320,6 +332,7 @@ class TestUpdateFeature:
 
     def test_update_feature_success(self):
         """update_feature should return updated feature."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -346,10 +359,14 @@ class TestUpdateFeature:
 
     def test_update_feature_geometry(self):
         """update_feature should update geometry."""
+
         async def run_test():
             new_geom = {"type": "Point", "coordinates": [140.0, 36.0]}
             mock_response = Mock()
-            mock_response.json.return_value = {"id": "550e8400-e29b-41d4-a716-446655440095", "geometry": new_geom}
+            mock_response.json.return_value = {
+                "id": "550e8400-e29b-41d4-a716-446655440095",
+                "geometry": new_geom,
+            }
             mock_response.raise_for_status = Mock()
 
             with patch("tools.crud.httpx.AsyncClient") as mock_client:
@@ -370,6 +387,7 @@ class TestUpdateFeature:
 
     def test_update_feature_no_fields(self):
         """update_feature with no fields should return error."""
+
         async def run_test():
             result = await update_feature(feature_id="550e8400-e29b-41d4-a716-446655440095")
             assert "error" in result
@@ -382,6 +400,7 @@ class TestDeleteFeature:
 
     def test_delete_feature_success(self):
         """delete_feature should return success message."""
+
         async def run_test():
             mock_response = Mock()
             mock_response.status_code = 204
@@ -402,6 +421,7 @@ class TestDeleteFeature:
 
     def test_delete_feature_not_found(self):
         """delete_feature should handle 404 errors."""
+
         async def run_test():
             import httpx
 

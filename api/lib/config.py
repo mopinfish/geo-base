@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     raster_default_format: str = "png"
     raster_max_preview_size: int = 1024
     raster_tile_size: int = 256
-    
+
     # PMTiles settings
     pmtiles_default_cache_ttl: int = 86400  # 24 hours
 
@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     def is_serverless(self) -> bool:
         """Check if running in a serverless environment (Vercel, Lambda, etc.)."""
         return (
-            self.is_vercel 
+            self.is_vercel
             or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
         )
 
@@ -125,8 +125,8 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production."""
         return (
-            self.environment == "production" 
-            or self.is_vercel 
+            self.environment == "production"
+            or self.is_vercel
             or self.is_fly
         )
 

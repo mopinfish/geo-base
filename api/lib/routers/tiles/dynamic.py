@@ -7,16 +7,15 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
+from lib.auth import AuthContext, check_tileset_access_v2, get_auth_context_optional
 from lib.database import get_connection
 from lib.errors import ErrorCode, api_error
 from lib.tiles import (
     VECTOR_TILE_MEDIA_TYPE,
-    generate_mvt_from_postgis,
     generate_features_mvt,
+    generate_mvt_from_postgis,
     get_cache_headers,
 )
-from lib.auth import AuthContext, get_auth_context_optional, check_tileset_access_v2
-
 
 router = APIRouter(tags=["tiles"])
 
@@ -24,7 +23,7 @@ router = APIRouter(tags=["tiles"])
 def get_base_url(request: Request) -> str:
     """
     Get base URL from request headers.
-    
+
     Handles various proxy configurations including Fly.io and Vercel.
     Always uses HTTPS in production (non-localhost).
     """
@@ -34,26 +33,26 @@ def get_base_url(request: Request) -> str:
         request.headers.get("fly-forwarded-proto") or
         "http"
     )
-    
+
     # Get host - prefer x-forwarded-host, fallback to host header
     forwarded_host = (
         request.headers.get("x-forwarded-host") or
         request.headers.get("host")
     )
-    
+
     if forwarded_host:
         # Force HTTPS for non-localhost hosts
         if "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
             forwarded_proto = "https"
         return f"{forwarded_proto}://{forwarded_host}"
-    
+
     # Fallback to request.base_url
     base_url = str(request.base_url).rstrip("/")
-    
+
     # Force HTTPS for production URLs
     if base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
         base_url = base_url.replace("http://", "https://", 1)
-    
+
     return base_url
 
 
@@ -73,7 +72,7 @@ def get_dynamic_vector_tile(
 ):
     """
     Generate a vector tile dynamically from PostGIS table.
-    
+
     Features:
     - Automatic zoom-based geometry simplification
     - Optimized caching based on zoom level
@@ -118,7 +117,7 @@ def get_dynamic_tilejson(layer_name: str, request: Request):
         layer_name: Name of the database table/layer
     """
     from lib.tiles import generate_tilejson
-    
+
     base_url = get_base_url(request)
 
     tilejson = generate_tilejson(
@@ -151,7 +150,7 @@ def get_features_vector_tile(
 ):
     """
     Generate a vector tile from the features table.
-    
+
     Features:
     - Filter by tileset_id and layer name
     - Attribute filtering with expressions
@@ -200,7 +199,7 @@ def get_features_vector_tile(
                     "You do not have permission to access this tileset",
                     details={"tileset_id": tileset_id},
                 )
-    
+
     try:
         tile_data = generate_features_mvt(
             conn=conn,
@@ -235,11 +234,11 @@ def get_features_tilejson(
 ):
     """
     Get TileJSON for the features layer.
-    
+
     Query parameters are passed through to the tile URLs.
     """
     base_url = get_base_url(request)
-    
+
     # Build tile URL with query params
     tile_url = f"{base_url}/api/tiles/features/{{z}}/{{x}}/{{y}}.pbf"
     query_params = []

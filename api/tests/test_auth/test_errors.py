@@ -1,14 +1,15 @@
 """Tests for auth.errors module."""
 import pytest
+
 from lib.auth.errors import (
     AuthError,
     InvalidCredentials,
-    RateLimited,
-    UserNotFound,
-    UserAlreadyExists,
     InvalidToken,
-    WeakPassword,
     ProviderError,
+    RateLimited,
+    UserAlreadyExists,
+    UserNotFound,
+    WeakPassword,
 )
 
 

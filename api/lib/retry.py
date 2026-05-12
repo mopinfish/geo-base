@@ -46,7 +46,7 @@ import os
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Optional, Type, TypeVar, Union
+from typing import Any, Callable, List, Optional, TypeVar
 
 import psycopg2
 
@@ -67,7 +67,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 class RetryConfig:
     """
     Configuration for retry behavior.
-    
+
     Attributes:
         max_attempts: Maximum number of retry attempts (default: 3)
         base_delay: Initial delay between retries in seconds (default: 0.5)
@@ -134,10 +134,10 @@ RETRYABLE_ERROR_PATTERNS: List[str] = [
 def is_retryable_error(error: Exception) -> bool:
     """
     Check if an error is retryable (transient issues).
-    
+
     Args:
         error: The exception to check
-        
+
     Returns:
         True if the error is retryable, False otherwise
     """
@@ -148,11 +148,11 @@ def is_retryable_error(error: Exception) -> bool:
     )):
         error_msg = str(error).lower()
         return any(pattern in error_msg for pattern in RETRYABLE_ERROR_PATTERNS)
-    
+
     # Deadlock is retryable
     if isinstance(error, psycopg2.extensions.TransactionRollbackError):
         return True
-    
+
     return False
 
 
@@ -162,25 +162,25 @@ def calculate_delay(
 ) -> float:
     """
     Calculate delay for the next retry attempt using exponential backoff.
-    
+
     Args:
         attempt: Current attempt number (0-indexed)
         config: Retry configuration
-        
+
     Returns:
         Delay in seconds
     """
     # Calculate exponential delay
     delay = config.base_delay * (config.exponential_base ** attempt)
-    
+
     # Cap at max_delay
     delay = min(delay, config.max_delay)
-    
+
     # Add jitter if enabled
     if config.jitter:
         jitter_amount = delay * config.jitter_range
         delay = delay + random.uniform(-jitter_amount, jitter_amount)
-    
+
     return max(0, delay)
 
 
@@ -191,7 +191,7 @@ def default_retry_callback(
 ) -> None:
     """
     Default callback function for retry events.
-    
+
     Args:
         error: The exception that triggered the retry
         attempt: Current attempt number (1-indexed)
@@ -217,21 +217,21 @@ def with_retry(
 ) -> Callable[[F], F]:
     """
     Decorator for retrying functions on transient errors.
-    
+
     Can be used with or without parentheses:
         @with_retry
         def my_function(): ...
-        
+
         @with_retry(max_attempts=5)
         def my_function(): ...
-    
+
     Args:
         config: RetryConfig instance (overrides other parameters)
         max_attempts: Maximum retry attempts
         base_delay: Initial delay between retries
         max_delay: Maximum delay between retries
         retryable_exceptions: Tuple of exception types to retry on
-        
+
     Returns:
         Decorated function with retry logic
     """
@@ -240,7 +240,7 @@ def with_retry(
         def wrapper(*args, **kwargs) -> Any:
             # Build configuration
             retry_config = config or RetryConfig()
-            
+
             # Override with explicit parameters
             if max_attempts is not None:
                 retry_config = RetryConfig(
@@ -286,14 +286,14 @@ def with_retry(
                     retryable_exceptions=retryable_exceptions,
                     on_retry=retry_config.on_retry,
                 )
-            
+
             return execute_with_retry(
                 lambda: func(*args, **kwargs),
                 config=retry_config,
             )
-        
+
         return wrapper  # type: ignore
-    
+
     return decorator
 
 
@@ -304,25 +304,25 @@ def with_db_retry(
 ) -> Callable[[F], F]:
     """
     Decorator for retrying database operations on transient errors.
-    
+
     This is a specialized version of with_retry that uses database-specific
     default configuration and error detection.
-    
+
     Args:
         max_attempts: Maximum retry attempts (default: 3)
         base_delay: Initial delay between retries (default: 0.5)
         max_delay: Maximum delay between retries (default: 10)
-        
+
     Returns:
         Decorated function with database retry logic
-        
+
     Example:
         @with_db_retry()
         def get_tilesets(conn):
             with conn.cursor() as cur:
                 cur.execute("SELECT * FROM tilesets")
                 return cur.fetchall()
-                
+
         @with_db_retry(max_attempts=5)
         def important_query(conn, tileset_id):
             # ...
@@ -338,14 +338,14 @@ def with_db_retry(
                 retryable_exceptions=DEFAULT_DB_CONFIG.retryable_exceptions,
                 on_retry=default_retry_callback,
             )
-            
+
             return execute_db_operation(
                 lambda: func(*args, **kwargs),
                 config=config,
             )
-        
+
         return wrapper  # type: ignore
-    
+
     return decorator
 
 
@@ -360,17 +360,17 @@ def execute_with_retry(
 ) -> T:
     """
     Execute a function with retry logic.
-    
+
     Args:
         operation: Function to execute (no arguments)
         config: Retry configuration
-        
+
     Returns:
         Result of the operation
-        
+
     Raises:
         The last exception if all retries fail
-        
+
     Example:
         result = execute_with_retry(
             lambda: risky_operation(),
@@ -379,23 +379,23 @@ def execute_with_retry(
     """
     retry_config = config or RetryConfig()
     last_error: Optional[Exception] = None
-    
+
     for attempt in range(retry_config.max_attempts):
         try:
             return operation()
-            
+
         except Exception as e:
             last_error = e
-            
+
             # Check if error is retryable
             should_retry = False
-            
+
             if retry_config.retryable_exceptions:
                 should_retry = isinstance(e, retry_config.retryable_exceptions)
             else:
                 # Default: retry on common transient errors
                 should_retry = is_retryable_error(e)
-            
+
             if not should_retry or attempt >= retry_config.max_attempts - 1:
                 # Not retryable or last attempt - raise
                 logger.error(
@@ -403,18 +403,18 @@ def execute_with_retry(
                     f"{type(e).__name__}: {e}"
                 )
                 raise
-            
+
             # Calculate delay and wait
             delay = calculate_delay(attempt, retry_config)
-            
+
             # Call retry callback if configured
             if retry_config.on_retry:
                 retry_config.on_retry(e, attempt + 1, delay)
             else:
                 default_retry_callback(e, attempt + 1, delay)
-            
+
             time.sleep(delay)
-    
+
     # Should not reach here, but just in case
     if last_error:
         raise last_error
@@ -427,63 +427,63 @@ def execute_db_operation(
 ) -> T:
     """
     Execute a database operation with retry logic specific to DB errors.
-    
+
     This function uses database-specific error detection to determine
     if an error is retryable.
-    
+
     Args:
         operation: Function to execute (no arguments)
         config: Retry configuration
-        
+
     Returns:
         Result of the operation
-        
+
     Raises:
         The last exception if all retries fail
-        
+
     Example:
         def my_query():
             with conn.cursor() as cur:
                 cur.execute("SELECT * FROM tilesets")
                 return cur.fetchall()
-                
+
         result = execute_db_operation(my_query)
     """
     retry_config = config or DEFAULT_DB_CONFIG
     last_error: Optional[Exception] = None
-    
+
     for attempt in range(retry_config.max_attempts):
         try:
             return operation()
-            
+
         except Exception as e:
             last_error = e
-            
+
             # Check if error is retryable using DB-specific logic
             if not is_retryable_error(e):
                 logger.error(
                     f"Non-retryable database error: {type(e).__name__}: {e}"
                 )
                 raise
-            
+
             if attempt >= retry_config.max_attempts - 1:
                 logger.error(
                     f"Database operation failed after {attempt + 1} attempts: "
                     f"{type(e).__name__}: {e}"
                 )
                 raise
-            
+
             # Calculate delay and wait
             delay = calculate_delay(attempt, retry_config)
-            
+
             # Call retry callback
             if retry_config.on_retry:
                 retry_config.on_retry(e, attempt + 1, delay)
             else:
                 default_retry_callback(e, attempt + 1, delay)
-            
+
             time.sleep(delay)
-    
+
     if last_error:
         raise last_error
     raise RuntimeError("Unexpected state: retry exhausted without exception")
@@ -497,9 +497,9 @@ def execute_db_operation(
 class RetryContext:
     """
     Context manager for retry logic.
-    
+
     Provides a convenient way to wrap code blocks with retry behavior.
-    
+
     Example:
         with RetryContext(max_attempts=3) as ctx:
             while ctx.should_retry():
@@ -508,11 +508,11 @@ class RetryContext:
                     break
                 except TransientError as e:
                     ctx.record_failure(e)
-        
+
         if ctx.last_error:
             raise ctx.last_error
     """
-    
+
     def __init__(
         self,
         max_attempts: int = 3,
@@ -527,29 +527,29 @@ class RetryContext:
         self.attempt = 0
         self.last_error: Optional[Exception] = None
         self._entered = False
-    
+
     def __enter__(self) -> "RetryContext":
         self._entered = True
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         # Don't suppress exceptions
         return False
-    
+
     def should_retry(self) -> bool:
         """Check if more retry attempts are available."""
         return self.attempt < self.config.max_attempts
-    
+
     def record_failure(self, error: Exception) -> None:
         """
         Record a failure and wait before next attempt.
-        
+
         Args:
             error: The exception that occurred
         """
         self.last_error = error
         self.attempt += 1
-        
+
         if self.should_retry():
             delay = calculate_delay(self.attempt - 1, self.config)
             logger.warning(
@@ -557,12 +557,12 @@ class RetryContext:
                 f"failed with {type(error).__name__}. Waiting {delay:.2f}s."
             )
             time.sleep(delay)
-    
+
     @property
     def succeeded(self) -> bool:
         """Check if the operation succeeded (no errors recorded on last attempt)."""
         return self.last_error is None or (
-            self.attempt < self.config.max_attempts and 
+            self.attempt < self.config.max_attempts and
             not self.should_retry()
         )
 
@@ -575,22 +575,22 @@ class RetryContext:
 class RetryableOperation:
     """
     Class for creating retryable operations with state.
-    
+
     Useful when you need to maintain state across retry attempts
     or perform cleanup on failures.
-    
+
     Example:
         class MyOperation(RetryableOperation):
             def execute(self):
                 return expensive_operation()
-            
+
             def on_failure(self, error):
                 cleanup_resources()
-        
+
         op = MyOperation(max_attempts=3)
         result = op.run()
     """
-    
+
     def __init__(
         self,
         max_attempts: int = 3,
@@ -604,80 +604,80 @@ class RetryableOperation:
         )
         self.attempt = 0
         self.last_error: Optional[Exception] = None
-    
+
     def execute(self) -> Any:
         """
         Execute the operation. Override this method in subclasses.
         """
         raise NotImplementedError("Subclasses must implement execute()")
-    
+
     def should_retry(self, error: Exception) -> bool:
         """
         Determine if the error should trigger a retry.
         Override this method to customize retry logic.
-        
+
         Args:
             error: The exception that occurred
-            
+
         Returns:
             True if the operation should be retried
         """
         return is_retryable_error(error)
-    
+
     def on_failure(self, error: Exception) -> None:
         """
         Called when an attempt fails. Override to add cleanup logic.
-        
+
         Args:
             error: The exception that occurred
         """
         pass
-    
+
     def on_success(self, result: Any) -> None:
         """
         Called when the operation succeeds. Override to add post-processing.
-        
+
         Args:
             result: The result of the successful operation
         """
         pass
-    
+
     def run(self) -> Any:
         """
         Run the operation with retry logic.
-        
+
         Returns:
             Result of the operation
-            
+
         Raises:
             The last exception if all retries fail
         """
         for attempt in range(self.config.max_attempts):
             self.attempt = attempt + 1
-            
+
             try:
                 result = self.execute()
                 self.on_success(result)
                 return result
-                
+
             except Exception as e:
                 self.last_error = e
                 self.on_failure(e)
-                
+
                 if not self.should_retry(e) or attempt >= self.config.max_attempts - 1:
                     logger.error(
                         f"Operation failed after {attempt + 1} attempts: "
                         f"{type(e).__name__}: {e}"
                     )
                     raise
-                
+
                 delay = calculate_delay(attempt, self.config)
                 logger.warning(
                     f"Operation failed (attempt {attempt + 1}/{self.config.max_attempts}), "
                     f"retrying in {delay:.2f}s: {type(e).__name__}: {e}"
                 )
                 time.sleep(delay)
-        
+
         if self.last_error:
             raise self.last_error
         raise RuntimeError("Unexpected state: retry exhausted without exception")

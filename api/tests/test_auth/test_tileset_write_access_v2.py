@@ -13,7 +13,6 @@ import pytest
 
 from lib.auth import AuthContext, check_tileset_write_access_v2
 
-
 # ---------------------------------------------------------------------------
 # Sync-friendly fixtures（async テストから安全に呼べる）
 # ---------------------------------------------------------------------------

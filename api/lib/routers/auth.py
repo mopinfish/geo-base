@@ -1,20 +1,26 @@
 """認証関連エンドポイント。"""
 from datetime import datetime
-from typing import Optional, Annotated
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 
 from lib.auth import (
-    User, AuthContext, AuthError,
-    InvalidCredentials, RateLimited, InvalidToken,
-    UserAlreadyExists, UserNotFound, WeakPassword, ProviderError,
-    require_auth, get_auth_provider,
+    AuthError,
+    InvalidCredentials,
+    InvalidToken,
+    ProviderError,
+    RateLimited,
+    User,
+    UserAlreadyExists,
+    UserNotFound,
+    WeakPassword,
+    get_auth_provider,
+    require_auth,
 )
 from lib.config import get_settings
 from lib.database import get_connection, get_db_connection
 from lib.errors import ErrorCode, api_error
-
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

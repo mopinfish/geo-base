@@ -1,12 +1,12 @@
 """Tests for auth.email_backends."""
+from unittest.mock import MagicMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import patch, MagicMock
 
 from lib.auth.email_backends import (
+    ConsoleEmailBackend,
     EmailBackend,
     NullEmailBackend,
-    ConsoleEmailBackend,
     SMTPEmailBackend,
 )
 

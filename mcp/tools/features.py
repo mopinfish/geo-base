@@ -17,15 +17,15 @@ import httpx
 from tenacity import RetryError
 
 from config import get_settings
-from errors import handle_api_error, create_error_response, ErrorCode
-from logger import get_logger, ToolCallLogger
+from errors import ErrorCode, create_error_response, handle_api_error
+from logger import ToolCallLogger, get_logger
 from retry import fetch_with_retry
 from validators import (
-    validate_uuid,
     validate_bbox,
+    validate_filter,
     validate_limit,
     validate_range,
-    validate_filter,
+    validate_uuid,
 )
 
 # Initialize logger and settings
@@ -89,8 +89,13 @@ async def search_features(
         - total: Total count of matching features (if available)
     """
     with ToolCallLogger(
-        logger, "search_features",
-        bbox=bbox, layer=layer, filter=filter, limit=limit, tileset_id=tileset_id
+        logger,
+        "search_features",
+        bbox=bbox,
+        layer=layer,
+        filter=filter,
+        limit=limit,
+        tileset_id=tileset_id,
     ) as log:
         # Validate bbox if provided
         bbox_parsed = None
@@ -104,7 +109,7 @@ async def search_features(
                 log.set_result(result)
                 return result
             bbox_parsed = bbox_result.value
-        
+
         # Validate limit
         limit_result = validate_limit(limit, max_value=1000)
         if not limit_result.valid:
@@ -115,7 +120,7 @@ async def search_features(
             log.set_result(result)
             return result
         validated_limit = limit_result.value
-        
+
         # Validate filter if provided
         if filter:
             filter_result = validate_filter(filter)
@@ -126,7 +131,7 @@ async def search_features(
                 )
                 log.set_result(result)
                 return result
-        
+
         # Validate tileset_id if provided
         if tileset_id:
             uuid_result = validate_uuid(tileset_id, "tileset_id")
@@ -138,7 +143,7 @@ async def search_features(
                 log.set_result(result)
                 return result
             tileset_id = uuid_result.value
-        
+
         tile_server_url = settings.tile_server_url.rstrip("/")
         url = f"{tile_server_url}/api/features"
 
@@ -225,7 +230,7 @@ async def search_features(
                 f"HTTP error searching features: {status_code}",
                 extra={"status_code": status_code, "url": url},
             )
-            
+
             if status_code == 400:
                 result = create_error_response(
                     "Invalid query parameters",
@@ -235,7 +240,7 @@ async def search_features(
                 )
             else:
                 result = handle_api_error(e, {"url": url})
-            
+
             log.set_result(result)
             return result
         except (httpx.RequestError, RetryError) as e:
@@ -272,7 +277,7 @@ async def get_feature(feature_id: str) -> dict[str, Any]:
             log.set_result(result)
             return result
         validated_feature_id = uuid_result.value
-        
+
         tile_server_url = settings.tile_server_url.rstrip("/")
         url = f"{tile_server_url}/api/features/{validated_feature_id}"
 
@@ -319,7 +324,7 @@ async def get_feature(feature_id: str) -> dict[str, Any]:
                 f"HTTP error getting feature {validated_feature_id}: {status_code}",
                 extra={"feature_id": validated_feature_id, "status_code": status_code},
             )
-            
+
             if status_code == 404:
                 result = create_error_response(
                     "Feature not found",
@@ -335,7 +340,7 @@ async def get_feature(feature_id: str) -> dict[str, Any]:
                 )
             else:
                 result = handle_api_error(e, {"feature_id": validated_feature_id})
-            
+
             log.set_result(result)
             return result
         except (httpx.RequestError, RetryError) as e:
@@ -384,8 +389,7 @@ async def get_features_in_tile(
         Dictionary containing features in the tile
     """
     with ToolCallLogger(
-        logger, "get_features_in_tile",
-        tileset_id=tileset_id, z=z, x=x, y=y, layer=layer
+        logger, "get_features_in_tile", tileset_id=tileset_id, z=z, x=x, y=y, layer=layer
     ) as log:
         # Validate tileset_id
         uuid_result = validate_uuid(tileset_id, "tileset_id")
@@ -398,7 +402,7 @@ async def get_features_in_tile(
             log.set_result(result)
             return result
         validated_tileset_id = uuid_result.value
-        
+
         # Validate zoom level
         zoom_result = validate_range(z, "z", min_value=0, max_value=22)
         if not zoom_result.valid:
@@ -410,9 +414,9 @@ async def get_features_in_tile(
             log.set_result(result)
             return result
         validated_z = zoom_result.value
-        
+
         # Validate x coordinate (must be 0 to 2^z - 1)
-        max_tile = (2 ** validated_z) - 1
+        max_tile = (2**validated_z) - 1
         x_result = validate_range(x, "x", min_value=0, max_value=max_tile)
         if not x_result.valid:
             result = x_result.to_error_response(
@@ -423,7 +427,7 @@ async def get_features_in_tile(
             log.set_result(result)
             return result
         validated_x = x_result.value
-        
+
         # Validate y coordinate (must be 0 to 2^z - 1)
         y_result = validate_range(y, "y", min_value=0, max_value=max_tile)
         if not y_result.valid:
@@ -435,11 +439,13 @@ async def get_features_in_tile(
             log.set_result(result)
             return result
         validated_y = y_result.value
-        
-        logger.debug(f"Getting features in tile z={validated_z}, x={validated_x}, y={validated_y} for tileset {validated_tileset_id}")
+
+        logger.debug(
+            f"Getting features in tile z={validated_z}, x={validated_x}, y={validated_y} for tileset {validated_tileset_id}"
+        )
 
         # Convert tile coordinates to bbox using Web Mercator tile math
-        n = 2.0 ** validated_z
+        n = 2.0**validated_z
 
         # Calculate bbox from tile coordinates
         min_lng = validated_x / n * 360.0 - 180.0

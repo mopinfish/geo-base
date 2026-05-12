@@ -1,17 +1,17 @@
 """Tests for api_key_auth module."""
-import pytest
 import hashlib
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from lib.auth.api_key_auth import validate_api_key
-from lib.auth.errors import InvalidToken, RateLimited
-from lib.auth.context import AuthContext
+from lib.auth.errors import RateLimited
 
 
 @pytest.fixture
 def make_api_key(db_conn, clean_auth_tables):
     """API キーを発行するファクトリ"""
-    import secrets, json
+    import secrets
     created_keys = []
 
     def _make(scopes=None, team_id=None, rate_limit_per_minute=60, rate_limit_per_day=10000,

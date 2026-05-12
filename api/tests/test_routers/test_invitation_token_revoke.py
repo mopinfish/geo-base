@@ -18,7 +18,6 @@ from fastapi.testclient import TestClient
 from lib.database import get_connection
 from lib.routers.auth import router as auth_router
 
-
 # ---------------------------------------------------------------------------
 # Test app + dependency overrides
 # ---------------------------------------------------------------------------

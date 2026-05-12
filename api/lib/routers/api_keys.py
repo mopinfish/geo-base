@@ -9,27 +9,25 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from lib.auth import User, require_auth
 from lib.config import get_settings
 from lib.database import get_connection
 from lib.errors import ErrorCode, api_error
-from lib.auth import User, get_current_user, require_auth
 from lib.models.api_key import (
     ApiKeyCreate,
-    ApiKeyUpdate,
-    ApiKeyRevoke,
-    ApiKeyResponse,
     ApiKeyCreatedResponse,
     ApiKeyListResponse,
-    ApiKeyUsageStats,
-    ApiKeyUsageLogResponse,
-    ApiKeyUsageLogEntry,
+    ApiKeyResponse,
+    ApiKeyRevoke,
+    ApiKeyUpdate,
     ApiKeyUsageDay,
+    ApiKeyUsageLogEntry,
+    ApiKeyUsageLogResponse,
+    ApiKeyUsageStats,
     RateLimitStatus,
-    ApiKeyScope,
     generate_api_key,
     hash_api_key,
 )
-
 
 router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])
 settings = get_settings()
@@ -52,7 +50,7 @@ def get_api_key_or_404(conn, key_id: str, user_id: str) -> dict:
         )
         columns = [desc[0] for desc in cur.description]
         row = cur.fetchone()
-    
+
     if not row:
         raise api_error(
             404,
@@ -87,7 +85,7 @@ def get_api_key_or_404(conn, key_id: str, user_id: str) -> dict:
                 "You don't have permission to access this API key",
                 details={"key_id": key_id},
             )
-    
+
     return key_data
 
 
@@ -122,7 +120,7 @@ def create_api_key(
 ):
     """
     Create a new API key.
-    
+
     The full key is only returned once - make sure to save it!
     """
     try:
@@ -140,15 +138,15 @@ def create_api_key(
                         "You are not a member of this team",
                         details={"team_id": str(key_data.team_id)},
                     )
-        
+
         # Generate the API key
         full_key, prefix, key_hash = generate_api_key(key_data.environment)
-        
+
         # Calculate expiration
         expires_at = None
         if key_data.expires_in_days:
             expires_at = datetime.utcnow() + timedelta(days=key_data.expires_in_days)
-        
+
         # Convert scopes to list of strings
         scopes = [s.value for s in key_data.scopes]
 
@@ -184,14 +182,14 @@ def create_api_key(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         result = serialize_api_key(dict(zip(columns, row)))
         result['key'] = full_key  # Include the actual key in response
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -215,24 +213,24 @@ def list_api_keys(
     """List API keys for the current user or team."""
     try:
         offset = (page - 1) * page_size
-        
+
         # Build query
         conditions = ["(ak.user_id = %s"]
         params = [user.id]
-        
+
         # Also include keys for teams user is a member of
         conditions[0] += " OR ak.team_id IN (SELECT team_id FROM team_members WHERE user_id = %s))"
         params.append(user.id)
-        
+
         if team_id:
             conditions.append("ak.team_id = %s")
             params.append(team_id)
-        
+
         if not include_revoked:
             conditions.append("ak.revoked_at IS NULL")
-        
+
         where_clause = " AND ".join(conditions)
-        
+
         with conn.cursor() as cur:
             # Get total count
             cur.execute(
@@ -240,7 +238,7 @@ def list_api_keys(
                 tuple(params)
             )
             total = cur.fetchone()[0]
-            
+
             # Get keys
             cur.execute(
                 f"""SELECT ak.id, ak.name, ak.description, ak.prefix, ak.user_id, ak.team_id,
@@ -256,16 +254,16 @@ def list_api_keys(
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         keys = [serialize_api_key(dict(zip(columns, row))) for row in rows]
-        
+
         return {
             "keys": keys,
             "total": total,
             "page": page,
             "page_size": page_size
         }
-        
+
     except Exception as e:
         raise api_error(
             500,
@@ -283,7 +281,7 @@ def get_api_key(
     """Get details of a specific API key."""
     try:
         key_data = get_api_key_or_404(conn, key_id, user.id)
-        
+
         # Get team name if applicable
         if key_data.get('team_id'):
             with conn.cursor() as cur:
@@ -291,9 +289,9 @@ def get_api_key(
                 row = cur.fetchone()
                 if row:
                     key_data['team_name'] = row[0]
-        
+
         return serialize_api_key(key_data)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -315,48 +313,48 @@ def update_api_key(
     try:
         # Verify ownership
         get_api_key_or_404(conn, key_id, user.id)
-        
+
         updates = []
         params = []
-        
+
         if update_data.name is not None:
             updates.append("name = %s")
             params.append(update_data.name)
-        
+
         if update_data.description is not None:
             updates.append("description = %s")
             params.append(update_data.description)
-        
+
         if update_data.scopes is not None:
             updates.append("scopes = %s")
             params.append([s.value for s in update_data.scopes])
-        
+
         if update_data.rate_limit_per_minute is not None:
             updates.append("rate_limit_per_minute = %s")
             params.append(update_data.rate_limit_per_minute)
-        
+
         if update_data.rate_limit_per_day is not None:
             updates.append("rate_limit_per_day = %s")
             params.append(update_data.rate_limit_per_day)
-        
+
         if update_data.is_active is not None:
             updates.append("is_active = %s")
             params.append(update_data.is_active)
-        
+
         if update_data.metadata is not None:
             # create_api_key と同じく JSONB バインドは json.dumps + ::jsonb キャスト
             updates.append("metadata = %s::jsonb")
             params.append(json.dumps(update_data.metadata))
-        
+
         if not updates:
             raise api_error(
                 400,
                 ErrorCode.VALIDATION_FIELD_REQUIRED,
                 "No fields to update",
             )
-        
+
         params.append(key_id)
-        
+
         with conn.cursor() as cur:
             cur.execute(
                 f"""UPDATE api_keys SET {', '.join(updates)}, updated_at = NOW()
@@ -369,11 +367,11 @@ def update_api_key(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         return serialize_api_key(dict(zip(columns, row)))
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -395,7 +393,7 @@ def revoke_api_key(
     """Revoke an API key (cannot be undone)."""
     try:
         key_data = get_api_key_or_404(conn, key_id, user.id)
-        
+
         if key_data.get('revoked_at'):
             raise api_error(
                 400,
@@ -403,10 +401,10 @@ def revoke_api_key(
                 "API key is already revoked",
                 details={"key_id": key_id},
             )
-        
+
         with conn.cursor() as cur:
             cur.execute(
-                """UPDATE api_keys 
+                """UPDATE api_keys
                    SET revoked_at = NOW(), revoked_by = %s, revoke_reason = %s,
                        is_active = false, updated_at = NOW()
                    WHERE id = %s
@@ -418,11 +416,11 @@ def revoke_api_key(
             )
             columns = [desc[0] for desc in cur.description]
             row = cur.fetchone()
-        
+
         conn.commit()
-        
+
         return serialize_api_key(dict(zip(columns, row)))
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -444,7 +442,7 @@ def delete_api_key(
     try:
         # Verify ownership
         get_api_key_or_404(conn, key_id, user.id)
-        
+
         with conn.cursor() as cur:
             cur.execute("DELETE FROM api_keys WHERE id = %s", (key_id,))
             if cur.rowcount == 0:
@@ -483,17 +481,17 @@ def get_api_key_usage(
     try:
         # Verify ownership
         get_api_key_or_404(conn, key_id, user.id)
-        
+
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT * FROM get_api_key_usage_stats(%s, %s)",
                 (key_id, days)
             )
             row = cur.fetchone()
-        
+
         if row:
             total_requests, avg_response_time, error_count, success_rate, requests_by_day = row
-            
+
             # Parse requests_by_day
             daily_stats = []
             if requests_by_day:
@@ -504,7 +502,7 @@ def get_api_key_usage(
                         errors=day.get('errors', 0),
                         avg_response_time=day.get('avg_response_time', 0)
                     ))
-            
+
             return ApiKeyUsageStats(
                 key_id=key_id,
                 total_requests=total_requests or 0,
@@ -513,7 +511,7 @@ def get_api_key_usage(
                 success_rate=float(success_rate or 100),
                 requests_by_day=daily_stats
             )
-        
+
         return ApiKeyUsageStats(
             key_id=key_id,
             total_requests=0,
@@ -522,7 +520,7 @@ def get_api_key_usage(
             success_rate=100,
             requests_by_day=[]
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -545,9 +543,9 @@ def get_api_key_logs(
     try:
         # Verify ownership
         get_api_key_or_404(conn, key_id, user.id)
-        
+
         offset = (page - 1) * page_size
-        
+
         with conn.cursor() as cur:
             # Get total count
             cur.execute(
@@ -555,7 +553,7 @@ def get_api_key_logs(
                 (key_id,)
             )
             total = cur.fetchone()[0]
-            
+
             # Get logs
             cur.execute(
                 """SELECT id, endpoint, method, status_code, response_time_ms,
@@ -568,7 +566,7 @@ def get_api_key_logs(
             )
             columns = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
-        
+
         logs = []
         for row in rows:
             log_data = dict(zip(columns, row))
@@ -581,13 +579,13 @@ def get_api_key_logs(
                 ip_address=log_data['ip_address'],
                 created_at=log_data['created_at']
             ))
-        
+
         return ApiKeyUsageLogResponse(
             logs=logs,
             total=total,
             key_id=key_id
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -607,7 +605,7 @@ def get_rate_limit_status(
     """Get current rate limit status for an API key."""
     try:
         key_data = get_api_key_or_404(conn, key_id, user.id)
-        
+
         with conn.cursor() as cur:
             # Get minute status
             cur.execute(
@@ -615,19 +613,19 @@ def get_rate_limit_status(
                 (key_id,)
             )
             minute_row = cur.fetchone()
-            
+
             # Get day status
             cur.execute(
                 "SELECT * FROM get_api_key_rate_limit_status(%s, 'day')",
                 (key_id,)
             )
             day_row = cur.fetchone()
-        
+
         minute_used = minute_row[0] if minute_row else 0
         minute_limit = key_data['rate_limit_per_minute']
         day_used = day_row[0] if day_row else 0
         day_limit = key_data['rate_limit_per_day']
-        
+
         return RateLimitStatus(
             key_id=key_id,
             minute_limit=minute_limit,
@@ -637,7 +635,7 @@ def get_rate_limit_status(
             day_used=day_used,
             day_remaining=max(0, day_limit - day_used)
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -659,7 +657,7 @@ def validate_api_key_endpoint(
 ):
     """
     Validate an API key (used internally or by external services).
-    
+
     Send the API key in the X-API-Key header.
     """
     try:
@@ -669,9 +667,9 @@ def validate_api_key_endpoint(
                 status_code=401,
                 content={"valid": False, "error": "No API key provided"}
             )
-        
+
         key_hash = hash_api_key(api_key)
-        
+
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT id, user_id, team_id, scopes, rate_limit_per_minute, rate_limit_per_day
@@ -683,20 +681,20 @@ def validate_api_key_endpoint(
                 (key_hash,)
             )
             row = cur.fetchone()
-        
+
         if not row:
             return JSONResponse(
                 status_code=401,
                 content={"valid": False, "error": "Invalid or expired API key"}
             )
-        
+
         key_id, user_id, team_id, scopes, rate_limit_minute, rate_limit_day = row
-        
+
         # Update last used
         with conn.cursor() as cur:
             cur.execute("SELECT update_api_key_last_used(%s)", (key_id,))
         conn.commit()
-        
+
         return {
             "valid": True,
             "key_id": str(key_id),
@@ -706,7 +704,7 @@ def validate_api_key_endpoint(
             "rate_limit_per_minute": rate_limit_minute,
             "rate_limit_per_day": rate_limit_day
         }
-        
+
     except Exception as e:
         return JSONResponse(
             status_code=500,

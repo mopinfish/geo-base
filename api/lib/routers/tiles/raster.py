@@ -7,28 +7,27 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
-from lib.config import get_settings
-from lib.database import get_connection
-from lib.errors import ErrorCode, api_error
-from lib.raster_tiles import (
-    is_rasterio_available,
-    get_raster_tile_async,
-    get_raster_preview_async,
-    get_cog_info,
-    get_cog_statistics,
-    generate_raster_tilejson,
-    get_raster_cache_headers,
-    get_raster_media_type,
-    validate_tile_format,
-)
-from lib.cache import get_cached_tileset_info, cache_tileset_info
 from lib.auth import (
     AuthContext,
     acheck_tileset_access_v2,
     check_tileset_access_v2,
     get_auth_context_optional,
 )
-
+from lib.cache import cache_tileset_info, get_cached_tileset_info
+from lib.config import get_settings
+from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
+from lib.raster_tiles import (
+    generate_raster_tilejson,
+    get_cog_info,
+    get_cog_statistics,
+    get_raster_cache_headers,
+    get_raster_media_type,
+    get_raster_preview_async,
+    get_raster_tile_async,
+    is_rasterio_available,
+    validate_tile_format,
+)
 
 router = APIRouter(prefix="/raster", tags=["tiles"])
 settings = get_settings()
@@ -37,7 +36,7 @@ settings = get_settings()
 def get_base_url(request: Request) -> str:
     """
     Get base URL from request headers.
-    
+
     Handles various proxy configurations including Fly.io and Vercel.
     Always uses HTTPS in production (non-localhost).
     """
@@ -47,26 +46,26 @@ def get_base_url(request: Request) -> str:
         request.headers.get("fly-forwarded-proto") or
         "http"
     )
-    
+
     # Get host - prefer x-forwarded-host, fallback to host header
     forwarded_host = (
         request.headers.get("x-forwarded-host") or
         request.headers.get("host")
     )
-    
+
     if forwarded_host:
         # Force HTTPS for non-localhost hosts
         if "localhost" not in forwarded_host and "127.0.0.1" not in forwarded_host:
             forwarded_proto = "https"
         return f"{forwarded_proto}://{forwarded_host}"
-    
+
     # Fallback to request.base_url
     base_url = str(request.base_url).rstrip("/")
-    
+
     # Force HTTPS for production URLs
     if base_url.startswith("http://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
         base_url = base_url.replace("http://", "https://", 1)
-    
+
     return base_url
 
 
@@ -86,11 +85,11 @@ async def get_raster_tile(
 ):
     """
     Get a raster tile from a Cloud Optimized GeoTIFF (COG).
-    
+
     Access control:
     - Public tilesets: No authentication required
     - Private tilesets: Only the owner can access
-    
+
     Args:
         tileset_id: Tileset ID
         z: Zoom level
@@ -121,11 +120,11 @@ async def get_raster_tile(
             str(e),
             details={"tile_format": tile_format},
         )
-    
+
     # Try to get tileset info from cache first
     cache_key = f"raster:{tileset_id}"
     cached_info = get_cached_tileset_info(cache_key)
-    
+
     if cached_info:
         cog_url = cached_info["cog_url"]
         min_zoom = cached_info["min_zoom"]
@@ -224,12 +223,12 @@ async def get_raster_tile(
                 "Invalid band indexes format",
                 details={"indexes": indexes},
             )
-    
+
     # NOTE: scale_min/scale_max are passed as-is (None allowed)
     # get_raster_tile_async will auto-detect appropriate scaling:
     # - RGB images (3+ bands) or uint8 data: 0-255
     # - Single-band or other types: use settings defaults
-    
+
     # Generate tile
     try:
         tile_data = await get_raster_tile_async(
@@ -259,10 +258,10 @@ async def get_raster_tile(
             "Tile not found or out of bounds",
             details={"tileset_id": tileset_id, "z": z, "x": x, "y": y},
         )
-    
+
     # Build response headers
     headers = get_raster_cache_headers(z, is_static=True)
-    
+
     return Response(content=tile_data, media_type=media_type, headers=headers)
 
 
@@ -275,7 +274,7 @@ def get_raster_tilejson_endpoint(
 ):
     """
     Get TileJSON for a raster tileset.
-    
+
     Args:
         tileset_id: Tileset ID
     """
@@ -337,16 +336,16 @@ def get_raster_tilejson_endpoint(
             )
 
         base_url = get_base_url(request)
-        
+
         bounds = None
         if xmin is not None and ymin is not None and xmax is not None and ymax is not None:
             bounds = [xmin, ymin, xmax, ymax]
-        
+
         center = None
         if center_x is not None and center_y is not None:
             center_zoom = min_zoom if min_zoom else 10
             center = [center_x, center_y, center_zoom]
-        
+
         return generate_raster_tilejson(
             tileset_id=tileset_id,
             name=name,
@@ -359,7 +358,7 @@ def get_raster_tilejson_endpoint(
             description=description,
             attribution=attribution,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -384,7 +383,7 @@ async def get_raster_preview(
 ):
     """
     Generate a preview image of the entire raster dataset.
-    
+
     Args:
         tileset_id: Tileset ID
         format: Output format (png, jpg, webp)
@@ -412,7 +411,7 @@ async def get_raster_preview(
             str(e),
             details={"format": format},
         )
-    
+
     # async handler 内なので sync DB I/O は asyncio.to_thread で
     # threadpool にオフロード（issue #66 / Option A）
     def _fetch_preview_info():
@@ -487,10 +486,10 @@ async def get_raster_preview(
                     "Invalid band indexes",
                     details={"bands": bands},
                 )
-        
+
         # NOTE: scale_min/scale_max are passed as-is (None allowed)
         # get_raster_preview_async will auto-detect appropriate scaling
-        
+
         # Generate preview
         preview_data = await get_raster_preview_async(
             cog_url=cog_url,
@@ -501,7 +500,7 @@ async def get_raster_preview(
             img_format=normalized_format,
             colormap=colormap,
         )
-        
+
         return Response(
             content=preview_data,
             media_type=media_type,
@@ -510,7 +509,7 @@ async def get_raster_preview(
                 "Access-Control-Allow-Origin": "*",
             },
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -536,7 +535,7 @@ def get_raster_info(
 ):
     """
     Get metadata information about a raster tileset's COG.
-    
+
     Args:
         tileset_id: Tileset ID
     """
@@ -632,7 +631,7 @@ def get_raster_statistics(
 ):
     """
     Get statistics for a raster tileset's bands.
-    
+
     Args:
         tileset_id: Tileset ID
         indexes: Comma-separated band indexes to analyze

@@ -15,8 +15,8 @@ class TestFactory:
     def test_local_provider_selected(self, monkeypatch):
         monkeypatch.setenv("AUTH_PROVIDER", "local")
         monkeypatch.setenv("JWT_SECRET", "x" * 64)
-        from lib.config import get_settings
         from lib.auth import get_auth_provider
+        from lib.config import get_settings
         get_settings.cache_clear()
         get_auth_provider.cache_clear()
         from lib.auth.providers.local import LocalAuthProvider
@@ -37,8 +37,8 @@ class TestFactory:
 
     def test_unknown_provider_raises(self, monkeypatch):
         monkeypatch.setenv("AUTH_PROVIDER", "unknown")
-        from lib.config import get_settings
         from lib.auth import get_auth_provider
+        from lib.config import get_settings
         get_settings.cache_clear()
         get_auth_provider.cache_clear()
         import pytest

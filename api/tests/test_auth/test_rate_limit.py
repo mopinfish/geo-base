@@ -1,14 +1,13 @@
 """Tests for auth.rate_limit module."""
 import pytest
 
-from lib.auth.rate_limit import (
-    check_login_rate_limit,
-    record_login_attempt,
-    cleanup_old_attempts,
-    MAX_FAILED_ATTEMPTS,
-    WINDOW_MINUTES,
-)
 from lib.auth.errors import RateLimited
+from lib.auth.rate_limit import (
+    MAX_FAILED_ATTEMPTS,
+    check_login_rate_limit,
+    cleanup_old_attempts,
+    record_login_attempt,
+)
 
 
 class TestCheckLoginRateLimit:

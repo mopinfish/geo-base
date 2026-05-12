@@ -10,8 +10,6 @@ This module provides:
 import os
 import sys
 from pathlib import Path
-from typing import Generator, Optional
-import json
 
 import pytest
 
@@ -315,7 +313,7 @@ def sample_bulk_features(sample_point, sample_polygon):
             "properties": {"name": "Feature 1"}
         },
         {
-            "type": "Feature", 
+            "type": "Feature",
             "geometry": sample_polygon,
             "properties": {"name": "Feature 2"}
         },
@@ -449,7 +447,7 @@ def assert_valid_geojson_geometry(geometry: dict) -> None:
     """Assert that a geometry is valid GeoJSON."""
     assert isinstance(geometry, dict), "Geometry must be a dict"
     assert "type" in geometry, "Geometry must have 'type'"
-    
+
     if geometry["type"] == "GeometryCollection":
         assert "geometries" in geometry, "GeometryCollection must have 'geometries'"
     else:
@@ -507,9 +505,9 @@ def local_auth_settings(monkeypatch, test_database_url):
     monkeypatch.setenv("CORS_ORIGINS", '["http://testserver"]')
     monkeypatch.setenv("DATABASE_URL", test_database_url)
 
-    from lib.config import get_settings
     from lib.auth import get_auth_provider
     from lib.auth.email_backends import get_email_backend
+    from lib.config import get_settings
     from lib.database import close_pool
     get_settings.cache_clear()
     get_auth_provider.cache_clear()
@@ -525,8 +523,9 @@ def local_auth_settings(monkeypatch, test_database_url):
 @pytest.fixture
 def make_user(db_conn, clean_auth_tables, local_auth_settings):
     """ローカル DB にユーザーを作成するファクトリ。"""
-    import uuid as uuid_lib
     import asyncio
+    import uuid as uuid_lib
+
     from lib.auth.providers.local import LocalAuthProvider
 
     def _make(email=None, password="ValidPass123", name="Test User"):
@@ -570,7 +569,8 @@ def make_team(db_conn, make_user):
 @pytest.fixture
 def make_api_key(db_conn, make_user):
     """API キー発行ファクトリ。"""
-    import secrets, hashlib
+    import hashlib
+    import secrets
 
     def _make(user=None, team_id=None, scopes=None):
         user = user or make_user()

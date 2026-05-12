@@ -12,12 +12,12 @@ Includes:
 - Connection health checking
 """
 
+import logging
 import os
 import time
-import logging
 from contextlib import contextmanager
 from typing import Generator
-from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import psycopg2
 import psycopg2.pool
@@ -47,15 +47,15 @@ RETRY_BASE_DELAY = 0.5  # Base delay in seconds (exponential backoff)
 def _is_serverless() -> bool:
     """
     Check if running in a serverless environment.
-    
+
     Serverless environments (Vercel, Lambda) create new connections per request
     because containers may be recycled between requests.
-    
+
     Fly.io is NOT serverless - it runs persistent containers,
     so connection pooling is appropriate.
     """
     return (
-        os.environ.get("VERCEL") == "1" 
+        os.environ.get("VERCEL") == "1"
         or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
     )
 
@@ -131,42 +131,42 @@ def _is_retryable_error(error: Exception) -> bool:
 def _create_connection_with_retry(dsn: str):
     """
     Create a database connection with keepalive settings and retry logic.
-    
+
     Args:
         dsn: Database connection string
-        
+
     Returns:
         psycopg2 connection object
-        
+
     Raises:
         psycopg2.OperationalError: If connection fails after all retries
     """
     last_error = None
-    
+
     for attempt in range(MAX_RETRIES):
         try:
             conn = psycopg2.connect(
                 dsn,
                 **CONNECTION_SETTINGS
             )
-            
+
             # Verify connection is alive
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-            
+
             if attempt > 0:
                 logger.info(f"Database connection succeeded on attempt {attempt + 1}")
-            
+
             return conn
-            
+
         except psycopg2.OperationalError as e:
             last_error = e
-            
+
             if not _is_retryable_error(e):
                 # Non-retryable error, raise immediately
                 logger.error(f"Non-retryable database error: {e}")
                 raise
-            
+
             if attempt < MAX_RETRIES - 1:
                 delay = RETRY_BASE_DELAY * (2 ** attempt)  # Exponential backoff
                 logger.warning(
@@ -178,26 +178,26 @@ def _create_connection_with_retry(dsn: str):
                 logger.error(
                     f"Database connection failed after {MAX_RETRIES} attempts: {e}"
                 )
-    
+
     raise last_error
 
 
 def get_pool() -> psycopg2.pool.SimpleConnectionPool:
     """
     Get or create the connection pool.
-    
+
     Used in development and Fly.io (persistent container) environments.
     """
     global _pool
     if _pool is None:
         settings = get_settings()
         dsn = _prepare_connection_string(settings.database_url)
-        
+
         logger.info(
             f"Creating connection pool (min={settings.db_pool_min_size}, "
             f"max={settings.db_pool_max_size}) on {settings.deployment_platform}"
         )
-        
+
         _pool = psycopg2.pool.SimpleConnectionPool(
             dsn=dsn,
             minconn=settings.db_pool_min_size,
@@ -212,11 +212,11 @@ def get_connection() -> Generator:
 
     In serverless environments (Vercel, Lambda), creates a new connection per request
     with keepalive settings and retry logic.
-    
+
     In persistent environments (Fly.io, local), uses a connection pool.
     """
     settings = get_settings()
-    
+
     if _is_serverless():
         # Serverless: create new connection per request with SSL and keepalive
         dsn = _prepare_connection_string(settings.database_url)
@@ -257,11 +257,11 @@ def get_connection() -> Generator:
 def get_db_connection():
     """
     Context manager for getting a database connection.
-    
+
     Includes retry logic for all environments.
     """
     settings = get_settings()
-    
+
     if _is_serverless():
         dsn = _prepare_connection_string(settings.database_url)
         conn = None
@@ -306,28 +306,28 @@ def close_pool():
 def check_database_connection() -> dict:
     """
     Check if database connection is working.
-    
+
     Returns dict with status and error details.
     """
     settings = get_settings()
-    
+
     try:
         dsn = _prepare_connection_string(settings.database_url)
         conn = _create_connection_with_retry(dsn)
-        
+
         with conn.cursor() as cur:
             cur.execute("SELECT version()")
             version = cur.fetchone()[0]
-        
+
         conn.close()
-        
+
         return {
             "connected": True,
             "version": version,
             "platform": settings.deployment_platform,
             "pooled": not _is_serverless(),
         }
-        
+
     except Exception as e:
         return {
             "connected": False,
@@ -339,7 +339,7 @@ def check_database_connection() -> dict:
 def check_postgis_extension() -> dict:
     """
     Check if PostGIS extension is available.
-    
+
     Returns dict with availability and version info.
     """
     try:
@@ -356,7 +356,7 @@ def check_postgis_extension() -> dict:
                         "full_version": row[1],
                     }
                 return {"available": False, "error": "PostGIS not installed"}
-                
+
     except Exception as e:
         return {
             "available": False,
