@@ -86,13 +86,13 @@ test.describe("Tilesets list filtering and bulk operations", () => {
       timeout: 10_000,
     });
 
-    // ネイティブ select なので selectOption で直接操作する。
-    // i18n catalog (PR #132) で "ベクター" / "ラスター" (長音記号あり) に統一済み。
-    await page.getByTestId("tileset-filter-type").selectOption({ label: "ベクター" });
+    // ネイティブ select の selectOption は value で指定する。i18n ラベルではなく
+    // 内部値 ("vector" / "raster") を使うことでロケール/翻訳変更に影響されない。
+    await page.getByTestId("tileset-filter-type").selectOption("vector");
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("v1", { exact: true })).toBeVisible();
 
-    await page.getByTestId("tileset-filter-type").selectOption({ label: "ラスター" });
+    await page.getByTestId("tileset-filter-type").selectOption("raster");
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("r1", { exact: true })).toBeVisible();
   });
@@ -112,11 +112,11 @@ test.describe("Tilesets list filtering and bulk operations", () => {
       timeout: 10_000,
     });
 
-    await page.getByTestId("tileset-filter-public").selectOption({ label: "公開" });
+    await page.getByTestId("tileset-filter-public").selectOption("public");
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("public-1", { exact: true })).toBeVisible();
 
-    await page.getByTestId("tileset-filter-public").selectOption({ label: "非公開" });
+    await page.getByTestId("tileset-filter-public").selectOption("private");
     await expect(page.getByTestId("tileset-list-row")).toHaveCount(1);
     await expect(page.getByText("private-1", { exact: true })).toBeVisible();
   });
