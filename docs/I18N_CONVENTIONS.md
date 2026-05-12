@@ -170,7 +170,12 @@ function Component() {
 
 ### 4.3 axe-core spec で違反ゼロを保つ
 
-`app/tests/e2e/a11y/` 配下に主要画面ごとの spec を置く (Issue #100、PR #130 / #133 で 6 ページ整備済み)。`expectNoA11ySeriousViolations(page, { awaitReady })` で hydrate 完了を待ってから WCAG 2.1 AA タグでスキャンし、`serious` / `critical` 違反のみ fail。
+主要画面ごとに axe-core ベースの spec を整備する (Issue #100、PR #130 / #133 で 6 ページ完成):
+
+- 認証後の主要 6 ページ (`/`, `/tilesets`, `/settings/profile`, `/api-keys`, `/features`, `/teams`): `app/tests/e2e/a11y/` 配下
+- `/login` (未認証ページ): `app/tests/e2e/auth/a11y-login.spec.ts` (auth スイートに同居)
+
+いずれも `expectNoA11ySeriousViolations(page, { awaitReady })` で hydrate 完了を待ってから WCAG 2.1 AA タグでスキャンし、`serious` / `critical` 違反のみ fail。
 
 ## 5. React hook の依存配列
 
@@ -318,4 +323,4 @@ PR レビューで修正したコードのコメントに `"(Copilot PR #N round
 - [next-intl docs](https://next-intl-docs.vercel.app/) — ICU 構文、useTranslations / getTranslations の使い分け
 - `app/src/i18n/config.ts` — 現在の locales / namespaces 一覧
 - `app/src/locales/__tests__/keysets.test.ts` — missing-key CI チェック
-- `app/.github/workflows/scripts/i18n_guard.py` — 公開 API / MCP 表面の JA 漏れ検出 (本規約とは別系統だが関連)
+- `.github/workflows/scripts/i18n_guard.py` — 公開 API / MCP 表面の JA 漏れ検出 (本規約とは別系統だが関連)

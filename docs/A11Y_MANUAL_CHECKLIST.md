@@ -2,16 +2,16 @@
 
 > Issue #100 (Phase 3 a11y 監査) の受入条件のうち、**axe-core では検出できない領域** をカバーする手動テスト項目。
 >
-> axe-core spec によるカバレッジは `app/tests/e2e/a11y/` に整備済み (PR #130 / #133 で 6 ページ完成)。本ドキュメントは:
+> axe-core spec によるカバレッジは認証後の主要 6 ページが `app/tests/e2e/a11y/` (PR #130 / #133)、`/login` が `app/tests/e2e/auth/a11y-login.spec.ts` に整備済み。本ドキュメントは:
 > 1. **キーボード操作** (Tab / Shift+Tab / Enter / Esc / 矢印キー)
 > 2. **screen reader (SR) 読み上げ** (VoiceOver / NVDA)
 >
-> を 6 ページごとに実機検証するためのテンプレ。
+> を 6 ページごとに実機検証するためのテンプレ。`/login` のキーボード操作は `app/tests/e2e/auth/login.spec.ts` と上記 axe spec で自動カバーしているため本チェックリストの巡回対象外とする (SR の追加検証が必要なら ad-hoc に実施)。
 
 ## 共通の前提
 
 - ローカル開発環境で `npm run dev` を起動し、`http://localhost:3000` で実施
-- ログインは admin user で行う (login spec の admin@example.com 等、`tests/e2e/utils/session.ts` 参照)
+- ログインは admin user で行う (`app/tests/e2e/utils/session.ts` の `E2E_ADMIN_EMAIL` = `e2e-admin@example.com` 参照)
 - **キーボードのみで操作** (マウス使わない)
 - VoiceOver (macOS): Cmd+F5 で起動 / 終了。Ctrl+Option+→ で次の要素読み上げ
 - NVDA (Windows): 起動後、NVDA キー (CapsLock or Insert) + 矢印で読み上げ
@@ -93,7 +93,7 @@
 - [ ] export button → 形式 select (GeoJSON / CSV) → ダウンロードまで完了
 
 #### E-2. SR 読み上げ
-- [ ] icon-only ボタンが `aria-label` で読まれる (※ PR-E 後の確認項目: `tilesets/page.tsx` で追加した aria-label と同じパターンが適用されているか)
+- [ ] icon-only ボタンが `aria-label` で読まれる (※ PR-E 後の確認項目: `app/src/app/tilesets/page.tsx` で追加した aria-label と同じパターンが適用されているか)
 - [ ] geometry type (Point / LineString / Polygon) badge が読まれる
 - [ ] 一括操作ダイアログの description が読まれる
 
@@ -122,17 +122,17 @@ PR-G (Phase 3g) で catalog 化されたら本セクションを実施する。
 
 ## 全ページ共通の最終確認
 
-### G-1. focus visibility
+### H-1. focus visibility
 - [ ] すべての focusable 要素で focus ring が明確に見える (Issue #94 で対応済みだが目視確認)
 - [ ] focus ring の色 / コントラストが WCAG 2.1 AA を満たす
 - [ ] focus 状態のまま page reload / 言語切替してもフォーカスが失われない (or 失われても OK な配置)
 
-### G-2. ESC / Enter / Space の挙動
+### H-2. ESC / Enter / Space の挙動
 - [ ] modal / dialog はすべて Esc で閉じる
 - [ ] form 内で Enter は submit、Esc は cancel に対応
 - [ ] checkbox / switch は Space で toggle
 
-### G-3. SR landmark
+### H-3. SR landmark
 - [ ] `<header>` `<nav>` `<main>` の landmark が読まれる
 - [ ] heading 順 (h1 → h2 → h3) が論理的 (skip しない)
 - [ ] dialog open 時、focus が dialog 内にトラップされる
