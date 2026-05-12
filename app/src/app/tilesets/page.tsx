@@ -10,13 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -47,6 +40,7 @@ import {
   Lock,
   Trash2,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 
 export default function TilesetsPage() {
@@ -250,35 +244,36 @@ export default function TilesetsPage() {
                   data-testid="tileset-search-input"
                 />
               </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger
-                  className="w-[150px]"
+              {/* ネイティブ select を使用（Radix UI のポータル問題を回避） */}
+              <div className="relative">
+                <select
                   data-testid="tileset-filter-type"
                   aria-label={t("filter_type_label")}
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="h-9 w-[150px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 >
-                  <SelectValue placeholder={t("filter_type_placeholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("filter_type_all")}</SelectItem>
-                  <SelectItem value="vector">{t("filter_type_vector")}</SelectItem>
-                  <SelectItem value="raster">{t("filter_type_raster")}</SelectItem>
-                  <SelectItem value="pmtiles">{t("filter_type_pmtiles")}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={publicFilter} onValueChange={setPublicFilter}>
-                <SelectTrigger
-                  className="w-[150px]"
+                  <option value="all">{t("filter_type_all")}</option>
+                  <option value="vector">{t("filter_type_vector")}</option>
+                  <option value="raster">{t("filter_type_raster")}</option>
+                  <option value="pmtiles">{t("filter_type_pmtiles")}</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+              </div>
+              <div className="relative">
+                <select
                   data-testid="tileset-filter-public"
                   aria-label={t("filter_public_label")}
+                  value={publicFilter}
+                  onChange={(e) => setPublicFilter(e.target.value)}
+                  className="h-9 w-[150px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 >
-                  <SelectValue placeholder={t("filter_public_placeholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("filter_public_all")}</SelectItem>
-                  <SelectItem value="public">{t("filter_public_public")}</SelectItem>
-                  <SelectItem value="private">{t("filter_public_private")}</SelectItem>
-                </SelectContent>
-              </Select>
+                  <option value="all">{t("filter_public_all")}</option>
+                  <option value="public">{t("filter_public_public")}</option>
+                  <option value="private">{t("filter_public_private")}</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -476,6 +471,7 @@ export default function TilesetsPage() {
               onClick={handleBulkDelete}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="tileset-bulk-delete-confirm"
             >
               {isDeleting ? (
                 <>
