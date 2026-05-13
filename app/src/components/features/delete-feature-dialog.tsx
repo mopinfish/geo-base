@@ -68,7 +68,7 @@ export function DeleteFeatureDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("title")}</AlertDialogTitle>
-          <AlertDialogDescription>
+          <AlertDialogDescription className="whitespace-pre-line">
             {t("description", { name })}
           </AlertDialogDescription>
         </AlertDialogHeader>
