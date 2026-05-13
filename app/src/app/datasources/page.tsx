@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations, useLocale } from "next-intl";
 import Link from "next/link";
 import { AdminLayout } from "@/components/layout";
 import {
@@ -49,6 +50,9 @@ import {
 } from "lucide-react";
 
 export default function DatasourcesPage() {
+  const t = useTranslations("datasources.list");
+  const locale = useLocale();
+  const dateLocale = locale === "ja" ? "ja-JP" : locale;
   const { api, isReady } = useApi();
   const [datasources, setDatasources] = useState<Datasource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +98,7 @@ export default function DatasourcesPage() {
       // 選択状態をクリア
       setSelectedIds(new Set());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "データソースの取得に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_fetch"));
       setDatasources([]);
     } finally {
       setLoading(false);
@@ -115,7 +119,7 @@ export default function DatasourcesPage() {
       setDeleteDialogOpen(false);
       setDeletingId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_delete"));
     } finally {
       setDeleteLoading(false);
     }
@@ -134,7 +138,7 @@ export default function DatasourcesPage() {
     } catch (err) {
       setTestResults(prev => ({
         ...prev,
-        [id]: { status: 'error', message: err instanceof Error ? err.message : 'テストに失敗しました' }
+        [id]: { status: 'error', message: err instanceof Error ? err.message : t("test_error") }
       }));
     } finally {
       setTestingId(null);
@@ -183,7 +187,7 @@ export default function DatasourcesPage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("ja-JP", {
+    return new Date(dateString).toLocaleDateString(dateLocale, {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -236,14 +240,14 @@ export default function DatasourcesPage() {
       const errors = results.filter(r => r && typeof r === 'object' && 'error' in r);
       
       if (errors.length > 0) {
-        setError(`${errors.length}件の削除に失敗しました`);
+        setError(t("error_bulk_delete", { count: errors.length }));
       }
       
       // データを再取得
       await fetchDatasources();
       setBulkDeleteDialogOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_delete"));
     } finally {
       setIsBulkDeleting(false);
     }
@@ -255,20 +259,20 @@ export default function DatasourcesPage() {
         {/* ヘッダー */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">データソース</h1>
+            <h1 className="text-3xl font-bold">{t("title")}</h1>
             <p className="text-muted-foreground">
-              PMTiles・COGファイルなどの外部データソース管理
+              {t("subtitle")}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={fetchDatasources} disabled={loading}>
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              更新
+              {t("refresh")}
             </Button>
             <Button asChild>
               <Link href="/datasources/new">
                 <Plus className="mr-2 h-4 w-4" />
-                新規登録
+                {t("register")}
               </Link>
             </Button>
           </div>
@@ -277,12 +281,12 @@ export default function DatasourcesPage() {
         {/* フィルター */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">フィルター</CardTitle>
+            <CardTitle className="text-lg">{t("filter_title")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2" data-testid="datasource-filter-type">
-                <span className="text-sm text-muted-foreground">タイプ:</span>
+                <span className="text-sm text-muted-foreground">{t("filter_type_label")}</span>
                 <div className="flex gap-1">
                   <Button
                     variant={filterType === "all" ? "default" : "outline"}
@@ -290,7 +294,7 @@ export default function DatasourcesPage() {
                     onClick={() => setFilterType("all")}
                     data-testid="datasource-filter-type-all"
                   >
-                    すべて
+                    {t("filter_type_all")}
                   </Button>
                   <Button
                     variant={filterType === "pmtiles" ? "default" : "outline"}
@@ -321,7 +325,7 @@ export default function DatasourcesPage() {
                     className="rounded border-gray-300"
                     data-testid="datasource-include-private-toggle"
                   />
-                  プライベートを含む
+                  {t("filter_include_private")}
                 </label>
               </div>
             </div>
@@ -343,7 +347,7 @@ export default function DatasourcesPage() {
             <CardContent className="py-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
-                  {selectedIds.size}件を選択中
+                  {t("selected_count", { count: selectedIds.size })}
                 </span>
                 <div className="flex gap-2">
                   <Button
@@ -351,7 +355,7 @@ export default function DatasourcesPage() {
                     size="sm"
                     onClick={() => setSelectedIds(new Set())}
                   >
-                    選択解除
+                    {t("clear_selection")}
                   </Button>
                   <Button
                     variant="destructive"
@@ -360,7 +364,7 @@ export default function DatasourcesPage() {
                     data-testid="datasource-bulk-delete"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    一括削除
+                    {t("bulk_delete")}
                   </Button>
                 </div>
               </div>
@@ -373,11 +377,11 @@ export default function DatasourcesPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>データソース一覧</CardTitle>
+                <CardTitle>{t("section_title")}</CardTitle>
                 <CardDescription>
                   {loading
-                    ? "読み込み中..."
-                    : `${datasources.length}件のデータソース`}
+                    ? t("loading")
+                    : t("count", { count: datasources.length })}
                 </CardDescription>
               </div>
             </div>
@@ -391,15 +395,15 @@ export default function DatasourcesPage() {
               <div className="text-center py-8">
                 <Database className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-4 text-lg font-semibold">
-                  データソースがありません
+                  {t("empty_title")}
                 </h3>
                 <p className="mt-2 text-muted-foreground">
-                  「新規登録」からデータソースを追加してください
+                  {t("empty_description")}
                 </p>
                 <Button asChild className="mt-4">
                   <Link href="/datasources/new">
                     <Plus className="mr-2 h-4 w-4" />
-                    新規登録
+                    {t("empty_register")}
                   </Link>
                 </Button>
               </div>
@@ -417,14 +421,14 @@ export default function DatasourcesPage() {
                           data-testid="datasource-select-all"
                         />
                       </TableHead>
-                      <TableHead>タイプ</TableHead>
-                      <TableHead>タイルセット</TableHead>
-                      <TableHead>URL</TableHead>
-                      <TableHead>ストレージ</TableHead>
-                      <TableHead>公開設定</TableHead>
-                      <TableHead>状態</TableHead>
-                      <TableHead>作成日</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
+                      <TableHead>{t("column_type")}</TableHead>
+                      <TableHead>{t("column_tileset")}</TableHead>
+                      <TableHead>{t("column_url")}</TableHead>
+                      <TableHead>{t("column_storage")}</TableHead>
+                      <TableHead>{t("column_visibility")}</TableHead>
+                      <TableHead>{t("column_status")}</TableHead>
+                      <TableHead>{t("column_created")}</TableHead>
+                      <TableHead className="text-right">{t("column_actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -483,7 +487,7 @@ export default function DatasourcesPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={ds.is_public ? "default" : "secondary"}>
-                            {ds.is_public ? "公開" : "非公開"}
+                            {ds.is_public ? t("visibility_public") : t("visibility_private")}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -496,11 +500,11 @@ export default function DatasourcesPage() {
                             ) : (
                               <div className="flex items-center gap-1 text-red-600" title={testResults[ds.id].message}>
                                 <XCircle className="h-4 w-4" />
-                                <span className="text-xs">エラー</span>
+                                <span className="text-xs">{t("status_error")}</span>
                               </div>
                             )
                           ) : (
-                            <span className="text-xs text-muted-foreground">未テスト</span>
+                            <span className="text-xs text-muted-foreground">{t("status_untested")}</span>
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
@@ -513,7 +517,7 @@ export default function DatasourcesPage() {
                               size="sm"
                               onClick={() => handleTestConnection(ds.id)}
                               disabled={testingId === ds.id}
-                              title="接続テスト"
+                              title={t("test_connection_title")}
                             >
                               {testingId === ds.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -557,7 +561,7 @@ export default function DatasourcesPage() {
                 {datasources.filter((ds) => ds.type === "pmtiles").length}
               </div>
               <p className="text-xs text-muted-foreground">
-                ベクタタイルアーカイブ
+                {t("summary_pmtiles_desc")}
               </p>
             </CardContent>
           </Card>
@@ -571,13 +575,13 @@ export default function DatasourcesPage() {
                 {datasources.filter((ds) => ds.type === "cog").length}
               </div>
               <p className="text-xs text-muted-foreground">
-                Cloud Optimized GeoTIFF
+                {t("summary_cog_desc")}
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">公開</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("summary_public_title")}</CardTitle>
               <Map className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -585,7 +589,7 @@ export default function DatasourcesPage() {
                 {datasources.filter((ds) => ds.is_public).length}
               </div>
               <p className="text-xs text-muted-foreground">
-                公開データソース数
+                {t("summary_public_desc")}
               </p>
             </CardContent>
           </Card>
@@ -596,13 +600,13 @@ export default function DatasourcesPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>データソースを削除しますか？</AlertDialogTitle>
+            <AlertDialogTitle>{t("delete_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              この操作は取り消せません。データソースが削除されますが、タイルセットは削除されません。
+              {t("delete_description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteLoading}>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteLoading}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={deleteLoading}
@@ -611,10 +615,10 @@ export default function DatasourcesPage() {
               {deleteLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  削除中...
+                  {t("deleting")}
                 </>
               ) : (
-                "削除する"
+                t("delete_confirm")
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -625,14 +629,13 @@ export default function DatasourcesPage() {
       <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>データソースを一括削除しますか？</AlertDialogTitle>
+            <AlertDialogTitle>{t("bulk_delete_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              選択した {selectedIds.size} 件のデータソースを削除します。
-              この操作は取り消せません。タイルセットは削除されません。
+              {t("bulk_delete_description", { count: selectedIds.size })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isBulkDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel disabled={isBulkDeleting}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
@@ -642,12 +645,12 @@ export default function DatasourcesPage() {
               {isBulkDeleting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  削除中...
+                  {t("deleting")}
                 </>
               ) : (
                 <>
                   <Trash2 className="mr-2 h-4 w-4" />
-                  {selectedIds.size}件を削除
+                  {t("bulk_delete_confirm", { count: selectedIds.size })}
                 </>
               )}
             </AlertDialogAction>
