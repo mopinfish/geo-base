@@ -35,7 +35,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
   const router = useRouter();
   const t = useTranslations("features.detail");
   const locale = useLocale();
-  const dateLocale = locale === "ja" ? "ja-JP" : locale;
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
   const { api, isReady } = useApi();
   const [feature, setFeature] = useState<Feature | null>(null);
   const [tileset, setTileset] = useState<Tileset | null>(null);

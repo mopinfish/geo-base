@@ -303,7 +303,7 @@ export default function TeamsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("delete_dialog_title")}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="whitespace-pre-line">
               {t("delete_dialog_description", { name: teamToDelete?.name ?? "" })}
             </DialogDescription>
           </DialogHeader>

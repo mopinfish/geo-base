@@ -78,15 +78,20 @@ const roleIcons: Record<TeamRole, React.ReactNode> = {
 export default function TeamDetailPage() {
   const t = useTranslations("teams.detail");
 
-  const getRoleLabel = (role: TeamRole): string => {
-    const map: Record<TeamRole, string> = {
-      owner: t("role_owner"),
-      administrator: t("role_administrator"),
-      member: t("role_member"),
-      guest: t("role_guest"),
-    };
-    return map[role] ?? role;
+  const roleLabels: Record<TeamRole, string> = {
+    owner: t("role_owner"),
+    administrator: t("role_administrator"),
+    member: t("role_member"),
+    guest: t("role_guest"),
   };
+  const getRoleLabel = (role: TeamRole) => roleLabels[role];
+
+  const permissionLabels: Record<string, string> = {
+    view: t("permission_level_view"),
+    edit: t("permission_level_edit"),
+    admin: t("permission_level_admin"),
+  };
+  const getPermissionLabel = (level: string) => permissionLabels[level] ?? level;
 
   const params = useParams();
   const router = useRouter();
@@ -559,7 +564,7 @@ export default function TeamDetailPage() {
                         <div className="text-sm text-muted-foreground">
                           {tileset.tileset_type}
                           {tileset.permission_level && (
-                            <> • {t("tileset_permission", { level: tileset.permission_level })}</>
+                            <> • {t("tileset_permission", { level: getPermissionLabel(tileset.permission_level) })}</>
                           )}
                         </div>
                       </div>
@@ -693,7 +698,7 @@ export default function TeamDetailPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("delete_dialog_title")}</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="whitespace-pre-line">
               {t("delete_dialog_description", { name: team.name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
