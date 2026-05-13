@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { 
   GeoJSONDropzone, 
@@ -49,6 +50,7 @@ interface BoundsResult {
 const BULK_CHUNK_SIZE = 500;
 
 export default function GeoJSONImportPage() {
+  const t = useTranslations("features.import");
   const router = useRouter();
   const { api, isReady } = useApi();
   
@@ -116,7 +118,7 @@ export default function GeoJSONImportPage() {
     // レイヤー名のバリデーション
     const trimmedLayerName = layerName.trim();
     if (!trimmedLayerName) {
-      setError("レイヤー名を入力してください");
+      setError(t("error_no_layer"));
       return;
     }
 
@@ -203,7 +205,7 @@ export default function GeoJSONImportPage() {
       }
     } else {
       setStatus("error");
-      setError("すべてのフィーチャーのインポートに失敗しました");
+      setError(t("error_all_failed"));
     }
   };
 
@@ -237,11 +239,11 @@ export default function GeoJSONImportPage() {
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
               <FileJson className="h-8 w-8" />
-              GeoJSONインポート
+              {t("title")}
             </h1>
             <p className="text-muted-foreground flex items-center gap-2">
               <Zap className="h-4 w-4 text-yellow-500" />
-              バルクインサートで高速インポート（{BULK_CHUNK_SIZE}件/リクエスト）
+              {t("subtitle", { chunk_size: BULK_CHUNK_SIZE })}
             </p>
           </div>
         </div>
@@ -267,10 +269,10 @@ export default function GeoJSONImportPage() {
                   <div className="flex items-center gap-2 text-green-600">
                     <Check className="h-5 w-5" />
                     <p>
-                      {progress.completed}件のフィーチャーをインポートしました
+                      {t("success_count", { count: progress.completed })}
                       {progress.failed > 0 && (
                         <span className="text-destructive ml-2">
-                          （{progress.failed}件失敗）
+                          {t("success_failed_suffix", { failed: progress.failed })}
                         </span>
                       )}
                     </p>
@@ -279,8 +281,10 @@ export default function GeoJSONImportPage() {
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Zap className="h-4 w-4 text-yellow-500" />
                       <span>
-                        処理時間: {(importTime / 1000).toFixed(2)}秒
-                        （{(progress.completed / (importTime / 1000)).toFixed(0)}件/秒）
+                        {t("success_time", {
+                          time: (importTime / 1000).toFixed(2),
+                          rate: (progress.completed / (importTime / 1000)).toFixed(0),
+                        })}
                       </span>
                     </div>
                   )}
@@ -295,12 +299,12 @@ export default function GeoJSONImportPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={handleReset}>
-                    別のファイルをインポート
+                    {t("success_button_another")}
                   </Button>
                   <Link href={`/tilesets/${selectedTilesetId}`}>
                     <Button>
                       <MapPin className="mr-2 h-4 w-4" />
-                      タイルセットを確認
+                      {t("success_button_view_tileset")}
                     </Button>
                   </Link>
                 </div>
@@ -315,7 +319,7 @@ export default function GeoJSONImportPage() {
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-blue-600">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <p>タイルセットのBoundsを計算中...</p>
+                <p>{t("calculating_bounds")}</p>
               </div>
             </CardContent>
           </Card>
@@ -329,10 +333,10 @@ export default function GeoJSONImportPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Upload className="h-5 w-5" />
-                  ファイルを選択
+                  {t("file_card_title")}
                 </CardTitle>
                 <CardDescription>
-                  GeoJSON形式のファイルをアップロードしてください
+                  {t("file_card_description")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -347,24 +351,24 @@ export default function GeoJSONImportPage() {
             {/* タイルセット選択 */}
             <Card>
               <CardHeader>
-                <CardTitle>インポート先タイルセット</CardTitle>
+                <CardTitle>{t("tileset_card_title")}</CardTitle>
                 <CardDescription>
-                  フィーチャーを追加するタイルセットを選択
+                  {t("tileset_card_description")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {tilesets.length === 0 ? (
                   <div className="text-center py-4">
                     <p className="text-muted-foreground mb-4">
-                      vectorタイプのタイルセットがありません
+                      {t("tileset_none")}
                     </p>
                     <Link href="/tilesets/new">
-                      <Button variant="outline">タイルセットを作成</Button>
+                      <Button variant="outline">{t("tileset_create_link")}</Button>
                     </Link>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <Label htmlFor="tileset-select">タイルセット</Label>
+                    <Label htmlFor="tileset-select">{t("tileset_label")}</Label>
                     <select
                       id="tileset-select"
                       value={selectedTilesetId}
@@ -384,7 +388,7 @@ export default function GeoJSONImportPage() {
                         <Badge variant="outline">{selectedTileset.type}</Badge>
                         <Badge variant="outline">{selectedTileset.format}</Badge>
                         {selectedTileset.is_public && (
-                          <Badge variant="secondary">公開</Badge>
+                          <Badge variant="secondary">{t("badge_public")}</Badge>
                         )}
                       </div>
                     )}
@@ -398,15 +402,15 @@ export default function GeoJSONImportPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Layers className="h-5 w-5" />
-                  レイヤー名
+                  {t("layer_card_title")}
                 </CardTitle>
                 <CardDescription>
-                  インポートするフィーチャーのレイヤー名を指定
+                  {t("layer_card_description")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <Label htmlFor="layer-name">レイヤー名</Label>
+                  <Label htmlFor="layer-name">{t("layer_label")}</Label>
                   <Input
                     id="layer-name"
                     value={layerName}
@@ -415,8 +419,7 @@ export default function GeoJSONImportPage() {
                     disabled={status === "importing" || status === "calculating"}
                   />
                   <p className="text-xs text-muted-foreground">
-                    ベクタータイルのsource-layer名として使用されます。
-                    QGISやMapLibre GL JSでレイヤーを識別する際に必要です。
+                    {t("layer_help")}
                   </p>
                 </div>
               </CardContent>
@@ -430,8 +433,8 @@ export default function GeoJSONImportPage() {
                     {status === "importing" && (
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
-                          <span>インポート中...</span>
-                          <span>{progressPercent}%</span>
+                          <span>{t("progress_importing")}</span>
+                          <span>{t("progress_percent", { percent: progressPercent })}</span>
                         </div>
                         <div className="h-2 bg-secondary rounded-full overflow-hidden">
                           <div
@@ -440,8 +443,8 @@ export default function GeoJSONImportPage() {
                           />
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {progress.completed} / {progress.total} 完了
-                          {progress.failed > 0 && ` (${progress.failed} 失敗)`}
+                          {t("progress_detail", { completed: progress.completed, total: progress.total })}
+                          {progress.failed > 0 && ` ${t("progress_failed", { failed: progress.failed })}`}
                         </p>
                       </div>
                     )}
@@ -455,12 +458,12 @@ export default function GeoJSONImportPage() {
                       {status === "importing" ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          インポート中...
+                          {t("import_button")}
                         </>
                       ) : (
                         <>
                           <Zap className="mr-2 h-4 w-4" />
-                          {parsedGeoJSON.data.features.length}件のフィーチャーを高速インポート
+                          {t("import_button_ready", { count: parsedGeoJSON.data.features.length })}
                         </>
                       )}
                     </Button>
@@ -471,7 +474,7 @@ export default function GeoJSONImportPage() {
                           <p key={index}>{error}</p>
                         ))}
                         {progress.errors.length > 5 && (
-                          <p>...他 {progress.errors.length - 5} 件のエラー</p>
+                          <p>{t("error_summary_more", { count: progress.errors.length - 5 })}</p>
                         )}
                       </div>
                     )}
@@ -486,13 +489,13 @@ export default function GeoJSONImportPage() {
             {parsedGeoJSON ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>プレビュー</CardTitle>
+                  <CardTitle>{t("preview_card_title")}</CardTitle>
                   <CardDescription>
-                    {parsedGeoJSON.fileName} - {parsedGeoJSON.data.features.length}件のフィーチャー
+                    {t("preview_description", { fileName: parsedGeoJSON.fileName, count: parsedGeoJSON.data.features.length })}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <GeoJSONPreview 
+                  <GeoJSONPreview
                     data={parsedGeoJSON.data}
                     height="400px"
                   />
@@ -503,8 +506,7 @@ export default function GeoJSONImportPage() {
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center justify-center h-64 text-center text-muted-foreground">
                     <FileJson className="h-16 w-16 mb-4 opacity-50" />
-                    <p>GeoJSONファイルをアップロードすると</p>
-                    <p>ここにプレビューが表示されます</p>
+                    <p>{t("preview_placeholder")}</p>
                   </div>
                 </CardContent>
               </Card>

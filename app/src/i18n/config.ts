@@ -34,8 +34,10 @@ export const FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE: Locale = "ja";
  *   (Phase 3c / Issue #107)。
  * - `tilesets`: タイルセット系画面 (一覧 / 新規 / 詳細 / 編集 + form +
  *   delete dialog) の UI 文言 (Phase 3d / Issue #107)。
+ * - `features`: フィーチャー系画面 (一覧 / 新規 / 詳細 / 編集 / インポート + form +
+ *   dialog) の UI 文言 (Phase 3e / Issue #107)。
  *
  * PR-E 以降 (features / datasources / ...) で domain 別に namespace を追加していく。
  */
-export const NAMESPACES = ["common", "api-errors", "auth", "tilesets"] as const;
+export const NAMESPACES = ["common", "api-errors", "auth", "tilesets", "features"] as const;
 export type Namespace = (typeof NAMESPACES)[number];
