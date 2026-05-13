@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -25,13 +26,14 @@ import type { Tileset, FeatureCreate, FeatureUpdate } from "@/lib/api";
 // ジオメトリタイプ
 type GeometryType = "Point" | "LineString" | "Polygon";
 
-// フォームのスキーマ
-const featureFormSchema = z.object({
-  tileset_id: z.string().min(1, "タイルセットを選択してください"),
-  layer_name: z.string().min(1, "レイヤー名を入力してください"),
-});
+// フォームのスキーマ（t を受け取ってエラーメッセージを国際化）
+const createFeatureFormSchema = (t: (key: string) => string) =>
+  z.object({
+    tileset_id: z.string().min(1, t("zod_tileset_required")),
+    layer_name: z.string().min(1, t("zod_layer_required")),
+  });
 
-type FeatureFormValues = z.infer<typeof featureFormSchema>;
+type FeatureFormValues = z.infer<ReturnType<typeof createFeatureFormSchema>>;
 
 interface PropertyItem {
   key: string;
@@ -69,6 +71,7 @@ export function FeatureForm({
   onCancel,
   isSubmitting = false,
 }: FeatureFormProps) {
+  const t = useTranslations("features.form");
   const isEditMode = !!featureId;
 
   // フォームの設定
@@ -79,7 +82,7 @@ export function FeatureForm({
     watch,
     formState: { errors },
   } = useForm<FeatureFormValues>({
-    resolver: zodResolver(featureFormSchema),
+    resolver: zodResolver(createFeatureFormSchema(t)),
     defaultValues: {
       tileset_id: initialData?.tileset_id || "",
       layer_name: initialData?.layer_name || "default",
@@ -153,23 +156,23 @@ export function FeatureForm({
     try {
       parsed = JSON.parse(text);
     } catch {
-      setGeojsonError("JSON として解釈できません");
+      setGeojsonError(t("zod_geojson_not_json"));
       setCoordinates(null);
       return;
     }
     if (!parsed || typeof parsed !== "object") {
-      setGeojsonError("オブジェクトを入力してください");
+      setGeojsonError(t("zod_geojson_not_object"));
       setCoordinates(null);
       return;
     }
     const obj = parsed as { type?: unknown; coordinates?: unknown };
     if (typeof obj.type !== "string" || !Array.isArray(obj.coordinates)) {
-      setGeojsonError("type と coordinates が必要です");
+      setGeojsonError(t("zod_geojson_missing_fields"));
       setCoordinates(null);
       return;
     }
     if (obj.type !== "Point" && obj.type !== "LineString" && obj.type !== "Polygon") {
-      setGeojsonError("Point / LineString / Polygon のみ対応しています");
+      setGeojsonError(t("zod_geojson_unsupported_type"));
       setCoordinates(null);
       return;
     }
@@ -187,7 +190,7 @@ export function FeatureForm({
     // 既存の geometryType / coordinates 形式に変換 (Polygon は外環のみ)。
     if (obj.type === "Point") {
       if (!isNumPair(obj.coordinates)) {
-        setGeojsonError("Point の coordinates は [number, number] が必要です");
+        setGeojsonError(t("zod_geojson_point_invalid"));
         setCoordinates(null);
         return;
       }
@@ -196,9 +199,7 @@ export function FeatureForm({
     } else if (obj.type === "LineString") {
       const arr = obj.coordinates as unknown[];
       if (arr.length < 2 || !arr.every(isNumPair)) {
-        setGeojsonError(
-          "LineString の coordinates は [number, number] の配列 (>=2) が必要です",
-        );
+        setGeojsonError(t("zod_geojson_linestring_invalid"));
         setCoordinates(null);
         return;
       }
@@ -208,9 +209,7 @@ export function FeatureForm({
       // Polygon: coordinates = [outerRing, ...holes] の外環だけ拾う。
       const outer = (obj.coordinates as unknown[])[0];
       if (!Array.isArray(outer) || outer.length < 3 || !outer.every(isNumPair)) {
-        setGeojsonError(
-          "Polygon の外環は [number, number] の配列 (>=3) が必要です",
-        );
+        setGeojsonError(t("zod_geojson_polygon_invalid"));
         setCoordinates(null);
         return;
       }
@@ -364,7 +363,7 @@ export function FeatureForm({
     const geometry = buildGeometry();
     
     if (!geometry) {
-      alert("ジオメトリを入力してください");
+      alert(t("alert_no_geometry"));
       return;
     }
 
@@ -399,19 +398,19 @@ export function FeatureForm({
       {/* 基本情報 */}
       <Card>
         <CardHeader>
-          <CardTitle>基本情報</CardTitle>
+          <CardTitle>{t("section_basic_info")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* タイルセット選択 */}
           <div className="space-y-2">
-            <Label htmlFor="tileset_id">タイルセット *</Label>
+            <Label htmlFor="tileset_id">{t("tileset_label")}</Label>
             <Select
               value={watch("tileset_id")}
               onValueChange={(value) => setValue("tileset_id", value)}
               disabled={isEditMode}
             >
               <SelectTrigger data-testid="feature-form-tileset">
-                <SelectValue placeholder="タイルセットを選択" />
+                <SelectValue placeholder={t("tileset_placeholder")} />
               </SelectTrigger>
               <SelectContent>
                 {tilesets.map((tileset) => (
@@ -430,7 +429,7 @@ export function FeatureForm({
 
           {/* レイヤー名 */}
           <div className="space-y-2">
-            <Label htmlFor="layer_name">レイヤー名</Label>
+            <Label htmlFor="layer_name">{t("layer_label")}</Label>
             <Input
               data-testid="feature-form-layer-name"
               id="layer_name"
@@ -446,16 +445,16 @@ export function FeatureForm({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            ジオメトリ
+            {t("section_geometry")}
           </CardTitle>
           <CardDescription>
-            地図をクリックして座標を設定、またはマーカーをドラッグして移動できます
+            {t("geometry_description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* ジオメトリタイプ選択 */}
           <div className="space-y-2">
-            <Label>ジオメトリタイプ</Label>
+            <Label>{t("geometry_type_label")}</Label>
             <Select
               value={geometryType}
               onValueChange={(value) => handleGeometryTypeChange(value as GeometryType)}
@@ -464,9 +463,9 @@ export function FeatureForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Point">Point（ポイント）</SelectItem>
-                <SelectItem value="LineString">LineString（線）</SelectItem>
-                <SelectItem value="Polygon">Polygon（ポリゴン）</SelectItem>
+                <SelectItem value="Point">{t("geometry_type_point")}</SelectItem>
+                <SelectItem value="LineString">{t("geometry_type_linestring")}</SelectItem>
+                <SelectItem value="Polygon">{t("geometry_type_polygon")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -474,11 +473,11 @@ export function FeatureForm({
           {/* ジオメトリステータス */}
           <div className="flex items-center gap-2">
             <Badge variant={isGeometryValid ? "default" : "secondary"}>
-              {coordsArray.length}点
+              {t("geometry_status_count", { count: coordsArray.length })}
             </Badge>
             {!isGeometryValid && (
               <span className="text-sm text-muted-foreground">
-                ({minPointsRequired}点以上必要)
+                {t("geometry_status_min_points", { min_points: minPointsRequired })}
               </span>
             )}
           </div>
@@ -490,10 +489,10 @@ export function FeatureForm({
           >
             <TabsList>
               <TabsTrigger value="map" data-testid="feature-form-mode-map">
-                マップで描画
+                {t("tab_draw_map")}
               </TabsTrigger>
               <TabsTrigger value="geojson" data-testid="feature-form-mode-geojson">
-                GeoJSON 直接入力
+                {t("tab_geojson_input")}
               </TabsTrigger>
             </TabsList>
 
@@ -513,7 +512,7 @@ export function FeatureForm({
                   className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50"
                   onClick={() => setShowCoordInputs(!showCoordInputs)}
                 >
-                  <span>座標を数値で編集</span>
+                  <span>{t("coord_edit_label")}</span>
                   {showCoordInputs ? (
                     <ChevronUp className="h-4 w-4" />
                   ) : (
@@ -531,7 +530,7 @@ export function FeatureForm({
                         <span className="text-sm font-medium w-8">#{index + 1}</span>
                         <div className="flex-1 grid grid-cols-2 gap-2">
                           <div>
-                            <Label className="text-xs">経度</Label>
+                            <Label className="text-xs">{t("coord_lng")}</Label>
                             <Input
                               type="number"
                               step="any"
@@ -539,12 +538,12 @@ export function FeatureForm({
                               onChange={(e) =>
                                 updateCoordinate(index, "lng", parseFloat(e.target.value))
                               }
-                              placeholder="経度"
+                              placeholder={t("coord_lng")}
                               className="h-8"
                             />
                           </div>
                           <div>
-                            <Label className="text-xs">緯度</Label>
+                            <Label className="text-xs">{t("coord_lat")}</Label>
                             <Input
                               type="number"
                               step="any"
@@ -552,7 +551,7 @@ export function FeatureForm({
                               onChange={(e) =>
                                 updateCoordinate(index, "lat", parseFloat(e.target.value))
                               }
-                              placeholder="緯度"
+                              placeholder={t("coord_lat")}
                               className="h-8"
                             />
                           </div>
@@ -577,7 +576,7 @@ export function FeatureForm({
                         className="w-full"
                       >
                         <Plus className="mr-2 h-4 w-4" />
-                        座標を追加
+                        {t("coord_add_button")}
                       </Button>
                     )}
                   </div>
@@ -587,7 +586,7 @@ export function FeatureForm({
 
             <TabsContent value="geojson" className="space-y-2">
               <Label htmlFor="feature-form-geometry-text">
-                GeoJSON Geometry (Point / LineString / Polygon)
+                {t("geojson_label")}
               </Label>
               <Textarea
                 id="feature-form-geometry-text"
@@ -602,7 +601,7 @@ export function FeatureForm({
                 <p className="text-sm text-destructive">{geojsonError}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                GeoJSON Geometry オブジェクトを貼り付けてください。Polygon は外環のみ反映されます。
+                {t("geojson_help")}
               </p>
             </TabsContent>
           </Tabs>
@@ -612,9 +611,9 @@ export function FeatureForm({
       {/* プロパティ */}
       <Card>
         <CardHeader>
-          <CardTitle>プロパティ（属性）</CardTitle>
+          <CardTitle>{t("section_properties")}</CardTitle>
           <CardDescription>
-            フィーチャーに付加する属性情報を入力してください
+            {t("properties_description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -622,14 +621,14 @@ export function FeatureForm({
             <div key={index} className="flex items-center gap-2" data-testid="feature-form-property-row">
               <Input
                 data-testid="feature-form-property-key"
-                placeholder="キー"
+                placeholder={t("property_key_placeholder")}
                 value={prop.key}
                 onChange={(e) => updateProperty(index, "key", e.target.value)}
                 className="flex-1"
               />
               <Input
                 data-testid="feature-form-property-value"
-                placeholder="値"
+                placeholder={t("property_value_placeholder")}
                 value={prop.value}
                 onChange={(e) => updateProperty(index, "value", e.target.value)}
                 className="flex-1"
@@ -652,7 +651,7 @@ export function FeatureForm({
             className="w-full"
           >
             <Plus className="mr-2 h-4 w-4" />
-            プロパティを追加
+            {t("add_property_button")}
           </Button>
         </CardContent>
       </Card>
@@ -661,7 +660,7 @@ export function FeatureForm({
       <div className="flex justify-end gap-4">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>
-            キャンセル
+            {t("cancel")}
           </Button>
         )}
         <Button
@@ -675,7 +674,7 @@ export function FeatureForm({
           }
         >
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isEditMode ? "更新" : "作成"}
+          {isEditMode ? t("submit_edit") : t("submit_create")}
         </Button>
       </div>
     </form>

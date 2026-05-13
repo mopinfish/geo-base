@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Plus, Users, Settings, Trash2, MoreHorizontal } from "lucide-react";
 import { AdminLayout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { useApi } from "@/hooks/use-api";
 import { Team, TeamCreate } from "@/lib/api";
 
 export default function TeamsPage() {
+  const t = useTranslations("teams.list");
   const router = useRouter();
   const { api, isReady } = useApi();
 
@@ -59,7 +61,7 @@ export default function TeamsPage() {
       setTeams(response.teams);
     } catch (err) {
       console.error("Failed to load teams:", err);
-      setError(err instanceof Error ? err.message : "チームの読み込みに失敗しました");
+      setError(err instanceof Error ? err.message : t("error_load"));
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +78,7 @@ export default function TeamsPage() {
       setCreateForm({ name: "" });
     } catch (err) {
       console.error("Failed to create team:", err);
-      setError(err instanceof Error ? err.message : "チームの作成に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_create"));
     } finally {
       setIsCreating(false);
     }
@@ -93,7 +95,7 @@ export default function TeamsPage() {
       setTeamToDelete(null);
     } catch (err) {
       console.error("Failed to delete team:", err);
-      setError(err instanceof Error ? err.message : "チームの削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_delete"));
     } finally {
       setIsDeleting(false);
     }
@@ -103,7 +105,7 @@ export default function TeamsPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">読み込み中...</div>
+          <div className="text-muted-foreground">{t("loading")}</div>
         </div>
       </AdminLayout>
     );
@@ -115,9 +117,9 @@ export default function TeamsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">チーム管理</h1>
+            <h1 className="text-2xl font-bold">{t("title")}</h1>
             <p className="text-muted-foreground">
-              チームを作成してメンバーとタイルセットを共有しましょう
+              {t("subtitle")}
             </p>
           </div>
           <Button
@@ -125,7 +127,7 @@ export default function TeamsPage() {
             data-testid="team-create-button"
           >
             <Plus className="w-4 h-4 mr-2" />
-            新規チーム
+            {t("new_team_button")}
           </Button>
         </div>
 
@@ -139,19 +141,19 @@ export default function TeamsPage() {
         {/* Teams List */}
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-muted-foreground">読み込み中...</div>
+            <div className="text-muted-foreground">{t("loading")}</div>
           </div>
         ) : teams.length === 0 ? (
           <Card data-testid="team-empty-state">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Users className="w-12 h-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">チームがありません</h3>
+              <h3 className="text-lg font-medium mb-2">{t("empty_title")}</h3>
               <p className="text-muted-foreground text-center mb-4">
-                チームを作成してメンバーを招待しましょう
+                {t("empty_description")}
               </p>
               <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                最初のチームを作成
+                {t("empty_create_button")}
               </Button>
             </CardContent>
           </Card>
@@ -178,7 +180,7 @@ export default function TeamsPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          aria-label="チームのアクションメニューを開く"
+                          aria-label={t("menu_aria_label")}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
@@ -191,7 +193,7 @@ export default function TeamsPage() {
                           }}
                         >
                           <Settings className="w-4 h-4 mr-2" />
-                          設定
+                          {t("menu_settings")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive"
@@ -202,7 +204,7 @@ export default function TeamsPage() {
                           }}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
-                          削除
+                          {t("menu_delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -217,10 +219,10 @@ export default function TeamsPage() {
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Users className="w-4 h-4" />
-                      <span>{team.member_count ?? 0} メンバー</span>
+                      <span>{t("member_count", { count: team.member_count ?? 0 })}</span>
                     </div>
                     <Badge variant="outline">
-                      {team.tileset_count ?? 0} タイルセット
+                      {t("tileset_count", { count: team.tileset_count ?? 0 })}
                     </Badge>
                   </div>
                 </CardContent>
@@ -234,45 +236,45 @@ export default function TeamsPage() {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>新規チーム作成</DialogTitle>
+            <DialogTitle>{t("create_dialog_title")}</DialogTitle>
             <DialogDescription>
-              チームを作成してメンバーを招待しましょう
+              {t("create_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">チーム名 *</Label>
+              <Label htmlFor="name">{t("form_name_label")}</Label>
               <Input
                 id="name"
                 value={createForm.name}
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, name: e.target.value }))
                 }
-                placeholder="マイチーム"
+                placeholder={t("form_name_placeholder")}
                 data-testid="team-create-name"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="slug">スラッグ（URL用）</Label>
+              <Label htmlFor="slug">{t("form_slug_label")}</Label>
               <Input
                 id="slug"
                 value={createForm.slug ?? ""}
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, slug: e.target.value }))
                 }
-                placeholder="my-team（空欄で自動生成）"
+                placeholder={t("form_slug_placeholder")}
                 data-testid="team-create-slug"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">説明</Label>
+              <Label htmlFor="description">{t("form_description_label")}</Label>
               <Textarea
                 id="description"
                 value={createForm.description ?? ""}
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, description: e.target.value }))
                 }
-                placeholder="チームの説明を入力..."
+                placeholder={t("form_description_placeholder")}
                 rows={3}
               />
             </div>
@@ -283,14 +285,14 @@ export default function TeamsPage() {
               onClick={() => setShowCreateDialog(false)}
               disabled={isCreating}
             >
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleCreateTeam}
               disabled={!createForm.name.trim() || isCreating}
               data-testid="team-create-submit"
             >
-              {isCreating ? "作成中..." : "作成"}
+              {isCreating ? t("creating") : t("create_button")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -300,10 +302,9 @@ export default function TeamsPage() {
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>チームを削除</DialogTitle>
-            <DialogDescription>
-              本当に「{teamToDelete?.name}」を削除しますか？
-              この操作は取り消せません。
+            <DialogTitle>{t("delete_dialog_title")}</DialogTitle>
+            <DialogDescription className="whitespace-pre-line">
+              {teamToDelete && t("delete_dialog_description", { name: teamToDelete.name })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -312,14 +313,14 @@ export default function TeamsPage() {
               onClick={() => setShowDeleteDialog(false)}
               disabled={isDeleting}
             >
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
               onClick={handleDeleteTeam}
               disabled={isDeleting}
             >
-              {isDeleting ? "削除中..." : "削除"}
+              {isDeleting ? t("deleting") : t("delete_button")}
             </Button>
           </DialogFooter>
         </DialogContent>

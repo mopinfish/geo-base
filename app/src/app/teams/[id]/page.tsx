@@ -15,6 +15,7 @@ import {
   User,
   Eye,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,13 +68,6 @@ import {
   Tileset,
 } from "@/lib/api";
 
-const roleLabels: Record<TeamRole, string> = {
-  owner: "オーナー",
-  administrator: "管理者",
-  member: "メンバー",
-  guest: "ゲスト",
-};
-
 const roleIcons: Record<TeamRole, React.ReactNode> = {
   owner: <Crown className="w-4 h-4 text-yellow-500" />,
   administrator: <Shield className="w-4 h-4 text-blue-500" />,
@@ -82,17 +76,33 @@ const roleIcons: Record<TeamRole, React.ReactNode> = {
 };
 
 export default function TeamDetailPage() {
+  const t = useTranslations("teams.detail");
   const params = useParams();
   const router = useRouter();
   const teamId = params.id as string;
   const { api, isReady } = useApi();
+
+  const roleLabels: Record<TeamRole, string> = {
+    owner: t("role_owner"),
+    administrator: t("role_administrator"),
+    member: t("role_member"),
+    guest: t("role_guest"),
+  };
+  const getRoleLabel = (role: TeamRole) => roleLabels[role];
+
+  const permissionLabels: Record<string, string> = {
+    view: t("permission_level_view"),
+    edit: t("permission_level_edit"),
+    admin: t("permission_level_admin"),
+  };
+  const getPermissionLabel = (level: string) => permissionLabels[level] ?? level;
 
   const [team, setTeam] = useState<Team | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [teamTilesets, setTeamTilesets] = useState<TeamTileset[]>([]);
   const [availableTilesets, setAvailableTilesets] = useState<Tileset[]>([]);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,7 +141,7 @@ export default function TeamDetailPage() {
       teamData = await api.getTeam(teamId);
     } catch (err) {
       console.error("Failed to load team:", err);
-      setError(err instanceof Error ? err.message : "チームの取得に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_fetch"));
       setIsLoading(false);
       return;
     }
@@ -189,7 +199,7 @@ export default function TeamDetailPage() {
       setShowEditDialog(false);
     } catch (err) {
       console.error("Failed to update team:", err);
-      setError(err instanceof Error ? err.message : "チームの更新に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_update"));
     } finally {
       setIsSaving(false);
     }
@@ -205,7 +215,7 @@ export default function TeamDetailPage() {
       setInviteForm({ email: "" });
     } catch (err) {
       console.error("Failed to invite member:", err);
-      setError(err instanceof Error ? err.message : "招待の送信に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_invite"));
     } finally {
       setIsInviting(false);
     }
@@ -217,7 +227,7 @@ export default function TeamDetailPage() {
       setInvitations((prev) => prev.filter((i) => i.id !== invitationId));
     } catch (err) {
       console.error("Failed to cancel invitation:", err);
-      setError(err instanceof Error ? err.message : "招待のキャンセルに失敗しました");
+      setError(err instanceof Error ? err.message : t("error_cancel_invitation"));
     }
   };
 
@@ -227,7 +237,7 @@ export default function TeamDetailPage() {
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
     } catch (err) {
       console.error("Failed to remove member:", err);
-      setError(err instanceof Error ? err.message : "メンバーの削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_remove_member"));
     }
   };
 
@@ -239,7 +249,7 @@ export default function TeamDetailPage() {
       );
     } catch (err) {
       console.error("Failed to change role:", err);
-      setError(err instanceof Error ? err.message : "役割の変更に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_change_role"));
     }
   };
 
@@ -253,7 +263,7 @@ export default function TeamDetailPage() {
       setSelectedTilesetId("");
     } catch (err) {
       console.error("Failed to add tileset:", err);
-      setError(err instanceof Error ? err.message : "タイルセットの追加に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_add_tileset"));
     } finally {
       setIsAddingTileset(false);
     }
@@ -266,7 +276,7 @@ export default function TeamDetailPage() {
       router.push("/teams");
     } catch (err) {
       console.error("Failed to delete team:", err);
-      setError(err instanceof Error ? err.message : "チームの削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_delete"));
       setIsDeleting(false);
       setShowDeleteDialog(false);
     }
@@ -278,7 +288,7 @@ export default function TeamDetailPage() {
       setTeamTilesets((prev) => prev.filter((t) => t.tileset_id !== tilesetId));
     } catch (err) {
       console.error("Failed to remove tileset:", err);
-      setError(err instanceof Error ? err.message : "タイルセットの削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_remove_tileset"));
     }
   };
 
@@ -286,7 +296,7 @@ export default function TeamDetailPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">読み込み中...</div>
+          <div className="text-muted-foreground">{t("loading")}</div>
         </div>
       </AdminLayout>
     );
@@ -296,9 +306,9 @@ export default function TeamDetailPage() {
     return (
       <AdminLayout>
         <div className="text-center py-12">
-          <p className="text-muted-foreground">チームが見つかりません</p>
+          <p className="text-muted-foreground">{t("not_found")}</p>
           <Button className="mt-4" onClick={() => router.push("/teams")}>
-            チーム一覧に戻る
+            {t("back_to_list")}
           </Button>
         </div>
       </AdminLayout>
@@ -322,7 +332,7 @@ export default function TeamDetailPage() {
             onClick={() => setShowEditDialog(true)}
             data-testid="team-edit-button"
           >
-            設定を編集
+            {t("edit_button")}
           </Button>
           <Button
             variant="destructive"
@@ -330,7 +340,7 @@ export default function TeamDetailPage() {
             data-testid="team-delete-button"
           >
             <Trash2 className="w-4 h-4 mr-2" />
-            削除
+            {t("delete_button")}
           </Button>
         </div>
 
@@ -346,7 +356,7 @@ export default function TeamDetailPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                メンバー数
+                {t("stat_member_count")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -356,7 +366,7 @@ export default function TeamDetailPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                保留中の招待
+                {t("stat_pending_invitations")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -368,7 +378,7 @@ export default function TeamDetailPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                共有タイルセット
+                {t("stat_shared_tilesets")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -382,28 +392,28 @@ export default function TeamDetailPage() {
           <TabsList>
             <TabsTrigger value="members">
               <Users className="w-4 h-4 mr-2" />
-              メンバー
+              {t("tab_members")}
             </TabsTrigger>
             <TabsTrigger value="invitations">
               <Mail className="w-4 h-4 mr-2" />
-              招待
+              {t("tab_invitations")}
             </TabsTrigger>
             <TabsTrigger value="tilesets">
               <MapPin className="w-4 h-4 mr-2" />
-              タイルセット
+              {t("tab_tilesets")}
             </TabsTrigger>
           </TabsList>
 
           {/* Members Tab */}
           <TabsContent value="members" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">メンバー一覧</h2>
+              <h2 className="text-lg font-semibold">{t("members_section_title")}</h2>
               <Button
                 onClick={() => setShowInviteDialog(true)}
                 data-testid="team-invite-button"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                招待する
+                {t("invite_button")}
               </Button>
             </div>
             <div className="space-y-2">
@@ -417,7 +427,7 @@ export default function TeamDetailPage() {
                           {member.user_email || member.user_id}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {roleLabels[member.role]}
+                          {getRoleLabel(member.role)}
                         </div>
                       </div>
                     </div>
@@ -437,7 +447,7 @@ export default function TeamDetailPage() {
                             }
                           >
                             <Shield className="w-4 h-4 mr-2" />
-                            管理者に変更
+                            {t("menu_promote")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             data-testid="team-member-role-demote"
@@ -447,7 +457,7 @@ export default function TeamDetailPage() {
                             }
                           >
                             <User className="w-4 h-4 mr-2" />
-                            メンバーに変更
+                            {t("menu_demote")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -455,7 +465,7 @@ export default function TeamDetailPage() {
                             onClick={() => handleRemoveMember(member.user_id)}
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
-                            削除
+                            {t("menu_remove_member")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -469,19 +479,19 @@ export default function TeamDetailPage() {
           {/* Invitations Tab */}
           <TabsContent value="invitations" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">招待一覧</h2>
+              <h2 className="text-lg font-semibold">{t("invitations_section_title")}</h2>
               <Button
                 onClick={() => setShowInviteDialog(true)}
                 data-testid="team-invitation-create-button"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                新規招待
+                {t("new_invitation_button")}
               </Button>
             </div>
             {invitations.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  保留中の招待はありません
+                  {t("no_invitations")}
                 </CardContent>
               </Card>
             ) : (
@@ -492,7 +502,7 @@ export default function TeamDetailPage() {
                       <div>
                         <div className="font-medium">{invitation.email}</div>
                         <div className="text-sm text-muted-foreground">
-                          {roleLabels[invitation.role]} として招待 •{" "}
+                          {t("invited_as", { role: getRoleLabel(invitation.role) })} •{" "}
                           <Badge
                             variant={
                               invitation.status === "pending"
@@ -503,9 +513,9 @@ export default function TeamDetailPage() {
                             }
                           >
                             {invitation.status === "pending"
-                              ? "保留中"
+                              ? t("invitation_status_pending")
                               : invitation.status === "accepted"
-                              ? "承諾済み"
+                              ? t("invitation_status_accepted")
                               : invitation.status}
                           </Badge>
                         </div>
@@ -516,7 +526,7 @@ export default function TeamDetailPage() {
                           size="sm"
                           onClick={() => handleCancelInvitation(invitation.id)}
                         >
-                          キャンセル
+                          {t("cancel_invitation")}
                         </Button>
                       )}
                     </CardContent>
@@ -529,16 +539,16 @@ export default function TeamDetailPage() {
           {/* Tilesets Tab */}
           <TabsContent value="tilesets" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">共有タイルセット</h2>
+              <h2 className="text-lg font-semibold">{t("tilesets_section_title")}</h2>
               <Button onClick={() => setShowAddTilesetDialog(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                タイルセットを追加
+                {t("add_tileset_button")}
               </Button>
             </div>
             {teamTilesets.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  共有されているタイルセットはありません
+                  {t("no_tilesets")}
                 </CardContent>
               </Card>
             ) : (
@@ -553,7 +563,7 @@ export default function TeamDetailPage() {
                         <div className="text-sm text-muted-foreground">
                           {tileset.tileset_type}
                           {tileset.permission_level && (
-                            <> • 権限: {tileset.permission_level}</>
+                            <> • {t("tileset_permission", { level: getPermissionLabel(tileset.permission_level) })}</>
                           )}
                         </div>
                       </div>
@@ -577,11 +587,11 @@ export default function TeamDetailPage() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>チーム設定</DialogTitle>
+            <DialogTitle>{t("edit_dialog_title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">チーム名</Label>
+              <Label htmlFor="edit-name">{t("edit_name_label")}</Label>
               <Input
                 id="edit-name"
                 value={editForm.name ?? ""}
@@ -591,7 +601,7 @@ export default function TeamDetailPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-description">説明</Label>
+              <Label htmlFor="edit-description">{t("edit_description_label")}</Label>
               <Textarea
                 id="edit-description"
                 value={editForm.description ?? ""}
@@ -604,10 +614,10 @@ export default function TeamDetailPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button onClick={handleUpdateTeam} disabled={isSaving}>
-              {isSaving ? "保存中..." : "保存"}
+              {isSaving ? t("saving") : t("save_button")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -617,14 +627,14 @@ export default function TeamDetailPage() {
       <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>メンバーを招待</DialogTitle>
+            <DialogTitle>{t("invite_dialog_title")}</DialogTitle>
             <DialogDescription>
-              メールアドレスを入力して招待を送信します
+              {t("invite_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="invite-email">メールアドレス *</Label>
+              <Label htmlFor="invite-email">{t("invite_email_label")}</Label>
               <Input
                 id="invite-email"
                 type="email"
@@ -637,7 +647,7 @@ export default function TeamDetailPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invite-role">役割</Label>
+              <Label htmlFor="invite-role">{t("invite_role_label")}</Label>
               <Select
                 value={inviteForm.role ?? "member"}
                 onValueChange={(value: TeamRole) =>
@@ -648,35 +658,35 @@ export default function TeamDetailPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="administrator">管理者</SelectItem>
-                  <SelectItem value="member">メンバー</SelectItem>
-                  <SelectItem value="guest">ゲスト</SelectItem>
+                  <SelectItem value="administrator">{t("role_administrator")}</SelectItem>
+                  <SelectItem value="member">{t("role_member")}</SelectItem>
+                  <SelectItem value="guest">{t("role_guest")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invite-message">メッセージ（オプション）</Label>
+              <Label htmlFor="invite-message">{t("invite_message_label")}</Label>
               <Textarea
                 id="invite-message"
                 value={inviteForm.message ?? ""}
                 onChange={(e) =>
                   setInviteForm((prev) => ({ ...prev, message: e.target.value }))
                 }
-                placeholder="招待メッセージを入力..."
+                placeholder={t("invite_message_placeholder")}
                 rows={2}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowInviteDialog(false)}>
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleInviteMember}
               disabled={!inviteForm.email.trim() || isInviting}
               data-testid="team-invite-submit"
             >
-              {isInviting ? "送信中..." : "招待を送信"}
+              {isInviting ? t("sending") : t("send_invite_button")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -686,22 +696,21 @@ export default function TeamDetailPage() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>チームを削除</AlertDialogTitle>
-            <AlertDialogDescription>
-              本当に「{team.name}」を削除しますか？
-              この操作は取り消せません。
+            <AlertDialogTitle>{t("delete_dialog_title")}</AlertDialogTitle>
+            <AlertDialogDescription className="whitespace-pre-line">
+              {t("delete_dialog_description", { name: team.name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
-              キャンセル
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteTeam}
               disabled={isDeleting}
               data-testid="team-delete-confirm"
             >
-              {isDeleting ? "削除中..." : "削除"}
+              {isDeleting ? t("deleting") : t("delete_confirm_button")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -711,17 +720,17 @@ export default function TeamDetailPage() {
       <Dialog open={showAddTilesetDialog} onOpenChange={setShowAddTilesetDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>タイルセットを追加</DialogTitle>
+            <DialogTitle>{t("add_tileset_dialog_title")}</DialogTitle>
             <DialogDescription>
-              チームで共有するタイルセットを選択してください
+              {t("add_tileset_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>タイルセット</Label>
+              <Label>{t("add_tileset_label")}</Label>
               <Select value={selectedTilesetId} onValueChange={setSelectedTilesetId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="タイルセットを選択..." />
+                  <SelectValue placeholder={t("add_tileset_placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableTilesets
@@ -742,13 +751,13 @@ export default function TeamDetailPage() {
               variant="outline"
               onClick={() => setShowAddTilesetDialog(false)}
             >
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleAddTileset}
               disabled={!selectedTilesetId || isAddingTileset}
             >
-              {isAddingTileset ? "追加中..." : "追加"}
+              {isAddingTileset ? t("adding") : t("add_button")}
             </Button>
           </DialogFooter>
         </DialogContent>

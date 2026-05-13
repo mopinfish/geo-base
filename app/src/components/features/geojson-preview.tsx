@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONFeatureCollection } from "./geojson-dropzone";
@@ -11,6 +12,7 @@ interface GeoJSONPreviewProps {
 }
 
 export function GeoJSONPreview({ data, height = "400px" }: GeoJSONPreviewProps) {
+  const t = useTranslations("features.geojsonPreview");
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -178,13 +180,13 @@ export function GeoJSONPreview({ data, height = "400px" }: GeoJSONPreviewProps) 
       {!data && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
           <p className="text-muted-foreground">
-            GeoJSONファイルを読み込むとプレビューが表示されます
+            {t("not_loaded")}
           </p>
         </div>
       )}
       {data && data.features.length > 0 && (
         <div className="absolute bottom-2 left-2 bg-background/90 px-2 py-1 rounded text-xs">
-          {data.features.length}件のフィーチャー
+          {t("feature_count_badge", { count: data.features.length })}
         </div>
       )}
     </div>

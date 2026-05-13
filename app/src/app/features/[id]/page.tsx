@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations, useLocale } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,9 @@ interface FeatureDetailPageProps {
 export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
   const { id } = use(params);
   const router = useRouter();
+  const t = useTranslations("features.detail");
+  const locale = useLocale();
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
   const { api, isReady } = useApi();
   const [feature, setFeature] = useState<Feature | null>(null);
   const [tileset, setTileset] = useState<Tileset | null>(null);
@@ -98,7 +102,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "フィーチャーの取得に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_fetch"));
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +124,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("ja-JP", {
+    return new Date(dateString).toLocaleString(dateLocale, {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -131,19 +135,20 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
 
   const getGeometryDescription = (geometry: GeoJSON.Geometry): string => {
     switch (geometry.type) {
-      case "Point":
+      case "Point": {
         const [lng, lat] = geometry.coordinates as [number, number];
-        return `経度: ${lng.toFixed(6)}, 緯度: ${lat.toFixed(6)}`;
+        return t("geometry_point", { lng: lng.toFixed(6), lat: lat.toFixed(6) });
+      }
       case "LineString":
-        return `${(geometry.coordinates as [number, number][]).length}点`;
+        return t("geometry_linestring", { count: (geometry.coordinates as [number, number][]).length });
       case "Polygon":
-        return `${(geometry.coordinates[0] as [number, number][]).length - 1}点`;
+        return t("geometry_polygon", { count: (geometry.coordinates[0] as [number, number][]).length - 1 });
       case "MultiPoint":
-        return `${geometry.coordinates.length}点`;
+        return t("geometry_multipoint", { count: geometry.coordinates.length });
       case "MultiLineString":
-        return `${geometry.coordinates.length}本の線`;
+        return t("geometry_multilinestring", { count: geometry.coordinates.length });
       case "MultiPolygon":
-        return `${geometry.coordinates.length}個のポリゴン`;
+        return t("geometry_multipolygon", { count: geometry.coordinates.length });
       default:
         return geometry.type;
     }
@@ -175,7 +180,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
           <Button variant="ghost" asChild>
             <Link href="/features">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              フィーチャー一覧に戻る
+              {t("back_to_list")}
             </Link>
           </Button>
           <Card className="border-destructive">
@@ -195,12 +200,12 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
           <Button variant="ghost" asChild>
             <Link href="/features">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              フィーチャー一覧に戻る
+              {t("back_to_list")}
             </Link>
           </Button>
           <Card>
             <CardContent className="flex h-32 items-center justify-center pt-6">
-              <p className="text-muted-foreground">フィーチャーが見つかりません</p>
+              <p className="text-muted-foreground">{t("not_found")}</p>
             </CardContent>
           </Card>
         </div>
@@ -217,16 +222,16 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/features">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                戻る
+                {t("back")}
               </Link>
             </Button>
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
                 <MapPin className="h-6 w-6" />
-                フィーチャー詳細
+                {t("title")}
               </h1>
               <p className="text-sm text-muted-foreground">
-                ID: {feature.id}
+                {t("id_label")} {feature.id}
               </p>
             </div>
           </div>
@@ -234,7 +239,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
             <Button variant="outline" asChild>
               <Link href={`/features/${id}/edit`}>
                 <Pencil className="mr-2 h-4 w-4" />
-                編集
+                {t("edit")}
               </Link>
             </Button>
             <DeleteFeatureDialog
@@ -249,7 +254,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
           {/* 基本情報 */}
           <Card>
             <CardHeader>
-              <CardTitle>基本情報</CardTitle>
+              <CardTitle>{t("section_basic_info")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* ID */}
@@ -257,7 +262,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
                 <div className="space-y-1">
                   <p className="text-sm font-medium flex items-center gap-2">
                     <Hash className="h-4 w-4" />
-                    フィーチャーID
+                    {t("field_feature_id")}
                   </p>
                   <code className="text-sm text-muted-foreground break-all">
                     {feature.id}
@@ -282,7 +287,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
               <div className="space-y-1">
                 <p className="text-sm font-medium flex items-center gap-2">
                   <Layers className="h-4 w-4" />
-                  タイルセット
+                  {t("field_tileset")}
                 </p>
                 <div className="flex items-center gap-2">
                   <Link
@@ -301,7 +306,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
 
               {/* レイヤー */}
               <div className="space-y-1">
-                <p className="text-sm font-medium">レイヤー名</p>
+                <p className="text-sm font-medium">{t("field_layer")}</p>
                 <Badge variant="secondary">{feature.layer_name}</Badge>
               </div>
 
@@ -311,7 +316,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
               <div className="space-y-1">
                 <p className="text-sm font-medium flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  ジオメトリ
+                  {t("field_geometry")}
                 </p>
                 <div className="flex items-center gap-2">
                   <Badge>{feature.geometry.type}</Badge>
@@ -327,7 +332,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
               <div className="space-y-1">
                 <p className="text-sm font-medium flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  作成日時
+                  {t("field_created_at")}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {formatDate(feature.created_at)}
@@ -335,7 +340,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-sm font-medium">更新日時</p>
+                <p className="text-sm font-medium">{t("field_updated_at")}</p>
                 <p className="text-sm text-muted-foreground">
                   {formatDate(feature.updated_at)}
                 </p>
@@ -346,9 +351,9 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
           {/* 地図プレビュー */}
           <Card>
             <CardHeader>
-              <CardTitle>地図プレビュー</CardTitle>
+              <CardTitle>{t("section_map_preview")}</CardTitle>
               <CardDescription>
-                フィーチャーのジオメトリを地図上に表示
+                {t("map_description")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -370,15 +375,15 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileJson className="h-5 w-5" />
-              プロパティ（属性）
+              {t("section_properties")}
             </CardTitle>
             <CardDescription>
-              フィーチャーに付加された属性情報
+              {t("properties_description")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {Object.keys(feature.properties).length === 0 ? (
-              <p className="text-sm text-muted-foreground">プロパティはありません</p>
+              <p className="text-sm text-muted-foreground">{t("no_properties")}</p>
             ) : (
               <div className="space-y-3">
                 {Object.entries(feature.properties).map(([key, value]) => (
@@ -428,7 +433,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
             <CardTitle className="flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <FileJson className="h-5 w-5" />
-                GeoJSON
+                {t("section_geojson")}
               </span>
               <Button
                 variant="outline"
@@ -440,12 +445,12 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
                 {copiedField === "geojson" ? (
                   <>
                     <Check className="mr-2 h-4 w-4 text-green-500" />
-                    コピーしました
+                    {t("copied")}
                   </>
                 ) : (
                   <>
                     <Copy className="mr-2 h-4 w-4" />
-                    コピー
+                    {t("copy")}
                   </>
                 )}
               </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Upload, FileJson, AlertCircle, Check } from "lucide-react";
@@ -32,6 +33,7 @@ interface GeoJSONDropzoneProps {
 }
 
 export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDropzoneProps) {
+  const t = useTranslations("features.geojsonDropzone");
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadedFile, setLoadedFile] = useState<ParsedGeoJSON | null>(null);
@@ -48,7 +50,7 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
         
         for (const feature of parsed.features) {
           if (feature.type !== "Feature" || !feature.geometry) {
-            throw new Error("無効なFeatureが含まれています");
+            throw new Error(t("error_invalid_feature"));
           }
           const geoType = feature.geometry.type;
           geometryTypes[geoType] = (geometryTypes[geoType] || 0) + 1;
@@ -76,31 +78,31 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
           geometryTypes: { [parsed.geometry.type]: 1 },
         };
       } else {
-        throw new Error("GeoJSON FeatureCollection または Feature 形式である必要があります");
+        throw new Error(t("error_invalid_format"));
       }
     } catch (err) {
       if (err instanceof SyntaxError) {
-        onError("JSONの解析に失敗しました。ファイル形式を確認してください。");
+        onError(t("error_parse_failed"));
       } else if (err instanceof Error) {
         onError(err.message);
       } else {
-        onError("ファイルの解析中にエラーが発生しました");
+        onError(t("error_parse_error"));
       }
       return null;
     }
-  }, [onError]);
+  }, [onError, t]);
 
   const handleFile = useCallback(async (file: File) => {
     // ファイルタイプの検証
     if (!file.name.endsWith(".geojson") && !file.name.endsWith(".json")) {
-      onError("GeoJSONファイル（.geojson または .json）を選択してください");
+      onError(t("error_wrong_extension"));
       return;
     }
 
     // ファイルサイズの検証（10MB制限）
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      onError("ファイルサイズは10MB以下にしてください");
+      onError(t("error_file_too_large"));
       return;
     }
 
@@ -112,7 +114,7 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
       
       if (result) {
         if (result.featureCount === 0) {
-          onError("フィーチャーが含まれていません");
+          onError(t("error_no_features"));
           setLoadedFile(null);
         } else {
           setLoadedFile(result);
@@ -122,12 +124,12 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
         setLoadedFile(null);
       }
     } catch (err) {
-      onError("ファイルの読み込みに失敗しました");
+      onError(t("error_read_failed"));
       setLoadedFile(null);
     } finally {
       setIsLoading(false);
     }
-  }, [parseGeoJSON, onFileLoaded, onError]);
+  }, [parseGeoJSON, onFileLoaded, onError, t]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -202,7 +204,7 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
           {isLoading ? (
             <>
               <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              <p className="text-sm text-muted-foreground">ファイルを解析中...</p>
+              <p className="text-sm text-muted-foreground">{t("parsing")}</p>
             </>
           ) : loadedFile ? (
             <>
@@ -221,13 +223,13 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
             <>
               <Upload className="h-12 w-12 text-muted-foreground" />
               <div className="text-center">
-                <p className="font-medium">GeoJSONファイルをドラッグ＆ドロップ</p>
+                <p className="font-medium">{t("drag")}</p>
                 <p className="text-sm text-muted-foreground">
-                  または クリックしてファイルを選択
+                  {t("click")}
                 </p>
               </div>
               <p className="text-xs text-muted-foreground">
-                .geojson / .json（最大10MB）
+                {t("format_hint")}
               </p>
             </>
           )}
@@ -250,25 +252,25 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
           <CardContent className="pt-6">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <h3 className="font-medium">ファイル情報</h3>
+                <h3 className="font-medium">{t("file_info_title")}</h3>
                 <Button variant="ghost" size="sm" onClick={handleReset}>
-                  別のファイルを選択
+                  {t("change_file")}
                 </Button>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground">フィーチャー数:</span>
-                  <span className="ml-2 font-medium">{loadedFile.featureCount}件</span>
+                  <span className="text-muted-foreground">{t("feature_count_label")}</span>
+                  <span className="ml-2 font-medium">{t("feature_count_value", { count: loadedFile.featureCount })}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">ファイルサイズ:</span>
+                  <span className="text-muted-foreground">{t("file_size_label")}</span>
                   <span className="ml-2 font-medium">{formatFileSize(loadedFile.fileSize)}</span>
                 </div>
               </div>
 
               <div>
-                <span className="text-sm text-muted-foreground">ジオメトリタイプ:</span>
+                <span className="text-sm text-muted-foreground">{t("geometry_type_label")}</span>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {Object.entries(loadedFile.geometryTypes).map(([type, count]) => (
                     <span
