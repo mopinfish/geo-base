@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import type { Tileset, FeatureCreate, FeatureUpdate } from "@/lib/api";
 import { ArrowLeft, Plus, RefreshCw } from "lucide-react";
 
 export default function NewFeaturePage() {
+  const t = useTranslations("features.new");
   const router = useRouter();
   const { api, isReady } = useApi();
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
@@ -33,7 +35,7 @@ export default function NewFeaturePage() {
         setTilesets([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "タイルセットの取得に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_fetch_tilesets"));
     } finally {
       setIsLoading(false);
     }
@@ -50,7 +52,7 @@ export default function NewFeaturePage() {
       const feature = await api.createFeature(data as FeatureCreate);
       router.push(`/features/${feature.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "フィーチャーの作成に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_create"));
       setIsSubmitting(false);
     }
   };
@@ -77,16 +79,16 @@ export default function NewFeaturePage() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/features">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              戻る
+              {t("back")}
             </Link>
           </Button>
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Plus className="h-6 w-6" />
-              フィーチャー新規作成
+              {t("title")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              新しい地物データを作成します
+              {t("subtitle")}
             </p>
           </div>
         </div>
@@ -105,12 +107,12 @@ export default function NewFeaturePage() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <p className="mb-4 text-muted-foreground">
-                フィーチャーを作成するには、まずタイルセットが必要です
+                {t("no_tilesets_message")}
               </p>
               <Button asChild>
                 <Link href="/tilesets/new">
                   <Plus className="mr-2 h-4 w-4" />
-                  タイルセットを作成
+                  {t("create_tileset_link")}
                 </Link>
               </Button>
             </CardContent>

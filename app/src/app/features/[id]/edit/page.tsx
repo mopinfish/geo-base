@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ interface EditFeaturePageProps {
 export default function EditFeaturePage({ params }: EditFeaturePageProps) {
   const { id } = use(params);
   const router = useRouter();
+  const t = useTranslations("features.edit");
   const { api, isReady } = useApi();
   const [feature, setFeature] = useState<Feature | null>(null);
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
@@ -81,7 +83,7 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
         setTilesets([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "データの取得に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_fetch"));
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +100,7 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
       await api.updateFeature(id, data as FeatureUpdate);
       router.push(`/features/${id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "フィーチャーの更新に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_update"));
       setIsSubmitting(false);
     }
   };
@@ -124,12 +126,12 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
           <Button variant="ghost" asChild>
             <Link href="/features">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              フィーチャー一覧に戻る
+              {t("back_to_list")}
             </Link>
           </Button>
           <Card>
             <CardContent className="flex h-32 items-center justify-center pt-6">
-              <p className="text-muted-foreground">フィーチャーが見つかりません</p>
+              <p className="text-muted-foreground">{t("not_found")}</p>
             </CardContent>
           </Card>
         </div>
@@ -145,16 +147,16 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
           <Button variant="ghost" size="sm" asChild>
             <Link href={`/features/${id}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              戻る
+              {t("back")}
             </Link>
           </Button>
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Pencil className="h-6 w-6" />
-              フィーチャー編集
+              {t("title")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              ID: {feature.id}
+              {t("id_label")} {feature.id}
             </p>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations, useLocale } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,9 @@ import {
 } from "lucide-react";
 
 export default function FeaturesPage() {
+  const t = useTranslations("features.list");
+  const locale = useLocale();
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
   const router = useRouter();
   const { api, isReady } = useApi();
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -176,7 +180,7 @@ export default function FeaturesPage() {
       // 選択状態をクリア
       setSelectedIds(new Set());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "データの取得に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_fetch"));
       setFeatures([]);
       setTilesets([]);
     } finally {
@@ -212,7 +216,7 @@ export default function FeaturesPage() {
   const safeTilesets = Array.isArray(tilesets) ? tilesets : [];
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("ja-JP", {
+    return new Date(dateString).toLocaleDateString(dateLocale, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -224,8 +228,8 @@ export default function FeaturesPage() {
   };
 
   const getTilesetName = (tilesetId: string | undefined | null): string => {
-    if (!tilesetId) return "(未設定)";
-    const tileset = safeTilesets.find((t) => t.id === tilesetId);
+    if (!tilesetId) return t("unset");
+    const tileset = safeTilesets.find((ts) => ts.id === tilesetId);
     return tileset?.name || tilesetId.slice(0, 8) + "...";
   };
 
@@ -261,7 +265,7 @@ export default function FeaturesPage() {
       setDeletePreview(result);
       setBulkDeleteDialogOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "プレビュー取得に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_preview"));
     }
   };
 
@@ -278,17 +282,17 @@ export default function FeaturesPage() {
       });
       
       if (result.failed_count > 0) {
-        setError(`${result.failed_count}件の削除に失敗しました: ${result.errors.join(', ')}`);
+        setError(t("partial_error_delete", { count: result.failed_count }) + ": " + result.errors.join(', '));
       } else {
-        setSuccessMessage(`${result.success_count}件のフィーチャーを削除しました`);
+        setSuccessMessage(t("success_delete", { count: result.success_count }));
       }
-      
+
       // データを再取得
       await fetchData();
       setBulkDeleteDialogOpen(false);
       setDeletePreview(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_delete"));
     } finally {
       setIsDeleting(false);
     }
@@ -297,7 +301,7 @@ export default function FeaturesPage() {
   // エクスポートの実行
   const handleExport = async () => {
     if (selectedTileset === "all") {
-      setError("エクスポートにはタイルセットを選択してください");
+      setError(t("error_export_no_tileset"));
       return;
     }
 
@@ -321,12 +325,12 @@ export default function FeaturesPage() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        setSuccessMessage(`${result.features.length}件のフィーチャーをエクスポートしました`);
+        setSuccessMessage(t("success_export", { count: result.features.length }));
       } else {
         const blob = await api.exportFeaturesCsv({
           tileset_id: selectedTileset,
         });
-        
+
         // ダウンロード
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -336,13 +340,13 @@ export default function FeaturesPage() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
-        setSuccessMessage('CSVエクスポートが完了しました');
+
+        setSuccessMessage(t("success_csv_export"));
       }
-      
+
       setExportDialogOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "エクスポートに失敗しました");
+      setError(err instanceof Error ? err.message : t("error_export"));
     } finally {
       setIsExporting(false);
     }
@@ -351,7 +355,7 @@ export default function FeaturesPage() {
   // 選択フィーチャーのエクスポート
   const handleExportSelected = async () => {
     if (selectedIds.size === 0) {
-      setError("エクスポートするフィーチャーを選択してください");
+      setError(t("error_export_no_selection"));
       return;
     }
 
@@ -377,12 +381,12 @@ export default function FeaturesPage() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        setSuccessMessage(`${result.features.length}件のフィーチャーをエクスポートしました`);
+        setSuccessMessage(t("success_export", { count: result.features.length }));
       } else {
         const blob = await api.exportFeaturesCsv({
           feature_ids: featureIds,
         });
-        
+
         // ダウンロード
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -392,13 +396,13 @@ export default function FeaturesPage() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
-        setSuccessMessage('CSVエクスポートが完了しました');
+
+        setSuccessMessage(t("success_csv_export"));
       }
-      
+
       setExportSelectedDialogOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "エクスポートに失敗しました");
+      setError(err instanceof Error ? err.message : t("error_export"));
     } finally {
       setIsExportingSelected(false);
     }
@@ -422,14 +426,14 @@ export default function FeaturesPage() {
         try {
           updates.properties = JSON.parse(updateProperties);
         } catch {
-          setError("プロパティのJSON形式が不正です");
+          setError(t("error_invalid_properties_json"));
           setIsUpdating(false);
           return;
         }
       }
 
       if (Object.keys(updates).length === 0) {
-        setError("更新内容を入力してください");
+        setError(t("error_no_update_content"));
         setIsUpdating(false);
         return;
       }
@@ -441,9 +445,9 @@ export default function FeaturesPage() {
       });
 
       if (result.failed_count > 0) {
-        setError(`${result.failed_count}件の更新に失敗しました: ${result.errors.join(', ')}`);
+        setError(t("partial_error_update", { count: result.failed_count }) + ": " + result.errors.join(', '));
       } else {
-        setSuccessMessage(`${result.success_count}件のフィーチャーを更新しました`);
+        setSuccessMessage(t("success_update", { count: result.success_count }));
       }
 
       // データを再取得
@@ -452,7 +456,7 @@ export default function FeaturesPage() {
       setUpdateLayerName("");
       setUpdateProperties("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_update"));
     } finally {
       setIsUpdating(false);
     }
@@ -464,15 +468,15 @@ export default function FeaturesPage() {
         {/* ヘッダー */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">フィーチャー</h1>
+            <h1 className="text-3xl font-bold">{t("title")}</h1>
             <p className="text-muted-foreground">
-              地物データの一覧と管理
+              {t("subtitle")}
             </p>
           </div>
           <div className="flex gap-2">
             <Button onClick={fetchData} variant="outline" size="sm">
               <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              更新
+              {t("refresh")}
             </Button>
             <Button
               data-testid="feature-export-open"
@@ -480,22 +484,22 @@ export default function FeaturesPage() {
               size="sm"
               onClick={() => setExportDialogOpen(true)}
               disabled={selectedTileset === "all"}
-              title={selectedTileset === "all" ? "タイルセットを選択してください" : "フィーチャーをエクスポート"}
+              title={selectedTileset === "all" ? t("export_hint") : t("export")}
             >
               <Download className="mr-2 h-4 w-4" />
-              エクスポート
+              {t("export")}
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => router.push("/features/import")}
             >
               <FileJson className="mr-2 h-4 w-4" />
-              インポート
+              {t("import")}
             </Button>
             <Button size="sm" onClick={() => router.push("/features/new")}>
               <Plus className="mr-2 h-4 w-4" />
-              新規作成
+              {t("new")}
             </Button>
           </div>
         </div>
@@ -508,7 +512,7 @@ export default function FeaturesPage() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   data-testid="feature-search-input"
-                  placeholder="フィーチャーを検索..."
+                  placeholder={t("search_placeholder")}
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -523,7 +527,7 @@ export default function FeaturesPage() {
                   onChange={(e) => setSelectedTileset(e.target.value)}
                   className="h-9 w-[200px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 >
-                  <option value="all">すべてのタイルセット</option>
+                  <option value="all">{t("filter_tileset_placeholder")}</option>
                   {safeTilesets.map((tileset) => (
                     <option key={tileset.id} value={tileset.id}>
                       {tileset.name}
@@ -540,16 +544,16 @@ export default function FeaturesPage() {
                   onChange={(e) => setLimit(Number(e.target.value))}
                   className="h-9 w-[120px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 >
-                  <option value="10">10件</option>
-                  <option value="50">50件</option>
-                  <option value="100">100件</option>
+                  <option value="10">{t("limit_10")}</option>
+                  <option value="50">{t("limit_50")}</option>
+                  <option value="100">{t("limit_100")}</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
               </div>
             </div>
             {selectedTileset === "all" && (
               <p className="mt-2 text-xs text-muted-foreground">
-                ※ エクスポートするには、上のドロップダウンからタイルセットを選択してください
+                {t("export_hint")}
               </p>
             )}
           </CardContent>
@@ -579,7 +583,7 @@ export default function FeaturesPage() {
             <CardContent className="py-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
-                  {selectedIds.size}件を選択中
+                  {t("selected_count", { count: selectedIds.size })}
                 </span>
                 <div className="flex gap-2">
                   <Button
@@ -587,7 +591,7 @@ export default function FeaturesPage() {
                     size="sm"
                     onClick={() => setSelectedIds(new Set())}
                   >
-                    選択解除
+                    {t("clear_selection")}
                   </Button>
                   <Button
                     variant="outline"
@@ -595,7 +599,7 @@ export default function FeaturesPage() {
                     onClick={() => setExportSelectedDialogOpen(true)}
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    選択をエクスポート
+                    {t("export_selected")}
                   </Button>
                   <Button
                     data-testid="feature-bulk-update"
@@ -604,7 +608,7 @@ export default function FeaturesPage() {
                     onClick={() => setBatchUpdateDialogOpen(true)}
                   >
                     <Edit className="mr-2 h-4 w-4" />
-                    一括更新
+                    {t("bulk_update")}
                   </Button>
                   <Button
                     data-testid="feature-bulk-delete"
@@ -613,7 +617,7 @@ export default function FeaturesPage() {
                     onClick={handleBulkDeletePreview}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    一括削除
+                    {t("bulk_delete")}
                   </Button>
                 </div>
               </div>
@@ -626,14 +630,14 @@ export default function FeaturesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Map className="h-5 w-5" />
-              フィーチャー一覧
+              {t("section_title")}
               <Badge variant="secondary" className="ml-2">
-                {filteredFeatures.length} 件
+                {t("count_badge", { count: filteredFeatures.length })}
               </Badge>
             </CardTitle>
             {filteredFeatures.length > 0 && selectedIds.size === 0 && (
               <p className="text-xs text-muted-foreground">
-                ※ チェックボックスでフィーチャーを選択すると、一括更新・一括削除ができます
+                {t("select_hint")}
               </p>
             )}
           </CardHeader>
@@ -645,20 +649,20 @@ export default function FeaturesPage() {
             ) : filteredFeatures.length === 0 ? (
               <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
                 <MapPin className="mb-2 h-8 w-8" />
-                <p>フィーチャーがありません</p>
+                <p>{t("empty_no_features")}</p>
                 <div className="mt-2 flex gap-2">
-                  <button 
+                  <button
                     onClick={() => router.push("/features/new")}
                     className="text-primary hover:underline"
                   >
-                    新規作成
+                    {t("empty_new")}
                   </button>
-                  <span>または</span>
-                  <button 
+                  <span>{t("empty_or")}</span>
+                  <button
                     onClick={() => router.push("/features/import")}
                     className="text-primary hover:underline"
                   >
-                    GeoJSONインポート
+                    {t("empty_import")}
                   </button>
                 </div>
               </div>
@@ -676,13 +680,13 @@ export default function FeaturesPage() {
                         className="h-4 w-4 rounded border-gray-300"
                       />
                     </TableHead>
-                    <TableHead>ID</TableHead>
-                    <TableHead>タイルセット</TableHead>
-                    <TableHead>レイヤー</TableHead>
-                    <TableHead>ジオメトリ</TableHead>
-                    <TableHead>プロパティ</TableHead>
-                    <TableHead>更新日</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
+                    <TableHead>{t("column_id")}</TableHead>
+                    <TableHead>{t("column_tileset")}</TableHead>
+                    <TableHead>{t("column_layer")}</TableHead>
+                    <TableHead>{t("column_geometry")}</TableHead>
+                    <TableHead>{t("column_properties")}</TableHead>
+                    <TableHead>{t("column_updated")}</TableHead>
+                    <TableHead className="text-right">{t("column_actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -734,7 +738,7 @@ export default function FeaturesPage() {
                       </TableCell>
                       <TableCell>
                         <code className="text-xs">
-                          {Object.keys(feature.properties).length} 属性
+                          {t("property_count", { count: Object.keys(feature.properties).length })}
                         </code>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
@@ -773,23 +777,21 @@ export default function FeaturesPage() {
       <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>フィーチャーを一括削除しますか？</AlertDialogTitle>
+            <AlertDialogTitle>{t("bulk_delete_title")}</AlertDialogTitle>
             <AlertDialogDescription>
               {deletePreview ? (
                 <span>
-                  {deletePreview.total_count}件のフィーチャーを削除します。
-                  この操作は取り消せません。
+                  {t("bulk_delete_description_preview", { count: deletePreview.total_count })}
                 </span>
               ) : (
                 <span>
-                  選択した {selectedIds.size} 件のフィーチャーを削除します。
-                  この操作は取り消せません。
+                  {t("bulk_delete_description_no_preview", { count: selectedIds.size })}
                 </span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               data-testid="feature-bulk-delete-confirm"
               onClick={handleBulkDelete}
@@ -799,12 +801,12 @@ export default function FeaturesPage() {
               {isDeleting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  削除中...
+                  {t("deleting")}
                 </>
               ) : (
                 <>
                   <Trash2 className="mr-2 h-4 w-4" />
-                  {selectedIds.size}件を削除
+                  {t("bulk_delete_button", { count: selectedIds.size })}
                 </>
               )}
             </AlertDialogAction>
@@ -816,22 +818,22 @@ export default function FeaturesPage() {
       <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>フィーチャーをエクスポート</DialogTitle>
+            <DialogTitle>{t("export_dialog_title")}</DialogTitle>
             <DialogDescription>
-              選択したタイルセットのフィーチャーをエクスポートします。
+              {t("export_dialog_description")}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>タイルセット</Label>
+              <Label>{t("export_dialog_tileset_label")}</Label>
               <p className="text-sm text-muted-foreground">
                 {getTilesetName(selectedTileset)}
               </p>
             </div>
-            
+
             <div className="space-y-2">
-              <Label>フォーマット</Label>
+              <Label>{t("export_dialog_format_label")}</Label>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2">
                   <input
@@ -859,7 +861,7 @@ export default function FeaturesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               data-testid="feature-export-submit"
@@ -869,12 +871,12 @@ export default function FeaturesPage() {
               {isExporting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  エクスポート中...
+                  {t("exporting")}
                 </>
               ) : (
                 <>
                   <Download className="mr-2 h-4 w-4" />
-                  エクスポート
+                  {t("export_button")}
                 </>
               )}
             </Button>
@@ -886,25 +888,25 @@ export default function FeaturesPage() {
       <Dialog open={batchUpdateDialogOpen} onOpenChange={setBatchUpdateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>フィーチャーを一括更新</DialogTitle>
+            <DialogTitle>{t("batch_update_title")}</DialogTitle>
             <DialogDescription>
-              選択した {selectedIds.size} 件のフィーチャーを更新します。
+              {t("batch_update_description", { count: selectedIds.size })}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="layer-name">レイヤー名（任意）</Label>
+              <Label htmlFor="layer-name">{t("batch_update_layer_label")}</Label>
               <Input
                 id="layer-name"
-                placeholder="新しいレイヤー名"
+                placeholder={t("batch_update_layer_placeholder")}
                 value={updateLayerName}
                 onChange={(e) => setUpdateLayerName(e.target.value)}
               />
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="properties">プロパティ（JSON形式、任意）</Label>
+              <Label htmlFor="properties">{t("batch_update_properties_label")}</Label>
               <textarea
                 data-testid="feature-bulk-update-properties"
                 id="properties"
@@ -923,14 +925,14 @@ export default function FeaturesPage() {
                 onChange={(e) => setMergeProperties(e.target.checked)}
               />
               <Label htmlFor="merge-properties">
-                既存のプロパティとマージする（オフの場合は置換）
+                {t("batch_update_merge_checkbox")}
               </Label>
             </div>
           </div>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setBatchUpdateDialogOpen(false)}>
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               data-testid="feature-bulk-update-submit"
@@ -940,12 +942,12 @@ export default function FeaturesPage() {
               {isUpdating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  更新中...
+                  {t("updating")}
                 </>
               ) : (
                 <>
                   <Edit className="mr-2 h-4 w-4" />
-                  {selectedIds.size}件を更新
+                  {t("batch_update_button", { count: selectedIds.size })}
                 </>
               )}
             </Button>
@@ -957,15 +959,15 @@ export default function FeaturesPage() {
       <Dialog open={exportSelectedDialogOpen} onOpenChange={setExportSelectedDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>選択したフィーチャーをエクスポート</DialogTitle>
+            <DialogTitle>{t("export_selected_title")}</DialogTitle>
             <DialogDescription>
-              選択した {selectedIds.size} 件のフィーチャーをエクスポートします。
+              {t("export_selected_description", { count: selectedIds.size })}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>フォーマット</Label>
+              <Label>{t("export_selected_format_label")}</Label>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -993,18 +995,18 @@ export default function FeaturesPage() {
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportSelectedDialogOpen(false)}>
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button onClick={handleExportSelected} disabled={isExportingSelected}>
               {isExportingSelected ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  エクスポート中...
+                  {t("exporting")}
                 </>
               ) : (
                 <>
                   <Download className="mr-2 h-4 w-4" />
-                  {selectedIds.size}件をエクスポート
+                  {t("export_selected_button", { count: selectedIds.size })}
                 </>
               )}
             </Button>
