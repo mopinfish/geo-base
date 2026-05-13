@@ -304,7 +304,7 @@ export default function TeamsPage() {
           <DialogHeader>
             <DialogTitle>{t("delete_dialog_title")}</DialogTitle>
             <DialogDescription className="whitespace-pre-line">
-              {t("delete_dialog_description", { name: teamToDelete?.name ?? "" })}
+              {teamToDelete && t("delete_dialog_description", { name: teamToDelete.name })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
