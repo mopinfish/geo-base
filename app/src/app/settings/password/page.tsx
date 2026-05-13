@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth/client";
 import { AdminLayout } from "@/components/layout";
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { KeyRound, Loader2, AlertCircle } from "lucide-react";
 
 export default function PasswordSettingsPage() {
+  const t = useTranslations("settings");
   const router = useRouter();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -35,7 +37,7 @@ export default function PasswordSettingsPage() {
         router.push("/login?password_changed=1");
         return;
       }
-      let detail = "更新に失敗しました";
+      let detail = t("password.error_default");
       try {
         const data = await res.json();
         if (data?.detail) detail = String(data.detail);
@@ -52,8 +54,8 @@ export default function PasswordSettingsPage() {
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">設定</h1>
-          <p className="text-muted-foreground">アカウントとアプリケーションの設定</p>
+          <h1 className="text-3xl font-bold">{t("header_title")}</h1>
+          <p className="text-muted-foreground">{t("header_subtitle")}</p>
         </div>
 
         <SettingsNav />
@@ -62,14 +64,14 @@ export default function PasswordSettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <KeyRound className="h-5 w-5" />
-              パスワード変更
+              {t("password.card_title")}
             </CardTitle>
-            <CardDescription>現在のパスワードと新しいパスワードを入力してください</CardDescription>
+            <CardDescription>{t("password.card_description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="current">現在のパスワード</Label>
+                <Label htmlFor="current">{t("password.current_label")}</Label>
                 <Input
                   id="current"
                   type="password"
@@ -81,7 +83,7 @@ export default function PasswordSettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="next">新しいパスワード（8 文字以上）</Label>
+                <Label htmlFor="next">{t("password.next_label")}</Label>
                 <Input
                   id="next"
                   type="password"
@@ -108,10 +110,10 @@ export default function PasswordSettingsPage() {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    変更中...
+                    {t("password.changing")}
                   </>
                 ) : (
-                  "変更"
+                  t("password.change_button")
                 )}
               </Button>
             </form>
