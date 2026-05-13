@@ -124,6 +124,8 @@
     "tileset_id_label": "タイルセットID:",
     "section_url": "データソースURL",
     "url_internal_note": "内部 URL（{type}）のため直接ブラウザで開けません。タイル配信は API 経由で行われます。",
+    "url_type_s3": "S3 互換 storage",
+    "url_type_non_http": "非 HTTP",
     "section_pmtiles": "PMTiles情報",
     "field_tile_type": "タイルタイプ",
     "field_compression": "圧縮形式",

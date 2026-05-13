@@ -124,6 +124,8 @@
     "tileset_id_label": "Tileset ID:",
     "section_url": "Datasource URL",
     "url_internal_note": "Cannot be opened directly in a browser because it is an internal URL ({type}). Tile delivery is done through the API.",
+    "url_type_s3": "S3-compatible storage",
+    "url_type_non_http": "non-HTTP",
     "section_pmtiles": "PMTiles information",
     "field_tile_type": "Tile type",
     "field_compression": "Compression",

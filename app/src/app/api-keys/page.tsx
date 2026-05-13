@@ -58,25 +58,22 @@ export default function ApiKeysPage() {
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : locale;
 
-  const getScopeLabel = (scope: string) => {
-    const map: Record<string, string> = {
-      read: t("scope_read_label"),
-      write: t("scope_write_label"),
-      delete: t("scope_delete_label"),
-      admin: t("scope_admin_label"),
-    };
-    return map[scope] || scope;
+  const scopeLabels: Record<string, string> = {
+    read: t("scope_read_label"),
+    write: t("scope_write_label"),
+    delete: t("scope_delete_label"),
+    admin: t("scope_admin_label"),
   };
 
-  const getScopeDesc = (scope: ApiKeyScope) => {
-    const map: Record<ApiKeyScope, string> = {
-      read: t("scope_read_desc"),
-      write: t("scope_write_desc"),
-      delete: t("scope_delete_desc"),
-      admin: t("scope_admin_desc"),
-    };
-    return map[scope];
+  const scopeDescs: Record<ApiKeyScope, string> = {
+    read: t("scope_read_desc"),
+    write: t("scope_write_desc"),
+    delete: t("scope_delete_desc"),
+    admin: t("scope_admin_desc"),
   };
+
+  const getScopeLabel = (scope: string) => scopeLabels[scope] ?? scope;
+  const getScopeDesc = (scope: ApiKeyScope) => scopeDescs[scope];
 
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);

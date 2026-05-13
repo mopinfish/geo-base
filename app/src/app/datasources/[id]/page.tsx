@@ -370,7 +370,7 @@ export default function DatasourceDetailPage() {
               </div>
               {!isOpenableUrl(datasource.url) && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {t("url_internal_note", { type: datasource.url.startsWith("s3://") ? "S3 互換 storage" : "non-HTTP" })}
+                  {t("url_internal_note", { type: datasource.url.startsWith("s3://") ? t("url_type_s3") : t("url_type_non_http") })}
                 </p>
               )}
             </CardContent>
