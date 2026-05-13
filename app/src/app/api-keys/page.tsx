@@ -12,6 +12,7 @@ import {
   XCircle,
   BarChart3,
 } from "lucide-react";
+import { useTranslations, useLocale } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,22 +52,31 @@ import {
   Team,
 } from "@/lib/api";
 
-const scopeLabels: Record<ApiKeyScope, string> = {
-  read: "読み取り",
-  write: "書き込み",
-  delete: "削除",
-  admin: "管理者",
-};
-
-const scopeDescriptions: Record<ApiKeyScope, string> = {
-  read: "データの読み取りのみ",
-  write: "データの作成・更新",
-  delete: "データの削除",
-  admin: "すべての操作",
-};
-
 export default function ApiKeysPage() {
   const { api, isReady } = useApi();
+  const t = useTranslations("api-keys");
+  const locale = useLocale();
+  const dateLocale = locale === "ja" ? "ja-JP" : locale;
+
+  const getScopeLabel = (scope: string) => {
+    const map: Record<string, string> = {
+      read: t("scope_read_label"),
+      write: t("scope_write_label"),
+      delete: t("scope_delete_label"),
+      admin: t("scope_admin_label"),
+    };
+    return map[scope] || scope;
+  };
+
+  const getScopeDesc = (scope: ApiKeyScope) => {
+    const map: Record<ApiKeyScope, string> = {
+      read: t("scope_read_desc"),
+      write: t("scope_write_desc"),
+      delete: t("scope_delete_desc"),
+      admin: t("scope_admin_desc"),
+    };
+    return map[scope];
+  };
 
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -115,7 +125,7 @@ export default function ApiKeysPage() {
       setTeams(teamsResponse.teams);
     } catch (err) {
       console.error("Failed to load data:", err);
-      setError(err instanceof Error ? err.message : "データの読み込みに失敗しました");
+      setError(err instanceof Error ? err.message : t("error_load"));
     } finally {
       setIsLoading(false);
     }
@@ -134,7 +144,7 @@ export default function ApiKeysPage() {
       setCreateForm({ name: "", scopes: ["read"] });
     } catch (err) {
       console.error("Failed to create API key:", err);
-      setError(err instanceof Error ? err.message : "APIキーの作成に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_create"));
     } finally {
       setIsCreating(false);
     }
@@ -154,7 +164,7 @@ export default function ApiKeysPage() {
       setRevokeReason("");
     } catch (err) {
       console.error("Failed to revoke API key:", err);
-      setError(err instanceof Error ? err.message : "APIキーの無効化に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_revoke"));
     } finally {
       setIsRevoking(false);
     }
@@ -171,7 +181,7 @@ export default function ApiKeysPage() {
       setKeyToDelete(null);
     } catch (err) {
       console.error("Failed to delete API key:", err);
-      setError(err instanceof Error ? err.message : "APIキーの削除に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_delete"));
     } finally {
       setIsDeleting(false);
     }
@@ -205,8 +215,8 @@ export default function ApiKeysPage() {
   };
 
   const formatDate = (dateString?: string) => {
-    if (!dateString) return "なし";
-    return new Date(dateString).toLocaleDateString("ja-JP", {
+    if (!dateString) return t("field_none");
+    return new Date(dateString).toLocaleDateString(dateLocale, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -219,7 +229,7 @@ export default function ApiKeysPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">読み込み中...</div>
+          <div className="text-muted-foreground">{t("loading")}</div>
         </div>
       </AdminLayout>
     );
@@ -231,9 +241,9 @@ export default function ApiKeysPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">APIキー管理</h1>
+            <h1 className="text-2xl font-bold">{t("title")}</h1>
             <p className="text-muted-foreground">
-              外部アプリケーションからのアクセス用APIキーを管理します
+              {t("subtitle")}
             </p>
           </div>
           <Button
@@ -241,7 +251,7 @@ export default function ApiKeysPage() {
             data-testid="api-key-create-button"
           >
             <Plus className="w-4 h-4 mr-2" />
-            新規APIキー
+            {t("new_key_button")}
           </Button>
         </div>
 
@@ -255,19 +265,19 @@ export default function ApiKeysPage() {
         {/* Keys List */}
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-muted-foreground">読み込み中...</div>
+            <div className="text-muted-foreground">{t("loading")}</div>
           </div>
         ) : keys.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Key className="w-12 h-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">APIキーがありません</h3>
+              <h3 className="text-lg font-medium mb-2">{t("empty_title")}</h3>
               <p className="text-muted-foreground text-center mb-4">
-                APIキーを作成して外部アプリケーションからアクセスしましょう
+                {t("empty_description")}
               </p>
               <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                最初のAPIキーを作成
+                {t("empty_create_button")}
               </Button>
             </CardContent>
           </Card>
@@ -288,17 +298,17 @@ export default function ApiKeysPage() {
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-lg">{key.name}</CardTitle>
                         {key.revoked_at ? (
-                          <Badge variant="destructive">無効化済み</Badge>
+                          <Badge variant="destructive">{t("status_revoked")}</Badge>
                         ) : key.is_expired ? (
                           <Badge variant="outline" className="text-orange-600">
-                            期限切れ
+                            {t("status_expired")}
                           </Badge>
                         ) : key.is_active ? (
                           <Badge variant="secondary" className="text-green-800">
-                            有効
+                            {t("status_active")}
                           </Badge>
                         ) : (
-                          <Badge variant="outline">無効</Badge>
+                          <Badge variant="outline">{t("status_inactive")}</Badge>
                         )}
                       </div>
                       <CardDescription
@@ -314,7 +324,7 @@ export default function ApiKeysPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          aria-label="アクションメニューを開く"
+                          aria-label={t("menu_aria_label")}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
@@ -322,7 +332,7 @@ export default function ApiKeysPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem disabled>
                           <BarChart3 className="w-4 h-4 mr-2" />
-                          使用状況を見る
+                          {t("menu_usage")}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {!key.revoked_at && (
@@ -334,7 +344,7 @@ export default function ApiKeysPage() {
                             data-testid="api-key-revoke-menuitem"
                           >
                             <XCircle className="w-4 h-4 mr-2" />
-                            無効化
+                            {t("menu_revoke")}
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
@@ -346,7 +356,7 @@ export default function ApiKeysPage() {
                           data-testid="api-key-delete-menuitem"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
-                          削除
+                          {t("menu_delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -355,34 +365,37 @@ export default function ApiKeysPage() {
                 <CardContent>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm">
                     <div>
-                      <div className="text-muted-foreground mb-1">スコープ</div>
+                      <div className="text-muted-foreground mb-1">{t("field_scope")}</div>
                       <div className="flex flex-wrap gap-1">
                         {key.scopes.map((scope) => (
                           <Badge key={scope} variant="outline" className="text-xs">
-                            {scopeLabels[scope as ApiKeyScope] || scope}
+                            {getScopeLabel(scope)}
                           </Badge>
                         ))}
                       </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground mb-1">レート制限</div>
+                      <div className="text-muted-foreground mb-1">{t("field_rate_limit")}</div>
                       <div>
-                        {key.rate_limit_per_minute}/分 • {key.rate_limit_per_day}/日
+                        {t("field_rate_limit_value", {
+                          per_minute: key.rate_limit_per_minute,
+                          per_day: key.rate_limit_per_day,
+                        })}
                       </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground mb-1">最終使用</div>
+                      <div className="text-muted-foreground mb-1">{t("field_last_used")}</div>
                       <div>{formatDate(key.last_used_at)}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground mb-1">作成日</div>
+                      <div className="text-muted-foreground mb-1">{t("field_created")}</div>
                       <div>{formatDate(key.created_at)}</div>
                     </div>
                   </div>
                   {key.team_name && (
                     <div className="mt-3 pt-3 border-t">
                       <span className="text-sm text-muted-foreground">
-                        チーム: {key.team_name}
+                        {t("field_team")} {key.team_name}
                       </span>
                     </div>
                   )}
@@ -397,38 +410,38 @@ export default function ApiKeysPage() {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>新規APIキー作成</DialogTitle>
+            <DialogTitle>{t("create_dialog_title")}</DialogTitle>
             <DialogDescription>
-              外部アプリケーションからのアクセス用APIキーを作成します
+              {t("create_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="key-name">キー名 *</Label>
+              <Label htmlFor="key-name">{t("form_name_label")}</Label>
               <Input
                 id="key-name"
                 value={createForm.name}
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, name: e.target.value }))
                 }
-                placeholder="本番環境用APIキー"
+                placeholder={t("form_name_placeholder")}
                 data-testid="api-key-form-name"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="key-description">説明</Label>
+              <Label htmlFor="key-description">{t("form_description_label")}</Label>
               <Textarea
                 id="key-description"
                 value={createForm.description ?? ""}
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, description: e.target.value }))
                 }
-                placeholder="このキーの用途を入力..."
+                placeholder={t("form_description_placeholder")}
                 rows={2}
               />
             </div>
             <div className="space-y-2">
-              <Label>権限スコープ</Label>
+              <Label>{t("form_scopes_label")}</Label>
               <div className="space-y-2">
                 {(["read", "write", "delete", "admin"] as ApiKeyScope[]).map(
                   (scope) => (
@@ -443,9 +456,9 @@ export default function ApiKeysPage() {
                         htmlFor={`scope-${scope}`}
                         className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                       >
-                        {scopeLabels[scope]}
+                        {getScopeLabel(scope)}
                         <span className="text-muted-foreground ml-2">
-                          - {scopeDescriptions[scope]}
+                          - {getScopeDesc(scope)}
                         </span>
                       </label>
                     </div>
@@ -455,7 +468,7 @@ export default function ApiKeysPage() {
             </div>
             {teams.length > 0 && (
               <div className="space-y-2">
-                <Label>チーム（オプション）</Label>
+                <Label>{t("form_team_label")}</Label>
                 <Select
                   // Radix UI の SelectItem は空文字 value を許容しないため、
                   // 「個人キー」を表す sentinel `__personal__` を使い、
@@ -469,10 +482,10 @@ export default function ApiKeysPage() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="チームを選択（個人キーの場合は空）" />
+                    <SelectValue placeholder={t("form_team_placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__personal__">個人キー</SelectItem>
+                    <SelectItem value="__personal__">{t("form_team_personal")}</SelectItem>
                     {teams.map((team) => (
                       <SelectItem key={team.id} value={team.id}>
                         {team.name}
@@ -483,7 +496,7 @@ export default function ApiKeysPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label>有効期限（オプション）</Label>
+              <Label>{t("form_expires_label")}</Label>
               <Select
                 // 同上: 「無期限」を表す sentinel を使う。
                 value={createForm.expires_in_days?.toString() ?? "__never__"}
@@ -496,14 +509,14 @@ export default function ApiKeysPage() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="無期限" />
+                  <SelectValue placeholder={t("form_expires_never")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__never__">無期限</SelectItem>
-                  <SelectItem value="7">7日</SelectItem>
-                  <SelectItem value="30">30日</SelectItem>
-                  <SelectItem value="90">90日</SelectItem>
-                  <SelectItem value="365">1年</SelectItem>
+                  <SelectItem value="__never__">{t("form_expires_never")}</SelectItem>
+                  <SelectItem value="7">{t("form_expires_7d")}</SelectItem>
+                  <SelectItem value="30">{t("form_expires_30d")}</SelectItem>
+                  <SelectItem value="90">{t("form_expires_90d")}</SelectItem>
+                  <SelectItem value="365">{t("form_expires_1y")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -514,14 +527,14 @@ export default function ApiKeysPage() {
               onClick={() => setShowCreateDialog(false)}
               disabled={isCreating}
             >
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleCreateKey}
               disabled={!createForm.name.trim() || isCreating}
               data-testid="api-key-form-submit"
             >
-              {isCreating ? "作成中..." : "作成"}
+              {isCreating ? t("creating") : t("create_button")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -533,10 +546,10 @@ export default function ApiKeysPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-500" />
-              APIキーが作成されました
+              {t("created_dialog_title")}
             </DialogTitle>
             <DialogDescription>
-              このキーは一度しか表示されません。必ずコピーして安全な場所に保存してください。
+              {t("created_dialog_description")}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -556,12 +569,12 @@ export default function ApiKeysPage() {
               {keyCopied ? (
                 <>
                   <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
-                  コピーしました
+                  {t("copied_button")}
                 </>
               ) : (
                 <>
                   <Copy className="w-4 h-4 mr-2" />
-                  クリップボードにコピー
+                  {t("copy_button")}
                 </>
               )}
             </Button>
@@ -569,12 +582,11 @@ export default function ApiKeysPage() {
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3 flex items-start gap-2">
             <AlertTriangle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
             <div className="text-sm text-yellow-800 dark:text-yellow-200">
-              <strong>重要:</strong> このAPIキーを他の人と共有しないでください。
-              キーが漏洩した場合は、すぐに無効化してください。
+              <strong>{t("security_warning_title")}</strong> {t("security_warning_body")}
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setShowKeyDialog(false)}>閉じる</Button>
+            <Button onClick={() => setShowKeyDialog(false)}>{t("close_button")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -583,19 +595,18 @@ export default function ApiKeysPage() {
       <Dialog open={showRevokeDialog} onOpenChange={setShowRevokeDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>APIキーを無効化</DialogTitle>
+            <DialogTitle>{t("revoke_dialog_title")}</DialogTitle>
             <DialogDescription>
-              「{keyToRevoke?.name}」を無効化しますか？
-              無効化されたキーは使用できなくなります。
+              {t("revoke_dialog_description", { name: keyToRevoke?.name ?? "" })}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Label htmlFor="revoke-reason">無効化の理由（オプション）</Label>
+            <Label htmlFor="revoke-reason">{t("revoke_reason_label")}</Label>
             <Textarea
               id="revoke-reason"
               value={revokeReason}
               onChange={(e) => setRevokeReason(e.target.value)}
-              placeholder="セキュリティ上の理由など..."
+              placeholder={t("revoke_reason_placeholder")}
               rows={2}
               className="mt-2"
               data-testid="api-key-revoke-reason"
@@ -607,7 +618,7 @@ export default function ApiKeysPage() {
               onClick={() => setShowRevokeDialog(false)}
               disabled={isRevoking}
             >
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -615,7 +626,7 @@ export default function ApiKeysPage() {
               disabled={isRevoking}
               data-testid="api-key-revoke-confirm"
             >
-              {isRevoking ? "無効化中..." : "無効化"}
+              {isRevoking ? t("revoking") : t("revoke_button")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -625,10 +636,9 @@ export default function ApiKeysPage() {
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>APIキーを削除</DialogTitle>
+            <DialogTitle>{t("delete_dialog_title")}</DialogTitle>
             <DialogDescription>
-              「{keyToDelete?.name}」を完全に削除しますか？
-              この操作は取り消せません。
+              {t("delete_dialog_description", { name: keyToDelete?.name ?? "" })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -637,7 +647,7 @@ export default function ApiKeysPage() {
               onClick={() => setShowDeleteDialog(false)}
               disabled={isDeleting}
             >
-              キャンセル
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -645,7 +655,7 @@ export default function ApiKeysPage() {
               disabled={isDeleting}
               data-testid="api-key-delete-confirm"
             >
-              {isDeleting ? "削除中..." : "削除"}
+              {isDeleting ? t("deleting") : t("delete_button")}
             </Button>
           </DialogFooter>
         </DialogContent>
