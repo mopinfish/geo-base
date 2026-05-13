@@ -44,5 +44,15 @@ export const FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE: Locale = "ja";
  * - `teams`: チーム管理画面 (一覧 / 詳細 / メンバー / 招待 / タイルセット共有 + dialog)
  *   の UI 文言 (Phase 3g / Issue #107)。
  */
-export const NAMESPACES = ["common", "api-errors", "auth", "tilesets", "features", "datasources", "api-keys", "settings", "teams"] as const;
+export const NAMESPACES = [
+  "common",
+  "api-errors",
+  "auth",
+  "tilesets",
+  "features",
+  "datasources",
+  "api-keys",
+  "settings",
+  "teams",
+] as const;
 export type Namespace = (typeof NAMESPACES)[number];
