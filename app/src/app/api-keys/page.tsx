@@ -58,7 +58,7 @@ export default function ApiKeysPage() {
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : locale;
 
-  const scopeLabels: Record<string, string> = {
+  const scopeLabels: Record<ApiKeyScope, string> = {
     read: t("scope_read_label"),
     write: t("scope_write_label"),
     delete: t("scope_delete_label"),
@@ -72,7 +72,7 @@ export default function ApiKeysPage() {
     admin: t("scope_admin_desc"),
   };
 
-  const getScopeLabel = (scope: string) => scopeLabels[scope] ?? scope;
+  const getScopeLabel = (scope: ApiKeyScope) => scopeLabels[scope];
   const getScopeDesc = (scope: ApiKeyScope) => scopeDescs[scope];
 
   const [keys, setKeys] = useState<ApiKey[]>([]);
