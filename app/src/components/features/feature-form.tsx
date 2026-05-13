@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,6 +74,8 @@ export function FeatureForm({
   const t = useTranslations("features.form");
   const isEditMode = !!featureId;
 
+  const resolver = useMemo(() => zodResolver(createFeatureFormSchema(t)), [t]);
+
   // フォームの設定
   const {
     register,
@@ -82,7 +84,7 @@ export function FeatureForm({
     watch,
     formState: { errors },
   } = useForm<FeatureFormValues>({
-    resolver: zodResolver(createFeatureFormSchema(t)),
+    resolver,
     defaultValues: {
       tileset_id: initialData?.tileset_id || "",
       layer_name: initialData?.layer_name || "default",

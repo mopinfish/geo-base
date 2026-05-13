@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { User, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const items = [
-  { href: "/settings/profile", label: "プロフィール", icon: User },
-  { href: "/settings/password", label: "パスワード", icon: KeyRound },
-];
-
 export function SettingsNav() {
+  const t = useTranslations("settings.nav");
   const pathname = usePathname();
+
+  const items = [
+    { href: "/settings/profile", label: t("profile"), icon: User },
+    { href: "/settings/password", label: t("password"), icon: KeyRound },
+  ];
 
   return (
     <nav className="flex gap-1 border-b">

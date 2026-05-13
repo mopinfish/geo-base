@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/lib/auth/context";
 import { apiFetch } from "@/lib/api";
 import { AdminLayout } from "@/components/layout";
@@ -11,17 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { User as UserIcon, Loader2, Check, AlertCircle } from "lucide-react";
 
-function humanizeDetail(detail: string): string {
-  // UUID 単体（DB 由来の UserNotFound）など、ユーザに不親切な値を整形
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (uuidPattern.test(detail)) {
-    return "対象ユーザーが見つかりません。再ログインしてください。";
-  }
-  return detail;
-}
-
 export default function ProfileSettingsPage() {
+  const t = useTranslations("settings");
   const { user } = useAuth();
+
+  const humanizeDetail = (detail: string): string => {
+    // UUID 単体（DB 由来の UserNotFound）など、ユーザに不親切な値を整形
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(detail)) {
+      return t("profile.error_user_not_found");
+    }
+    return detail;
+  };
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [message, setMessage] = useState("");
@@ -50,9 +52,9 @@ export default function ProfileSettingsPage() {
         body: JSON.stringify({ name, email }),
       });
       if (res.ok) {
-        setMessage("更新しました");
+        setMessage(t("profile.success_message"));
       } else {
-        let detail = "更新に失敗しました";
+        let detail = t("profile.error_default");
         try {
           const data = await res.json();
           if (data?.detail) detail = humanizeDetail(String(data.detail));
@@ -80,8 +82,8 @@ export default function ProfileSettingsPage() {
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">設定</h1>
-          <p className="text-muted-foreground">アカウントとアプリケーションの設定</p>
+          <h1 className="text-3xl font-bold">{t("header_title")}</h1>
+          <p className="text-muted-foreground">{t("header_subtitle")}</p>
         </div>
 
         <SettingsNav />
@@ -90,25 +92,25 @@ export default function ProfileSettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UserIcon className="h-5 w-5" />
-              プロフィール
+              {t("profile.card_title")}
             </CardTitle>
-            <CardDescription>名前とメールアドレスを更新できます</CardDescription>
+            <CardDescription>{t("profile.card_description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">名前</Label>
+                <Label htmlFor="name">{t("profile.name_label")}</Label>
                 <Input
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="お名前"
+                  placeholder={t("profile.name_placeholder")}
                   disabled={loading}
                   data-testid="profile-name"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">メールアドレス</Label>
+                <Label htmlFor="email">{t("profile.email_label")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -140,10 +142,10 @@ export default function ProfileSettingsPage() {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    更新中...
+                    {t("profile.updating")}
                   </>
                 ) : (
-                  "更新"
+                  t("profile.update_button")
                 )}
               </Button>
             </form>
