@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +29,7 @@ export function ExportFeaturesButton({
   variant = "outline",
   size = "sm",
 }: ExportFeaturesButtonProps) {
+  const t = useTranslations("features.exportButton");
   const { api } = useApi();
   const [open, setOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -74,7 +76,7 @@ export function ExportFeaturesButton({
 
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "エクスポートに失敗しました");
+      setError(err instanceof Error ? err.message : t("error"));
     } finally {
       setIsExporting(false);
     }
@@ -85,20 +87,20 @@ export function ExportFeaturesButton({
       <DialogTrigger asChild>
         <Button variant={variant} size={size}>
           <Download className="mr-2 h-4 w-4" />
-          エクスポート
+          {t("trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>フィーチャーをエクスポート</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
-            タイルセット「{tilesetName}」のフィーチャーをエクスポートします。
+            {t("description", { name: tilesetName })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>フォーマット</Label>
+            <Label>{t("format_label")}</Label>
             <div className="flex gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -132,18 +134,18 @@ export function ExportFeaturesButton({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            キャンセル
+            {t("cancel")}
           </Button>
           <Button onClick={handleExport} disabled={isExporting}>
             {isExporting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                エクスポート中...
+                {t("exporting")}
               </>
             ) : (
               <>
                 <Download className="mr-2 h-4 w-4" />
-                エクスポート
+                {t("export")}
               </>
             )}
           </Button>

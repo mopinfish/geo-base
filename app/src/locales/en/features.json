@@ -210,7 +210,8 @@
     "format_label": "Format",
     "cancel": "Cancel",
     "exporting": "Exporting...",
-    "export": "Export"
+    "export": "Export",
+    "error": "Failed to export"
   },
   "geojsonDropzone": {
     "parsing": "Parsing file...",

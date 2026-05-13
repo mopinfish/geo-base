@@ -210,7 +210,8 @@
     "format_label": "フォーマット",
     "cancel": "キャンセル",
     "exporting": "エクスポート中...",
-    "export": "エクスポート"
+    "export": "エクスポート",
+    "error": "エクスポートに失敗しました"
   },
   "geojsonDropzone": {
     "parsing": "ファイルを解析中...",

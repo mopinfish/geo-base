@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,7 @@ export function DeleteFeatureDialog({
   triggerVariant = "destructive",
   triggerSize = "sm",
 }: DeleteFeatureDialogProps) {
+  const t = useTranslations("features.deleteDialog");
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -60,27 +62,25 @@ export function DeleteFeatureDialog({
       <AlertDialogTrigger asChild>
         <Button variant={triggerVariant} size={triggerSize}>
           <Trash2 className="h-4 w-4" />
-          {triggerSize !== "icon" && <span className="ml-2">削除</span>}
+          {triggerSize !== "icon" && <span className="ml-2">{t("trigger")}</span>}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>フィーチャーを削除しますか？</AlertDialogTitle>
+          <AlertDialogTitle>{t("title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            フィーチャー「{name}」を削除します。
-            <br />
-            この操作は取り消すことができません。
+            {t("description", { name })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+          <AlertDialogCancel disabled={isDeleting}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
             disabled={isDeleting}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            削除
+            {t("delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
