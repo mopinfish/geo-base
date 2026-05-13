@@ -45,7 +45,10 @@
     "error_fetch": "データソースの取得に失敗しました",
     "error_delete": "削除に失敗しました",
     "error_bulk_delete": "{count}件の削除に失敗しました",
-    "test_error": "テストに失敗しました"
+    "test_error": "テストに失敗しました",
+    "storage_provider_s3": "S3 互換 (Fly Tigris / AWS S3 / R2)",
+    "storage_provider_http": "HTTP",
+    "storage_provider_supabase": "Supabase Storage (legacy)"
   },
   "new": {
     "back": "戻る",
@@ -153,6 +156,9 @@
     "error_fetch": "データソースの取得に失敗しました",
     "not_found": "データソースが見つかりませんでした",
     "test_error": "テストに失敗しました",
-    "error_delete": "削除に失敗しました"
+    "error_delete": "削除に失敗しました",
+    "storage_provider_s3": "S3 互換 (Fly Tigris / AWS S3 / R2)",
+    "storage_provider_http": "HTTP",
+    "storage_provider_supabase": "Supabase Storage (legacy)"
   }
 }

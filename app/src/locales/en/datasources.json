@@ -45,7 +45,10 @@
     "error_fetch": "Failed to fetch datasources",
     "error_delete": "Failed to delete",
     "error_bulk_delete": "{count} deletion(s) failed",
-    "test_error": "Test failed"
+    "test_error": "Test failed",
+    "storage_provider_s3": "S3-compatible (Fly Tigris / AWS S3 / R2)",
+    "storage_provider_http": "HTTP",
+    "storage_provider_supabase": "Supabase Storage (legacy)"
   },
   "new": {
     "back": "Back",
@@ -153,6 +156,9 @@
     "error_fetch": "Failed to fetch datasource",
     "not_found": "Datasource not found",
     "test_error": "Test failed",
-    "error_delete": "Failed to delete"
+    "error_delete": "Failed to delete",
+    "storage_provider_s3": "S3-compatible (Fly Tigris / AWS S3 / R2)",
+    "storage_provider_http": "HTTP",
+    "storage_provider_supabase": "Supabase Storage (legacy)"
   }
 }
