@@ -77,6 +77,10 @@ const roleIcons: Record<TeamRole, React.ReactNode> = {
 
 export default function TeamDetailPage() {
   const t = useTranslations("teams.detail");
+  const params = useParams();
+  const router = useRouter();
+  const teamId = params.id as string;
+  const { api, isReady } = useApi();
 
   const roleLabels: Record<TeamRole, string> = {
     owner: t("role_owner"),
@@ -92,11 +96,6 @@ export default function TeamDetailPage() {
     admin: t("permission_level_admin"),
   };
   const getPermissionLabel = (level: string) => permissionLabels[level] ?? level;
-
-  const params = useParams();
-  const router = useRouter();
-  const teamId = params.id as string;
-  const { api, isReady } = useApi();
 
   const [team, setTeam] = useState<Team | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);

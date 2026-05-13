@@ -81,7 +81,7 @@
     "sending": "Sending...",
     "send_invite_button": "Send invitation",
     "delete_dialog_title": "Delete team",
-    "delete_dialog_description": "Really delete \"{name}\"? This action cannot be undone.",
+    "delete_dialog_description": "Really delete \"{name}\"?\nThis action cannot be undone.",
     "deleting": "Deleting...",
     "delete_confirm_button": "Delete",
     "add_tileset_dialog_title": "Add tileset",
