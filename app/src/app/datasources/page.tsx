@@ -52,7 +52,7 @@ import {
 export default function DatasourcesPage() {
   const t = useTranslations("datasources.list");
   const locale = useLocale();
-  const dateLocale = locale === "ja" ? "ja-JP" : locale;
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
   const { api, isReady } = useApi();
   const [datasources, setDatasources] = useState<Datasource[]>([]);
   const [loading, setLoading] = useState(true);

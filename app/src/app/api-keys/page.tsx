@@ -56,7 +56,7 @@ export default function ApiKeysPage() {
   const { api, isReady } = useApi();
   const t = useTranslations("api-keys");
   const locale = useLocale();
-  const dateLocale = locale === "ja" ? "ja-JP" : locale;
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
 
   const scopeLabels: Record<ApiKeyScope, string> = {
     read: t("scope_read_label"),

@@ -50,7 +50,7 @@ import {
 export default function DatasourceDetailPage() {
   const t = useTranslations("datasources.detail");
   const locale = useLocale();
-  const dateLocale = locale === "ja" ? "ja-JP" : locale;
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
   const router = useRouter();
   const params = useParams();
   const datasourceId = params.id as string;
