@@ -32,12 +32,12 @@ export default defineConfig({
     {
       name: "unauthenticated",
       testMatch: /tests\/e2e\/auth\/.*\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], locale: "ja-JP" },
     },
     {
       name: "authenticated",
       testIgnore: /tests\/e2e\/auth\/.*\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], locale: "ja-JP" },
     },
   ],
 

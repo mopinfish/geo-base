@@ -55,7 +55,7 @@ test.describe("Tilesets PMTiles upload (moto S3)", () => {
 
     // 入力モードを「ファイルをアップロード」に切替。
     await page.getByTestId("datasource-form-mode").click();
-    await page.getByRole("option", { name: /ファイルをアップロード/ }).click();
+    await page.getByTestId("datasource-form-mode-upload").click();
 
     // ファイル input は uncontrolled だが、`key` に inputMode を含めているので
     // ここで存在する。setInputFiles で fixture を流し込む。

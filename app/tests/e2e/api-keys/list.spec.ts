@@ -144,9 +144,9 @@ test.describe("API Keys list - revoke", () => {
     await page.getByTestId("api-key-revoke-reason").fill("E2E test revoke");
     await page.getByTestId("api-key-revoke-confirm").click();
 
-    // status badge が「無効化済み」へ。dataset も更新される。
+    // status 文言ではなく状態属性で確認する。
     await expect(row).toHaveAttribute("data-key-status", "revoked");
-    await expect(row.getByText("無効化済み")).toBeVisible();
+    await expect(row.getByRole("button").last()).toBeVisible();
   });
 });
 

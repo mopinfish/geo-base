@@ -401,7 +401,7 @@ export default function DatasourcesPage() {
                   {t("empty_description")}
                 </p>
                 <Button asChild className="mt-4">
-                  <Link href="/datasources/new">
+                  <Link href="/datasources/new" data-testid="datasource-empty-register-button">
                     <Plus className="mr-2 h-4 w-4" />
                     {t("empty_register")}
                   </Link>

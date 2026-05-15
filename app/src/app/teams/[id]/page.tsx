@@ -394,7 +394,7 @@ export default function TeamDetailPage() {
               <Users className="w-4 h-4 mr-2" />
               {t("tab_members")}
             </TabsTrigger>
-            <TabsTrigger value="invitations">
+            <TabsTrigger value="invitations" data-testid="team-tab-invitations">
               <Mail className="w-4 h-4 mr-2" />
               {t("tab_invitations")}
             </TabsTrigger>
@@ -418,7 +418,12 @@ export default function TeamDetailPage() {
             </div>
             <div className="space-y-2">
               {members.map((member) => (
-                <Card key={member.id} data-testid="team-member-row" data-user-id={member.user_id}>
+                <Card
+                  key={member.id}
+                  data-testid="team-member-row"
+                  data-user-id={member.user_id}
+                  data-team-role={member.role}
+                >
                   <CardContent className="flex items-center justify-between py-4">
                     <div className="flex items-center gap-3">
                       {roleIcons[member.role]}
@@ -461,6 +466,7 @@ export default function TeamDetailPage() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
+                            data-testid="team-member-remove"
                             className="text-destructive"
                             onClick={() => handleRemoveMember(member.user_id)}
                           >
