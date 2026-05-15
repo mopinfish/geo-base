@@ -154,7 +154,6 @@
     "colormap_label": "Colormap",
     "opacity_transparent": "Transparent",
     "opacity_opaque": "Opaque",
-    "layer_legend_label": "Layers:",
     "tile_url_missing": "Tile URL is not set",
     "map_load_failed": "Failed to load the map",
     "map_init_failed": "Failed to initialize the map",

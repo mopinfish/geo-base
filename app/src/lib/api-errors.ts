@@ -50,7 +50,9 @@ function normalizeLocale(value: string | null | undefined): Locale {
     : FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE;
 }
 
-function resolveLocale(): Locale {
+function resolveLocale(locale?: Locale): Locale {
+  if (locale) return locale;
+
   if (typeof document !== "undefined") {
     return normalizeLocale(document.documentElement.lang);
   }
@@ -58,8 +60,8 @@ function resolveLocale(): Locale {
   return FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE;
 }
 
-function getApiErrorMessages(): Record<string, string> {
-  return API_ERROR_MESSAGES[resolveLocale()];
+function getApiErrorMessages(locale?: Locale): Record<string, string> {
+  return API_ERROR_MESSAGES[resolveLocale(locale)];
 }
 
 /**
@@ -104,10 +106,10 @@ export function extractApiError(body: unknown): ApiClientError | Error | null {
  * - `code` が未知なら英語 `message` をそのまま返す (forward-compat)
  * - `ApiClientError` でなければ `error.message` をそのまま返す
  */
-export function translateApiError(err: unknown): string {
+export function translateApiError(err: unknown, locale?: Locale): string {
   if (err instanceof ApiClientError) {
-    return getApiErrorMessages()[err.code] ?? err.message;
+    return getApiErrorMessages(locale)[err.code] ?? err.message;
   }
   if (err instanceof Error) return err.message;
-  return getApiErrorMessages().internal_unexpected ?? "Unexpected error occurred";
+  return getApiErrorMessages(locale).internal_unexpected ?? "Unexpected error occurred";
 }

@@ -11,6 +11,11 @@ import { extractApiError, translateApiError } from "./api-errors";
 // 絶対 URL を使いたい場合は NEXT_PUBLIC_API_URL を明示的に設定すること。
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
+function throwTranslatedApiError(error: Error): never {
+  error.message = translateApiError(error);
+  throw error;
+}
+
 /**
  * 認証トークン自動付与 + 401 リトライに対応した fetch ラッパー
  *
@@ -664,7 +669,7 @@ class ApiClient {
         // JSON パースに失敗した場合は fallback メッセージで Error を投げる
       }
       const extracted = extractApiError(body);
-      if (extracted) throw new Error(translateApiError(extracted));
+      if (extracted) throwTranslatedApiError(extracted);
       throw new Error(fallback);
     }
 
@@ -707,7 +712,7 @@ class ApiClient {
         // ignore
       }
       const extracted = extractApiError(body);
-      if (extracted) throw new Error(translateApiError(extracted));
+      if (extracted) throwTranslatedApiError(extracted);
       throw new Error(fallback);
     }
 
@@ -936,7 +941,7 @@ class ApiClient {
         body = await response.json();
       } catch { /* keep default */ }
       const extracted = extractApiError(body);
-      if (extracted) throw new Error(translateApiError(extracted));
+      if (extracted) throwTranslatedApiError(extracted);
       throw new Error(fallback);
     }
     return response.json();
@@ -964,7 +969,7 @@ class ApiClient {
         body = await response.json();
       } catch { /* keep default */ }
       const extracted = extractApiError(body);
-      if (extracted) throw new Error(translateApiError(extracted));
+      if (extracted) throwTranslatedApiError(extracted);
       throw new Error(fallback);
     }
     return response.json();

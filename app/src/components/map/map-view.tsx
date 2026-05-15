@@ -48,7 +48,14 @@ export function MapView({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const onMapClickRef = useRef(onMapClick);
+  const initialViewRef = useRef({ center, zoom, interactive });
   const [isLoaded, setIsLoaded] = useState(false);
+  const [centerLng, centerLat] = center;
+
+  useEffect(() => {
+    onMapClickRef.current = onMapClick;
+  }, [onMapClick]);
 
   // 地図の初期化
   useEffect(() => {
@@ -74,9 +81,9 @@ export function MapView({
           },
         ],
       },
-      center: center,
-      zoom: zoom,
-      interactive: interactive,
+      center: initialViewRef.current.center,
+      zoom: initialViewRef.current.zoom,
+      interactive: initialViewRef.current.interactive,
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -86,12 +93,9 @@ export function MapView({
       setIsLoaded(true);
     });
 
-    // クリックイベント
-    if (onMapClick) {
-      map.current.on("click", (e) => {
-        onMapClick({ lng: e.lngLat.lng, lat: e.lngLat.lat });
-      });
-    }
+    map.current.on("click", (e) => {
+      onMapClickRef.current?.({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+    });
 
     return () => {
       if (map.current) {
@@ -99,7 +103,12 @@ export function MapView({
         map.current = null;
       }
     };
-  }, [center, interactive, onMapClick, zoom]);
+  }, []);
+
+  useEffect(() => {
+    if (!map.current || !isLoaded) return;
+    map.current.jumpTo({ center: [centerLng, centerLat], zoom });
+  }, [centerLng, centerLat, zoom, isLoaded]);
 
   // GeoJSONデータの表示
   useEffect(() => {
@@ -363,6 +372,12 @@ export function GeometryPicker({
   const map = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const vertexMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const interactionRef = useRef({
+    enableClickAdd,
+    geometryType,
+    onCoordAdd,
+    onPointChange,
+  });
   const [isLoaded, setIsLoaded] = useState(false);
 
   // 現在の座標を取得
@@ -378,6 +393,17 @@ export function GeometryPicker({
         return [];
     }
   }, [geometryType, pointCoords, lineCoords, polygonCoords]);
+
+  const initialCoordsRef = useRef(getCurrentCoords());
+
+  useEffect(() => {
+    interactionRef.current = {
+      enableClickAdd,
+      geometryType,
+      onCoordAdd,
+      onPointChange,
+    };
+  }, [enableClickAdd, geometryType, onCoordAdd, onPointChange]);
 
   // GeoJSONを構築
   const buildGeoJson = useCallback((): GeoJSON.Feature | null => {
@@ -429,7 +455,7 @@ export function GeometryPicker({
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    const coords = getCurrentCoords();
+    const coords = initialCoordsRef.current;
     const defaultCenter: [number, number] = coords.length > 0 ? coords[0] : [139.7671, 35.6812];
 
     map.current = new maplibregl.Map({
@@ -465,6 +491,7 @@ export function GeometryPicker({
 
     // クリックイベント
     map.current.on("click", (e) => {
+      const { enableClickAdd, geometryType, onCoordAdd, onPointChange } = interactionRef.current;
       if (!enableClickAdd) return;
       
       const coord: [number, number] = [e.lngLat.lng, e.lngLat.lat];
@@ -490,7 +517,7 @@ export function GeometryPicker({
         map.current = null;
       }
     };
-  }, [enableClickAdd, geometryType, getCurrentCoords, onCoordAdd, onPointChange, isLoaded]);
+  }, []);
 
   // ジオメトリの表示を更新
   useEffect(() => {

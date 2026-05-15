@@ -61,6 +61,14 @@ describe("translateApiError", () => {
     expect(translateApiError(err)).toBe("タイルセットが見つかりません");
   });
 
+  it("明示 locale が渡された場合はその locale の訳文を返す", () => {
+    const err = new ApiClientError({
+      code: "tileset_not_found",
+      message: "Tileset not found",
+    });
+    expect(translateApiError(err, "en")).toBe("Tileset not found.");
+  });
+
   it("複数 domain の code がそれぞれ訳出される (smoke)", () => {
     const cases: Array<[string, string]> = [
       ["auth_invalid_credentials", "メールアドレスまたはパスワードが正しくありません"],

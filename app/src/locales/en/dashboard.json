@@ -13,7 +13,6 @@
   "postgis_prefix": "PostGIS:",
   "tilesets_breakdown": "Vector: {vector} / PMTiles: {pmtiles} / Raster: {raster}",
   "features_breakdown": "Point: {point} / Line: {line} / Polygon: {polygon}",
-  "stats_error": "Stats load error",
   "public_status": "Visibility",
   "public_tilesets": "Public tilesets",
   "public_badge": "Public",

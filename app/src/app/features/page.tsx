@@ -58,6 +58,7 @@ export default function FeaturesPage() {
   const t = useTranslations("features.list");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorFetch = t("error_fetch");
   const router = useRouter();
   const { api, isReady } = useApi();
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -180,13 +181,13 @@ export default function FeaturesPage() {
       // 選択状態をクリア
       setSelectedIds(new Set());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
       setFeatures([]);
       setTilesets([]);
     } finally {
       setIsLoading(false);
     }
-  }, [api, isReady, selectedTileset, limit, t]);
+  }, [api, isReady, selectedTileset, limit, errorFetch]);
 
   useEffect(() => {
     fetchData();

@@ -81,6 +81,7 @@ export default function TeamDetailPage() {
   const router = useRouter();
   const teamId = params.id as string;
   const { api, isReady } = useApi();
+  const errorFetch = t("error_fetch");
 
   const roleLabels: Record<TeamRole, string> = {
     owner: t("role_owner"),
@@ -135,7 +136,7 @@ export default function TeamDetailPage() {
       teamData = await api.getTeam(teamId);
     } catch (err) {
       console.error("Failed to load team:", err);
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
       setIsLoading(false);
       return;
     }
@@ -182,7 +183,7 @@ export default function TeamDetailPage() {
     }
 
     setIsLoading(false);
-  }, [api, teamId, t]);
+  }, [api, teamId, errorFetch]);
 
   useEffect(() => {
     if (isReady && teamId) {

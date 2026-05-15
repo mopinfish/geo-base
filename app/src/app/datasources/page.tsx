@@ -53,6 +53,7 @@ export default function DatasourcesPage() {
   const t = useTranslations("datasources.list");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorFetch = t("error_fetch");
   const { api, isReady } = useApi();
   const [datasources, setDatasources] = useState<Datasource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,12 +99,12 @@ export default function DatasourcesPage() {
       // 選択状態をクリア
       setSelectedIds(new Set());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
       setDatasources([]);
     } finally {
       setLoading(false);
     }
-  }, [api, isReady, filterType, includePrivate, t]);
+  }, [api, isReady, filterType, includePrivate, errorFetch]);
 
   useEffect(() => {
     fetchDatasources();

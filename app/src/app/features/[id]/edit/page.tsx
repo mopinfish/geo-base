@@ -20,6 +20,7 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
   const { id } = use(params);
   const router = useRouter();
   const t = useTranslations("features.edit");
+  const errorFetch = t("error_fetch");
   const { api, isReady } = useApi();
   const [feature, setFeature] = useState<Feature | null>(null);
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
@@ -83,11 +84,11 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
         setTilesets([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
     } finally {
       setIsLoading(false);
     }
-  }, [api, isReady, id, t]);
+  }, [api, isReady, id, errorFetch]);
 
   useEffect(() => {
     fetchData();

@@ -154,7 +154,6 @@
     "colormap_label": "カラーマップ",
     "opacity_transparent": "透明",
     "opacity_opaque": "不透明",
-    "layer_legend_label": "レイヤー:",
     "tile_url_missing": "タイルURLが設定されていません",
     "map_load_failed": "地図の読み込みに失敗しました",
     "map_init_failed": "地図の初期化に失敗しました",

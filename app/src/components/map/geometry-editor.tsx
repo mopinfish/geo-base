@@ -41,6 +41,7 @@ export function GeometryEditor({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const initialViewRef = useRef({ center, zoom });
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditing, setIsEditing] = useState(true);
 
@@ -248,8 +249,8 @@ export function GeometryEditor({
           },
         ],
       },
-      center: center,
-      zoom: zoom,
+      center: initialViewRef.current.center,
+      zoom: initialViewRef.current.zoom,
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -260,13 +261,14 @@ export function GeometryEditor({
     });
 
     return () => {
-      clearMarkers();
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
       if (map.current) {
         map.current.remove();
         map.current = null;
       }
     };
-  }, [center, clearMarkers, zoom]);
+  }, []);
 
   // クリックハンドラ
   useEffect(() => {

@@ -48,6 +48,7 @@ export default function TilesetsPage() {
   const t = useTranslations("tilesets.list");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorFetch = t("error_fetch");
 
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [filteredTilesets, setFilteredTilesets] = useState<Tileset[]>([]);
@@ -93,13 +94,13 @@ export default function TilesetsPage() {
       setSelectedIds(new Set());
     } catch (err) {
       console.error("Fetch error:", err);
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
       setTilesets([]);
       setFilteredTilesets([]);
     } finally {
       setIsLoading(false);
     }
-  }, [api, isReady, t]);
+  }, [api, isReady, errorFetch]);
 
   // isReadyになったらfetch
   useEffect(() => {

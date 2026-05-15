@@ -57,6 +57,7 @@ export default function ApiKeysPage() {
   const t = useTranslations("api-keys");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorLoad = t("error_load");
 
   const scopeLabels: Record<ApiKeyScope, string> = {
     read: t("scope_read_label"),
@@ -116,11 +117,11 @@ export default function ApiKeysPage() {
       setTeams(teamsResponse.teams);
     } catch (err) {
       console.error("Failed to load data:", err);
-      setError(err instanceof Error ? err.message : t("error_load"));
+      setError(err instanceof Error ? err.message : errorLoad);
     } finally {
       setIsLoading(false);
     }
-  }, [api, t]);
+  }, [api, errorLoad]);
 
   useEffect(() => {
     if (isReady) {

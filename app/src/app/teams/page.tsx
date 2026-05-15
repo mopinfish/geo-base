@@ -30,6 +30,7 @@ import { Team, TeamCreate } from "@/lib/api";
 
 export default function TeamsPage() {
   const t = useTranslations("teams.list");
+  const errorLoad = t("error_load");
   const router = useRouter();
   const { api, isReady } = useApi();
 
@@ -55,11 +56,11 @@ export default function TeamsPage() {
       setTeams(response.teams);
     } catch (err) {
       console.error("Failed to load teams:", err);
-      setError(err instanceof Error ? err.message : t("error_load"));
+      setError(err instanceof Error ? err.message : errorLoad);
     } finally {
       setIsLoading(false);
     }
-  }, [api, t]);
+  }, [api, errorLoad]);
 
   useEffect(() => {
     if (isReady) {

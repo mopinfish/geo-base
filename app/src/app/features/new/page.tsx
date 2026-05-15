@@ -14,6 +14,7 @@ import { ArrowLeft, Plus, RefreshCw } from "lucide-react";
 
 export default function NewFeaturePage() {
   const t = useTranslations("features.new");
+  const errorFetchTilesets = t("error_fetch_tilesets");
   const router = useRouter();
   const { api, isReady } = useApi();
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
@@ -35,11 +36,11 @@ export default function NewFeaturePage() {
         setTilesets([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch_tilesets"));
+      setError(err instanceof Error ? err.message : errorFetchTilesets);
     } finally {
       setIsLoading(false);
     }
-  }, [api, isReady, t]);
+  }, [api, isReady, errorFetchTilesets]);
 
   useEffect(() => {
     fetchTilesets();

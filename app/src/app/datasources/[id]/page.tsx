@@ -44,6 +44,7 @@ export default function DatasourceDetailPage() {
   const t = useTranslations("datasources.detail");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorFetch = t("error_fetch");
   const router = useRouter();
   const params = useParams();
   const datasourceId = params.id as string;
@@ -71,11 +72,11 @@ export default function DatasourceDetailPage() {
       const data = await api.getDatasource(datasourceId);
       setDatasource(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
     } finally {
       setLoading(false);
     }
-  }, [api, isReady, datasourceId, t]);
+  }, [api, isReady, datasourceId, errorFetch]);
 
   useEffect(() => {
     fetchDatasource();

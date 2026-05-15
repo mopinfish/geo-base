@@ -26,6 +26,9 @@ import Link from "next/link";
 export default function DashboardPage() {
   const { api, isReady } = useApi();
   const t = useTranslations("dashboard");
+  const tilesetsFetchError = t("tilesets_fetch_error");
+  const statsFetchError = t("stats_fetch_error");
+  const dataFetchError = t("data_fetch_error");
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -65,7 +68,7 @@ export default function DashboardPage() {
       } else {
         console.error("Tilesets fetch failed:", results[1].reason);
         setTilesets([]);
-        setError(t("tilesets_fetch_error"));
+        setError(tilesetsFetchError);
       }
       
       // 統計結果の処理
@@ -73,17 +76,17 @@ export default function DashboardPage() {
         setStats(results[2].value);
       } else {
         console.error("Stats fetch failed:", results[2].reason);
-        setStatsError(t("stats_fetch_error"));
+        setStatsError(statsFetchError);
       }
       
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : t("data_fetch_error");
+      const errorMessage = err instanceof Error ? err.message : dataFetchError;
       setError(errorMessage);
       setTilesets([]);
     } finally {
       setIsLoading(false);
     }
-  }, [api, t]);
+  }, [api, tilesetsFetchError, statsFetchError, dataFetchError]);
 
   useEffect(() => {
     if (isReady) {
@@ -351,7 +354,7 @@ export default function DashboardPage() {
                         </Badge>
                         {tileset.is_public && (
                           <Badge variant="secondary" className="text-xs">
-                          {t("public_badge")}
+                            {t("public_badge")}
                           </Badge>
                         )}
                       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { 
@@ -67,6 +67,7 @@ export default function GeoJSONImportPage() {
   });
   const [boundsResult, setBoundsResult] = useState<BoundsResult | null>(null);
   const [importTime, setImportTime] = useState<number | null>(null);
+  const hasAutoSelectedTileset = useRef(false);
 
   // タイルセット一覧の取得（vectorタイプのみ）
   useEffect(() => {
@@ -82,7 +83,8 @@ export default function GeoJSONImportPage() {
         setTilesets(vectorTilesets);
         
         // 最初のタイルセットを選択
-        if (vectorTilesets.length > 0) {
+        if (vectorTilesets.length > 0 && !hasAutoSelectedTileset.current) {
+          hasAutoSelectedTileset.current = true;
           setSelectedTilesetId((prev) => prev || vectorTilesets[0].id);
         }
       } catch (err) {

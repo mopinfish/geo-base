@@ -13,7 +13,6 @@
   "postgis_prefix": "PostGIS:",
   "tilesets_breakdown": "ベクタ: {vector} / PMTiles: {pmtiles} / ラスタ: {raster}",
   "features_breakdown": "Point: {point} / Line: {line} / Polygon: {polygon}",
-  "stats_error": "統計取得エラー",
   "public_status": "公開状態",
   "public_tilesets": "公開タイルセット",
   "public_badge": "公開",
