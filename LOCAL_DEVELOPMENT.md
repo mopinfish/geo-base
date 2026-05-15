@@ -1,80 +1,82 @@
-# geo-base ローカル開発環境
+# geo-base Local Development
 
-このドキュメントでは、geo-baseの各コンポーネントをローカル環境で実行する方法を説明します。
+> English: this page ・ 日本語: [LOCAL_DEVELOPMENT.ja.md](./LOCAL_DEVELOPMENT.ja.md)
 
-> 認証（`AUTH_PROVIDER=local`、初期管理者作成、トラブルシューティング）の詳細は
-> **[`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md)** を参照してください。
+This guide explains how to run each geo-base component locally.
 
-## ポート割り当て
+> For authentication details (`AUTH_PROVIDER=local`, initial admin creation, and troubleshooting),
+> see [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md).
 
-| コンポーネント | ポート | ディレクトリ | 説明 |
-|--------------|--------|-------------|------|
-| **Admin UI** | 3000 | `/app` | Next.js 管理画面 |
-| **API** | 8000 | `/api` | FastAPI タイルサーバー |
-| **MCP Server** | 8001 | `/mcp` | Claude Desktop連携（SSEモード） |
+## Port Mapping
 
-## 前提条件
+| Component | Port | Directory | Description |
+|---|---|---|---|
+| Admin UI | 3000 | `/app` | Next.js admin console |
+| API | 8000 | `/api` | FastAPI tile server |
+| MCP Server | 8001 | `/mcp` | Claude Desktop integration (SSE mode) |
+
+## Prerequisites
 
 - Node.js 18+
 - Python 3.12+
-- uv (Python パッケージマネージャー)
-- PostgreSQL + PostGIS（`docker compose up -d postgis` で起動可、`docker/` 配下）
+- `uv` (Python package manager)
+- PostgreSQL + PostGIS (`docker compose up -d postgis`, under `docker/`)
 
-## 起動方法
+## Startup
 
-### すべてのコンポーネントを起動（3つのターミナル）
+### Start all components (3 terminals)
 
 ```fish
-# ターミナル1: API (FastAPI)
+# Terminal 1: API (FastAPI)
 cd api
 uv run uvicorn lib.main:app --reload --port 8000
 
-# ターミナル2: MCP Server（必要な場合）
+# Terminal 2: MCP Server (optional)
 cd mcp
 set -x TILE_SERVER_URL http://localhost:8000
 uv run python server.py
 
-# ターミナル3: Admin UI (Next.js)
+# Terminal 3: Admin UI (Next.js)
 cd app
 npm run dev
 ```
 
-### Admin UIのみ起動（本番APIを使用）
+### Start only the Admin UI (using the production API)
 
 ```fish
 cd app
 
-# .env.local を本番向けに設定
+# Configure .env.local for the production API
 echo 'NEXT_PUBLIC_API_URL=https://geo-base-api.fly.dev' > .env.local
 
 npm run dev
 ```
 
-### APIのみ起動
+### Start only the API
 
 ```fish
 cd api
 uv run uvicorn lib.main:app --reload --port 8000
 ```
 
-## 環境変数
+## Environment Variables
 
 ### API (`/api/.env`)
 
 ```env
-# データベース接続
+# Database
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/geo_base
 
-# 認証プロバイダ（local のみサポート、Issue #72 で Supabase 対応は廃止済み）
+# Auth provider (`local` only; Supabase support was removed in Issue #72)
 AUTH_PROVIDER=local
 
-# JWT 設定（local モード必須。openssl rand -base64 64 等で生成）
+# JWT settings (required in local mode; generate with `openssl rand -base64 64`)
 JWT_SECRET=your-jwt-secret
 JWT_AUDIENCE=authenticated
 JWT_ISSUER=geo-base
 ACCESS_TOKEN_TTL_SECONDS=900
 
-# メール（招待・パスワードリセット）
+# Email (invitations and password reset)
 EMAIL_BACKEND=console            # null / console / smtp
 INVITATION_BASE_URL=http://localhost:3000
 
@@ -83,50 +85,45 @@ CORS_ORIGINS=http://localhost:3000
 COOKIE_SAMESITE=lax
 COOKIE_SECURE=false
 
-# local プロバイダ固有
-LOCAL_AUTH_ALLOW_SIGNUP=false    # パブリック signup の可否（招待フロー中心なら false）
+# Local-provider specific
+LOCAL_AUTH_ALLOW_SIGNUP=false    # set to true only if public signup is allowed
 ```
 
-詳細な変数リファレンスは [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md) を参照。
+For the full variable reference, see [`docs/AUTH_SETUP.md`](docs/AUTH_SETUP.md).
 
 ### MCP Server (`/mcp/.env`)
 
 ```env
-# タイルサーバーURL
 TILE_SERVER_URL=http://localhost:8000
-
-# デバッグモード
 DEBUG=true
-
-# 認証（必要な場合）
 API_TOKEN=your-api-token
 ```
 
 ### Admin UI (`/app/.env.local`)
 
 ```env
-# ローカル開発時
+# Local development
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_MCP_URL=http://localhost:8001
 
-# 本番APIを使う場合
+# Production API
 # NEXT_PUBLIC_API_URL=https://geo-base-api.fly.dev
 # NEXT_PUBLIC_MCP_URL=https://geo-base-mcp.fly.dev
 ```
 
-## 動作確認
+## Verification
 
-### API ヘルスチェック
+### API health check
 
 ```fish
-# ローカル
+# Local
 curl http://localhost:8000/api/health
 
-# 本番
+# Production
 curl https://geo-base-api.fly.dev/api/health
 ```
 
-### タイルセット一覧
+### Tileset list
 
 ```fish
 curl http://localhost:8000/api/tilesets
@@ -134,97 +131,95 @@ curl http://localhost:8000/api/tilesets
 
 ### Admin UI
 
-ブラウザで http://localhost:3000 を開く
+Open http://localhost:3000 in your browser.
 
-## トラブルシューティング
+## Troubleshooting
 
-### ポートが既に使用されている
+### Port already in use
 
 ```fish
-# 使用中のポートを確認
 lsof -i :3000
 lsof -i :8000
 lsof -i :8001
 
-# プロセスを終了
+# Then stop the process
 kill -9 <PID>
 ```
 
-### CORS エラー
+### CORS errors
 
-APIがローカルで動作している場合、CORSは自動的に許可されます。
-本番APIを使用する場合は、`.env.local`を本番URLに設定してください。
+When the API is running locally, CORS is allowed automatically.
+If you are using the production API, set `.env.local` to the production URL.
 
-### データベース接続エラー
+### Database connection errors
 
 ```fish
-# PostgreSQLが起動しているか確認
+# Confirm PostgreSQL is running
 pg_isready -h localhost -p 5432
 
-# Docker compose で起動していない場合
+# If Docker Compose is not already running
 cd docker && docker compose up -d postgis
 ```
 
 ---
 
-# Vercel デプロイ構成（Admin UI のみ）
+# Vercel Deployment Layout (Admin UI Only)
 
-> Vercel にデプロイするのは **Admin UI (Next.js) の `geo-base-admin` プロジェクトのみ**です。
-> FastAPI タイルサーバーは現在 Fly.io (`geo-base-api`) でホストしており、
-> 旧 Vercel API デプロイ (`geo-base` project) は廃止済み（詳細は `api/FLY_DEPLOY.md`）。
+> Vercel deploys only the **Admin UI (Next.js) `geo-base-admin` project**.
+> The FastAPI tile server now runs on Fly.io (`geo-base-api`).
+> The legacy Vercel API deployment (`geo-base`) was retired; see `api/FLY_DEPLOY.md`.
 
-## プロジェクト構成（参考: 全コンポーネント）
+## Reference Project Layout
 
-| プロジェクト | プラットフォーム | Root Directory | URL | デプロイ手順 |
+| Project | Platform | Root Directory | URL | Deployment guide |
 |---|---|---|---|---|
-| `geo-base-admin` | **Vercel** | `app` | https://geo-base-admin.vercel.app | 本セクション |
+| `geo-base-admin` | **Vercel** | `app` | https://geo-base-admin.vercel.app | This section |
 | `geo-base-api` | Fly.io | `api` | https://geo-base-api.fly.dev | `api/FLY_DEPLOY.md` |
 | `geo-base-mcp` | Fly.io | `mcp` | https://geo-base-mcp.fly.dev | `cd mcp && fly deploy` |
 | `geo-base-pg` | Fly.io | `pg` | `geo-base-pg.internal` (internal) | `docs/POSTGRES_SETUP.md` |
 
-## Admin UI (Vercel) プロジェクトの作成手順
+## Create the Vercel project
 
-### 1. Vercel Dashboardで新規プロジェクト作成
+### 1. Create a project in Vercel Dashboard
 
-1. [Vercel Dashboard](https://vercel.com/dashboard) にログイン
-2. **Add New...** → **Project** をクリック
-3. 同じリポジトリ `mopinfish/geo-base` を選択
-4. **Import** をクリック
+1. Log in to the [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click **Add New...** → **Project**
+3. Select the same repository: `mopinfish/geo-base`
+4. Click **Import**
 
-### 2. プロジェクト設定
+### 2. Project settings
 
-| 設定項目 | 値 |
-|---------|-----|
+| Setting | Value |
+|---|---|
 | Project Name | `geo-base-admin` |
-| Framework Preset | `Next.js`（自動検出） |
-| Root Directory | `app` ← **重要: 必ず設定** |
-| Build Command | （デフォルトのまま） |
-| Output Directory | （デフォルトのまま） |
+| Framework Preset | `Next.js` (auto-detected) |
+| Root Directory | `app` |
+| Build Command | default |
+| Output Directory | default |
 
-### 3. 環境変数の設定
+### 3. Environment variables
 
-| 変数名 | 値 | 説明 |
-|--------|-----|------|
-| `API_BACKEND_URL` | `https://geo-base-api.fly.dev` | **必須** (Production scope)。`next.config.ts` の rewrites が `/api/*` を proxy する宛先。未設定だと build が fail-fast で停止する |
-| `NEXT_PUBLIC_API_URL` | （空） | 本番では同一オリジン fetch を使うため空にする。`tilesets/[id]/page.tsx` 等は内部で `https://geo-base-api.fly.dev` の fallback を持つ |
-| `NEXT_PUBLIC_MCP_URL` | `https://geo-base-mcp.fly.dev` | 本番MCP URL |
+| Variable | Value | Notes |
+|---|---|---|
+| `API_BACKEND_URL` | `https://geo-base-api.fly.dev` | Required in Production; target of the `/api/*` rewrite in `next.config.ts` |
+| `NEXT_PUBLIC_API_URL` | empty | Use same-origin fetch in production |
+| `NEXT_PUBLIC_MCP_URL` | `https://geo-base-mcp.fly.dev` | Production MCP URL |
 
-### 4. デプロイ
+### 4. Deploy
 
-**Deploy** をクリックしてデプロイを開始。
+Click **Deploy**.
 
-### 5. 動作確認
+### 5. Verify
 
-デプロイ完了後、以下のURLで動作確認：
 - Admin UI: `https://geo-base-admin.vercel.app`
-- API: `https://geo-base-api.fly.dev/api/health`
+- API health: `https://geo-base-api.fly.dev/api/health`
 
 ---
 
-## 本番環境一覧
+## Production URLs
 
-| サービス | URL | プラットフォーム |
-|---------|-----|----------------|
+| Service | URL | Platform |
+|---|---|---|
 | Admin UI | https://geo-base-admin.vercel.app | Vercel |
 | API | https://geo-base-api.fly.dev | Fly.io |
 | MCP Server | https://geo-base-mcp.fly.dev | Fly.io |

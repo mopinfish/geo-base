@@ -42,6 +42,16 @@ geo-base/
 └── packages/            # Shared packages
 ```
 
+## Documentation
+
+- Deployment guide: [DEPLOY.md](./DEPLOY.md)
+- Local development: [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md)
+- Auth setup: [docs/AUTH_SETUP.md](./docs/AUTH_SETUP.md)
+- PostgreSQL setup: [docs/POSTGRES_SETUP.md](./docs/POSTGRES_SETUP.md)
+- Redis setup: [docs/REDIS_SETUP.md](./docs/REDIS_SETUP.md)
+- Access control review: [docs/ACCESS_CONTROL_REVIEW.md](./docs/ACCESS_CONTROL_REVIEW.md)
+- Verification guide: [TESTING.md](./TESTING.md)
+
 ## Local development setup
 
 ### Prerequisites
