@@ -12,6 +12,7 @@ import { extractApiError, translateApiError } from "./api-errors";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 function throwTranslatedApiError(error: Error): never {
+  // Preserve ApiClientError.code/details while replacing the user-facing message.
   error.message = translateApiError(error);
   throw error;
 }

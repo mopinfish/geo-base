@@ -105,6 +105,8 @@ export function extractApiError(body: unknown): ApiClientError | Error | null {
  * - `ApiClientError` で `code` が catalog にあれば locale に応じた訳文を返す
  * - `code` が未知なら英語 `message` をそのまま返す (forward-compat)
  * - `ApiClientError` でなければ `error.message` をそのまま返す
+ * - `locale` 省略時は client-side helper として `<html lang>` を参照し、
+ *   `document` がない環境では既定 locale に fallback する
  */
 export function translateApiError(err: unknown, locale?: Locale): string {
   if (err instanceof ApiClientError) {

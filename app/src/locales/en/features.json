@@ -178,7 +178,7 @@
     "geometry_type_point": "Point",
     "geometry_type_linestring": "LineString",
     "geometry_type_polygon": "Polygon",
-    "geometry_status_count": "{count} points",
+    "geometry_status_count": "{count, plural, one {# point} other {# points}}",
     "geometry_status_min_points": "({min_points} points required)",
     "geometry_editor_mode_editing": "Editing",
     "geometry_editor_mode_edit": "Edit",
