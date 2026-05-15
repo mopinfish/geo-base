@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import {
   Card,
@@ -41,6 +42,7 @@ type InputMode = "url" | "upload";
 export default function NewDatasourcePage() {
   const router = useRouter();
   const { api, isReady } = useApi();
+  const t = useTranslations("datasources.new");
 
   // フォーム状態
   const [inputMode, setInputMode] = useState<InputMode>("url");
@@ -154,23 +156,23 @@ export default function NewDatasourcePage() {
     e.preventDefault();
 
     if (!isReady || !api) {
-      setError("APIが準備できていません。しばらくお待ちください。");
+      setError(t("error_api_not_ready"));
       return;
     }
 
     if (!tilesetId) {
-      setError("タイルセットを選択してください。");
+      setError(t("error_no_tileset"));
       return;
     }
 
     if (inputMode === "url") {
       if (!url || !urlValid) {
-        setError("有効なURLを入力してください。");
+        setError(t("error_no_url"));
         return;
       }
     } else {
       if (!file) {
-        setError("アップロードするファイルを選択してください。");
+        setError(t("error_no_file"));
         return;
       }
     }
@@ -198,14 +200,14 @@ export default function NewDatasourcePage() {
             : await api.uploadPmtiles(file as File, tilesetId);
         resultId = result.id;
       }
-      setSuccess("データソースを登録しました。");
+      setSuccess(t("success_registered"));
 
       // 詳細ページへリダイレクト
       setTimeout(() => {
         router.push(`/datasources/${resultId}`);
       }, 1000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "データソースの登録に失敗しました");
+      setError(err instanceof Error ? err.message : t("error_register"));
       setIsSubmitting(false);
     }
   };
@@ -218,7 +220,7 @@ export default function NewDatasourcePage() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/datasources">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              戻る
+              {t("back")}
             </Link>
           </Button>
         </div>
@@ -226,10 +228,10 @@ export default function NewDatasourcePage() {
         <div>
           <div className="flex items-center gap-2">
             <Plus className="h-8 w-8" />
-            <h1 className="text-3xl font-bold">新規データソース登録</h1>
+            <h1 className="text-3xl font-bold">{t("title")}</h1>
           </div>
           <p className="mt-1 text-muted-foreground">
-            PMTilesまたはCOGファイルを登録します
+            {t("subtitle")}
           </p>
         </div>
 
@@ -238,9 +240,9 @@ export default function NewDatasourcePage() {
           <form onSubmit={handleSubmit}>
             <Card>
               <CardHeader>
-                <CardTitle>データソース情報</CardTitle>
+                <CardTitle>{t("card_title")}</CardTitle>
                 <CardDescription>
-                  タイルセットに紐づけるデータソースの情報を入力してください
+                  {t("card_description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -264,14 +266,14 @@ export default function NewDatasourcePage() {
 
                 {/* データソースタイプ */}
                 <div className="space-y-2">
-                  <Label htmlFor="type">データソースタイプ *</Label>
+                  <Label htmlFor="type">{t("type_label")}</Label>
                   <Select
                     value={datasourceType}
                     onValueChange={(v) => handleTypeChange(v as DatasourceType)}
                     disabled={isSubmitting}
                   >
                     <SelectTrigger id="type" data-testid="datasource-form-type">
-                      <SelectValue placeholder="タイプを選択" />
+                      <SelectValue placeholder={t("type_placeholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="pmtiles">
@@ -290,18 +292,18 @@ export default function NewDatasourcePage() {
                   </Select>
                   <p className="text-sm text-muted-foreground">
                     {datasourceType === "pmtiles"
-                      ? "PMTilesはベクタタイルアーカイブ形式です（タイプが「pmtiles」のタイルセットに紐づけられます）"
-                      : "COGはCloud Optimized GeoTIFF形式です（タイプが「raster」のタイルセットに紐づけられます）"}
+                      ? t("type_pmtiles_desc")
+                      : t("type_cog_desc")}
                   </p>
                 </div>
 
                 {/* タイルセット選択 */}
                 <div className="space-y-2">
-                  <Label htmlFor="tileset">タイルセット *</Label>
+                  <Label htmlFor="tileset">{t("tileset_label")}</Label>
                   {tilesetsLoading ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      タイルセットを読み込み中...
+                      {t("tileset_loading")}
                     </div>
                   ) : filteredTilesets.length === 0 ? (
                     <div className="space-y-2">
@@ -309,16 +311,16 @@ export default function NewDatasourcePage() {
                         <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                           {datasourceType === "pmtiles"
-                            ? "pmtilesタイプのタイルセットがありません。"
-                            : "rasterタイプのタイルセットがありません。"}
+                            ? t("tileset_none_pmtiles")
+                            : t("tileset_none_cog")}
                           <br />
-                          先にタイルセットを作成してください。
+                          {t("tileset_none_suffix")}
                         </AlertDescription>
                       </Alert>
                       <Button variant="outline" asChild>
                         <Link href="/tilesets/new">
                           <Plus className="mr-2 h-4 w-4" />
-                          タイルセットを作成
+                          {t("tileset_create_link")}
                         </Link>
                       </Button>
                     </div>
@@ -329,7 +331,7 @@ export default function NewDatasourcePage() {
                       disabled={isSubmitting}
                     >
                       <SelectTrigger id="tileset" data-testid="datasource-form-tileset">
-                        <SelectValue placeholder="タイルセットを選択" />
+                        <SelectValue placeholder={t("tileset_placeholder")} />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredTilesets.map((ts) => (
@@ -349,7 +351,7 @@ export default function NewDatasourcePage() {
 
                 {/* 入力モード切り替え (Issue #101) */}
                 <div className="space-y-2">
-                  <Label htmlFor="mode">入力方法 *</Label>
+                  <Label htmlFor="mode">{t("mode_label")}</Label>
                   <Select
                     value={inputMode}
                     onValueChange={(v) => handleModeChange(v as InputMode)}
@@ -362,21 +364,21 @@ export default function NewDatasourcePage() {
                       <SelectItem value="url">
                         <div className="flex items-center gap-2">
                           <ExternalLink className="h-4 w-4" />
-                          URL を指定（外部 HTTP(S) サーバー）
+                          {t("mode_url_label")}
                         </div>
                       </SelectItem>
                       <SelectItem value="upload">
                         <div className="flex items-center gap-2">
                           <Upload className="h-4 w-4" />
-                          ファイルをアップロード（Fly Tigris に保存）
+                          {t("mode_upload_label")}
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-sm text-muted-foreground">
                     {inputMode === "url"
-                      ? "外部の HTTP(S) URL を指定します（s3:// 等の内部 URL は対象外）"
-                      : "ローカルのファイルを直接 Fly Tigris (S3 互換 storage) にアップロードします"}
+                      ? t("mode_url_desc")
+                      : t("mode_upload_desc")}
                   </p>
                 </div>
 
@@ -384,7 +386,7 @@ export default function NewDatasourcePage() {
                   <>
                     {/* URL */}
                     <div className="space-y-2">
-                      <Label htmlFor="url">URL *</Label>
+                      <Label htmlFor="url">{t("url_label")}</Label>
                       <div className="relative">
                         <Input
                           id="url"
@@ -393,8 +395,8 @@ export default function NewDatasourcePage() {
                           onChange={(e) => handleUrlChange(e.target.value)}
                           placeholder={
                             datasourceType === "pmtiles"
-                              ? "https://example.com/tiles.pmtiles"
-                              : "https://example.com/image.tif"
+                              ? t("url_placeholder_pmtiles")
+                              : t("url_placeholder_cog")
                           }
                           disabled={isSubmitting}
                           className={
@@ -418,8 +420,8 @@ export default function NewDatasourcePage() {
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {datasourceType === "pmtiles"
-                          ? "PMTilesファイルのURLを入力してください（HTTP Range Requestsに対応している必要があります）"
-                          : "Cloud Optimized GeoTIFFファイルのURLを入力してください"}
+                          ? t("url_desc_pmtiles")
+                          : t("url_desc_cog")}
                       </p>
                       {url && (
                         <a
@@ -428,7 +430,7 @@ export default function NewDatasourcePage() {
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
                         >
-                          URLを開く
+                          {t("url_open")}
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
@@ -436,29 +438,29 @@ export default function NewDatasourcePage() {
 
                     {/* ストレージプロバイダー */}
                     <div className="space-y-2">
-                      <Label htmlFor="storage">ストレージプロバイダー</Label>
+                      <Label htmlFor="storage">{t("storage_label")}</Label>
                       <Select
                         value={storageProvider}
                         onValueChange={(v) => setStorageProvider(v as StorageProvider)}
                         disabled={isSubmitting}
                       >
                         <SelectTrigger id="storage" data-testid="datasource-form-storage-provider">
-                          <SelectValue placeholder="ストレージを選択" />
+                          <SelectValue placeholder={t("storage_placeholder")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="http">HTTP（汎用）</SelectItem>
-                          <SelectItem value="s3">S3 互換 (Fly Tigris / AWS S3 / R2)</SelectItem>
+                          <SelectItem value="http">{t("storage_http")}</SelectItem>
+                          <SelectItem value="s3">{t("storage_s3")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <p className="text-sm text-muted-foreground">
-                        URLから自動判定されますが、手動で変更することもできます
+                        {t("storage_auto_detect")}
                       </p>
                     </div>
                   </>
                 ) : (
                   /* アップロードモード (Issue #101) */
                   <div className="space-y-2">
-                    <Label htmlFor="file">ファイル *</Label>
+                    <Label htmlFor="file">{t("file_label")}</Label>
                     {/*
                      * `<input type="file">` は uncontrolled element のため、
                      * `setFile(null)` だけでは DOM 側の選択ファイル名が残り
@@ -480,12 +482,12 @@ export default function NewDatasourcePage() {
                     />
                     <p className="text-sm text-muted-foreground">
                       {datasourceType === "pmtiles"
-                        ? "PMTiles ファイル（拡張子 .pmtiles）を選択してください"
-                        : "Cloud Optimized GeoTIFF ファイル（拡張子 .tif / .tiff / .geotiff）を選択してください"}
+                        ? t("file_desc_pmtiles")
+                        : t("file_desc_cog")}
                     </p>
                     {file && (
                       <p className="text-sm">
-                        選択中: <span className="font-mono">{file.name}</span>{" "}
+                        {t("file_selected")} <span className="font-mono">{file.name}</span>{" "}
                         <span className="text-muted-foreground">
                           ({(file.size / (1024 * 1024)).toFixed(2)} MB)
                         </span>
@@ -502,7 +504,7 @@ export default function NewDatasourcePage() {
                     onClick={() => router.push("/datasources")}
                     disabled={isSubmitting}
                   >
-                    キャンセル
+                    {t("cancel")}
                   </Button>
                   <Button
                     type="submit"
@@ -517,7 +519,7 @@ export default function NewDatasourcePage() {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {inputMode === "upload" ? "アップロード中..." : "登録中..."}
+                        {inputMode === "upload" ? t("uploading") : t("registering")}
                       </>
                     ) : (
                       <>
@@ -526,7 +528,7 @@ export default function NewDatasourcePage() {
                         ) : (
                           <Plus className="mr-2 h-4 w-4" />
                         )}
-                        {inputMode === "upload" ? "アップロード" : "登録する"}
+                        {inputMode === "upload" ? t("upload_button") : t("register_button")}
                       </>
                     )}
                   </Button>
@@ -539,38 +541,27 @@ export default function NewDatasourcePage() {
         {/* ヘルプ */}
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle className="text-lg">ヒント</CardTitle>
+            <CardTitle className="text-lg">{t("help_title")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <div>
-              <h4 className="font-medium text-foreground">PMTilesとは？</h4>
-              <p>
-                PMTilesは、ベクタタイルを単一ファイルにアーカイブした形式です。
-                HTTP Range Requestsを利用して効率的にタイルを取得できます。
-              </p>
+              <h4 className="font-medium text-foreground">{t("help_pmtiles_title")}</h4>
+              <p>{t("help_pmtiles_desc")}</p>
             </div>
             <div>
-              <h4 className="font-medium text-foreground">COGとは？</h4>
-              <p>
-                Cloud Optimized GeoTIFF（COG）は、クラウド上での効率的なアクセスに最適化されたGeoTIFF形式です。
-                部分的な読み取りが可能で、大きな画像でも必要な部分だけを取得できます。
-              </p>
+              <h4 className="font-medium text-foreground">{t("help_cog_title")}</h4>
+              <p>{t("help_cog_desc")}</p>
             </div>
             <div>
-              <h4 className="font-medium text-foreground">対応ストレージ</h4>
+              <h4 className="font-medium text-foreground">{t("help_storage_title")}</h4>
               <ul className="list-disc list-inside space-y-1 mt-1">
-                <li>S3 互換 - Fly Tigris / AWS S3 / Cloudflare R2 等（API キーで認証）</li>
-                <li>HTTP - 一般的なHTTPサーバー（CORSとRange Requestsが必要）</li>
+                <li>{t("help_storage_s3")}</li>
+                <li>{t("help_storage_http")}</li>
               </ul>
             </div>
             <div>
-              <h4 className="font-medium text-foreground">直接アップロード（Issue #101）</h4>
-              <p>
-                「ファイルをアップロード」を選ぶと、Fly Tigris の private bucket
-                に直接保存され、内部 URL（<span className="font-mono">s3://</span>）として
-                管理されます。タイル配信は API 経由で行われるため、外部からは bucket に
-                アクセスできない安全な構成になります。
-              </p>
+              <h4 className="font-medium text-foreground">{t("help_upload_title")}</h4>
+              <p>{t("help_upload_desc")}</p>
             </div>
           </CardContent>
         </Card>

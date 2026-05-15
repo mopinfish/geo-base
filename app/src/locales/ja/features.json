@@ -12,6 +12,7 @@
     "limit_50": "50件",
     "limit_100": "100件",
     "export_hint": "※ エクスポートするには、上のドロップダウンからタイルセットを選択してください",
+    "export_disabled_tooltip": "エクスポートするにはタイルセットを選択してください",
     "selected_count": "{count}件を選択中",
     "clear_selection": "選択解除",
     "export_selected": "選択をエクスポート",

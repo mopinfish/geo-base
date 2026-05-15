@@ -484,7 +484,7 @@ export default function FeaturesPage() {
               size="sm"
               onClick={() => setExportDialogOpen(true)}
               disabled={selectedTileset === "all"}
-              title={selectedTileset === "all" ? t("export_hint") : t("export")}
+              title={selectedTileset === "all" ? t("export_disabled_tooltip") : t("export")}
             >
               <Download className="mr-2 h-4 w-4" />
               {t("export")}

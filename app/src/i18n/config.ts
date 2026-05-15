@@ -36,8 +36,23 @@ export const FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE: Locale = "ja";
  *   delete dialog) の UI 文言 (Phase 3d / Issue #107)。
  * - `features`: フィーチャー系画面 (一覧 / 新規 / 詳細 / 編集 / インポート + form +
  *   dialog) の UI 文言 (Phase 3e / Issue #107)。
- *
- * PR-E 以降 (features / datasources / ...) で domain 別に namespace を追加していく。
+ * - `datasources`: データソース系画面 (一覧 / 新規 / 詳細) の UI 文言
+ *   (Phase 3f / Issue #107)。
+ * - `api-keys`: APIキー管理画面の UI 文言 (Phase 3f / Issue #107)。
+ * - `settings`: アカウント設定画面 (プロフィール / パスワード) の UI 文言
+ *   (Phase 3f / Issue #107)。
+ * - `teams`: チーム管理画面 (一覧 / 詳細 / メンバー / 招待 / タイルセット共有 + dialog)
+ *   の UI 文言 (Phase 3g / Issue #107)。
  */
-export const NAMESPACES = ["common", "api-errors", "auth", "tilesets", "features"] as const;
+export const NAMESPACES = [
+  "common",
+  "api-errors",
+  "auth",
+  "tilesets",
+  "features",
+  "datasources",
+  "api-keys",
+  "settings",
+  "teams",
+] as const;
 export type Namespace = (typeof NAMESPACES)[number];
