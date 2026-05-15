@@ -51,7 +51,6 @@ export function MapView({
   const onMapClickRef = useRef(onMapClick);
   const initialViewRef = useRef({ center, zoom, interactive });
   const [isLoaded, setIsLoaded] = useState(false);
-  const [centerLng, centerLat] = center;
 
   useEffect(() => {
     onMapClickRef.current = onMapClick;
@@ -104,11 +103,6 @@ export function MapView({
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!map.current || !isLoaded) return;
-    map.current.jumpTo({ center: [centerLng, centerLat], zoom });
-  }, [centerLng, centerLat, zoom, isLoaded]);
 
   // GeoJSONデータの表示
   useEffect(() => {

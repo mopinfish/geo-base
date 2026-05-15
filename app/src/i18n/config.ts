@@ -29,8 +29,7 @@ export const FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE: Locale = "ja";
  *
  * - `common`: 横断的 (app title / nav / button labels 等)
  * - `dashboard`: 管理画面トップの表示文言。
- * - `api-errors`: API code → user-facing message のマップ。Phase 2b の
- *   `app/src/lib/api-errors.ts:JA_MESSAGES` を JSON 化したもの。
+ * - `api-errors`: API code → user-facing message の locale catalog。
  * - `auth`: 認証系画面 (login / password-reset / invitation) の UI 文言
  *   (Phase 3c / Issue #107)。
  * - `tilesets`: タイルセット系画面 (一覧 / 新規 / 詳細 / 編集 + form +

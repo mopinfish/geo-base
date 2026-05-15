@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocale } from "next-intl";
+import type { Locale } from "@/i18n/config";
 import { api } from "@/lib/api";
 import { authClient } from "@/lib/auth/client";
 
@@ -13,9 +15,11 @@ import { authClient } from "@/lib/auth/client";
  * @returns { api, isReady } - APIクライアントと準備完了状態
  */
 export function useApi() {
+  const locale = useLocale() as Locale;
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    api.setLocale(locale);
     // 初期トークン設定
     const token = authClient.getAccessToken();
     api.setToken(token);
@@ -35,7 +39,7 @@ export function useApi() {
     });
 
     return unsubscribe;
-  }, []);
+  }, [locale]);
 
   return { api, isReady };
 }
@@ -44,7 +48,8 @@ export function useApi() {
  * 認証トークンを一度だけ設定するユーティリティ
  * Server Actionsや非コンポーネントで使用
  */
-export async function setupApiToken(): Promise<void> {
+export async function setupApiToken(locale?: Locale): Promise<void> {
+  api.setLocale(locale ?? null);
   const token = authClient.getAccessToken();
   if (token) {
     api.setToken(token);

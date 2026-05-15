@@ -100,7 +100,7 @@ export function extractApiError(body: unknown): ApiClientError | Error | null {
 }
 
 /**
- * ApiClientError または一般 Error をユーザー向け日本語メッセージに変換する。
+ * ApiClientError または一般 Error を locale に応じたユーザー向けメッセージに変換する。
  *
  * - `ApiClientError` で `code` が catalog にあれば locale に応じた訳文を返す
  * - `code` が未知なら英語 `message` をそのまま返す (forward-compat)

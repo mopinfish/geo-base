@@ -170,6 +170,7 @@ export function TilesetMapPreview({
   const fullscreenMapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const fullscreenMap = useRef<maplibregl.Map | null>(null);
+  // MapLibre handlers run outside React; strings are translated when handlers create new UI.
   const tRef = useRef(t);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
