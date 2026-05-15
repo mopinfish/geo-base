@@ -295,17 +295,39 @@ export default function ApiKeysPage() {
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-lg">{key.name}</CardTitle>
                         {key.revoked_at ? (
-                          <Badge variant="destructive">{t("status_revoked")}</Badge>
+                          <Badge
+                            variant="destructive"
+                            data-testid="api-key-status-badge"
+                            data-badge-status="revoked"
+                          >
+                            {t("status_revoked")}
+                          </Badge>
                         ) : key.is_expired ? (
-                          <Badge variant="outline" className="text-orange-600">
+                          <Badge
+                            variant="outline"
+                            className="text-orange-600"
+                            data-testid="api-key-status-badge"
+                            data-badge-status="expired"
+                          >
                             {t("status_expired")}
                           </Badge>
                         ) : key.is_active ? (
-                          <Badge variant="secondary" className="text-green-800">
+                          <Badge
+                            variant="secondary"
+                            className="text-green-800"
+                            data-testid="api-key-status-badge"
+                            data-badge-status="active"
+                          >
                             {t("status_active")}
                           </Badge>
                         ) : (
-                          <Badge variant="outline">{t("status_inactive")}</Badge>
+                          <Badge
+                            variant="outline"
+                            data-testid="api-key-status-badge"
+                            data-badge-status="inactive"
+                          >
+                            {t("status_inactive")}
+                          </Badge>
                         )}
                       </div>
                       <CardDescription

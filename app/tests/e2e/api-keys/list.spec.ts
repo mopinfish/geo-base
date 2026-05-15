@@ -146,7 +146,10 @@ test.describe("API Keys list - revoke", () => {
 
     // status 文言ではなく状態属性で確認する。
     await expect(row).toHaveAttribute("data-key-status", "revoked");
-    await expect(row.getByRole("button").last()).toBeVisible();
+    await expect(row.getByTestId("api-key-status-badge")).toHaveAttribute(
+      "data-badge-status",
+      "revoked",
+    );
   });
 });
 
