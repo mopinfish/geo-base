@@ -367,7 +367,7 @@ export default function NewDatasourcePage() {
                           {t("mode_url_label")}
                         </div>
                       </SelectItem>
-                      <SelectItem value="upload">
+                      <SelectItem value="upload" data-testid="datasource-form-mode-upload">
                         <div className="flex items-center gap-2">
                           <Upload className="h-4 w-4" />
                           {t("mode_upload_label")}

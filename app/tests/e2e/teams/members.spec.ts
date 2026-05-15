@@ -58,7 +58,7 @@ test.describe("Teams members - invite", () => {
 
     // 招待タブに切り替えて行が見えることを確認。
     // 招待は state 直接更新でも反映される (invitations list)。
-    await page.getByRole("tab", { name: /招待/ }).click();
+    await page.getByTestId("team-tab-invitations").click();
 
     const row = page
       .getByTestId("team-invitation-row")
@@ -100,7 +100,7 @@ test.describe("Teams members - removal", () => {
     const targetRow = members.filter({ hasText: memberEmail });
     await expect(targetRow).toBeVisible();
     await targetRow.getByRole("button").last().click(); // dropdown trigger
-    await page.getByRole("menuitem", { name: /削除/ }).click();
+    await page.getByTestId("team-member-remove").click();
 
     // 1 件に減る (owner のみ)。
     await expect(members).toHaveCount(1);
@@ -129,15 +129,17 @@ test.describe("Teams members - removal", () => {
       .getByTestId("team-member-row")
       .filter({ hasText: memberEmail });
     await expect(memberRow).toBeVisible();
-    // 招待時の default role は "member" なので、最初の表示は「メンバー」。
-    await expect(memberRow).toContainText("メンバー");
+    // 招待時の default role は "member"。
+    await expect(memberRow).toHaveAttribute("data-team-role", "member");
 
     // dropdown を開いて「管理者に変更」を選択。
     await memberRow.getByRole("button").last().click();
     await page.getByTestId("team-member-role-promote").click();
 
-    // role が "administrator" → ラベル「管理者」に切り替わる。
-    await expect(memberRow).toContainText("管理者", { timeout: 10_000 });
+    // role が "administrator" に切り替わる。
+    await expect(memberRow).toHaveAttribute("data-team-role", "administrator", {
+      timeout: 10_000,
+    });
 
     // 続けて demote (メンバーに戻す) も検証する。dropdown 再展開 → promote
     // 側が disabled、demote 側を click。
@@ -145,7 +147,9 @@ test.describe("Teams members - removal", () => {
     await expect(page.getByTestId("team-member-role-promote")).toBeDisabled();
     await page.getByTestId("team-member-role-demote").click();
 
-    await expect(memberRow).toContainText("メンバー", { timeout: 10_000 });
+    await expect(memberRow).toHaveAttribute("data-team-role", "member", {
+      timeout: 10_000,
+    });
   });
 });
 
