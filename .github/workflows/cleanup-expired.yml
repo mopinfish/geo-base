@@ -44,20 +44,24 @@ jobs:
         # Update when a new release is published: https://github.com/superfly/flyctl-actions/releases
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
 
+      - name: Validate Fly credentials
+        run: |
+          set -euo pipefail
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "FLY_API_TOKEN is not set"
+            exit 1
+          fi
+
       - name: Resolve current production image
         run: |
           set -euo pipefail
-          IMAGE_INFO=$(flyctl image show --app "$FLY_APP" --json)
-          REGISTRY=$(echo "$IMAGE_INFO" | jq -r '.Registry')
-          REPOSITORY=$(echo "$IMAGE_INFO" | jq -r '.Repository')
-          TAG=$(echo "$IMAGE_INFO" | jq -r '.Tag')
-          if [ -z "$REGISTRY" ] || [ -z "$REPOSITORY" ] || [ -z "$TAG" ] \
-             || [ "$REGISTRY" = "null" ] || [ "$REPOSITORY" = "null" ] || [ "$TAG" = "null" ]; then
+          STATUS_JSON=$(flyctl status --app "$FLY_APP" --json)
+          IMAGE=$(echo "$STATUS_JSON" | jq -r '.Machines[0].config.image // empty')
+          if [ -z "$IMAGE" ] || [ "$IMAGE" = "null" ]; then
             echo "Failed to resolve image. Output was:"
-            echo "$IMAGE_INFO"
+            echo "$STATUS_JSON"
             exit 1
           fi
-          IMAGE="$REGISTRY/$REPOSITORY:$TAG"
           echo "Resolved image: $IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
