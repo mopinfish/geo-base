@@ -561,7 +561,10 @@ export default function FeaturesPage() {
 
         {/* 成功メッセージ */}
         {successMessage && (
-          <Card className="border-green-500 bg-green-50 dark:bg-green-950">
+          <Card
+            className="border-green-500 bg-green-50 dark:bg-green-950"
+            data-testid="feature-success-message"
+          >
             <CardContent className="py-3">
               <p className="text-green-700 dark:text-green-300">{successMessage}</p>
             </CardContent>

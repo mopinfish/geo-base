@@ -88,9 +88,9 @@ test.describe("Features bulk operations", () => {
     await page.getByTestId("feature-bulk-update-submit").click();
 
     // 更新完了後、再 fetch されたリストには成功メッセージが表示される。
-    await expect(
-      page.getByText(/3件のフィーチャーを更新しました/),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("feature-success-message")).toBeVisible({
+      timeout: 15_000,
+    });
 
     // リストの行数自体は変わらない (3 件のまま)。
     await expect(page.getByTestId("feature-list-row")).toHaveCount(3);

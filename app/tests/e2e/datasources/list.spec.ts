@@ -109,8 +109,6 @@ test.describe("Datasources list - bulk delete", () => {
 
     // 削除完了後、一覧が空になる。
     await expect(rows).toHaveCount(0);
-    await expect(
-      page.getByText("データソースがありません"),
-    ).toBeVisible();
+    await expect(page.getByTestId("datasource-empty-register-button")).toBeVisible();
   });
 });
