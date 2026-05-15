@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -98,7 +99,7 @@ export function MapView({
         map.current = null;
       }
     };
-  }, []);
+  }, [center, interactive, onMapClick, zoom]);
 
   // GeoJSONデータの表示
   useEffect(() => {
@@ -357,6 +358,7 @@ export function GeometryPicker({
   height = "350px",
   enableClickAdd = true,
 }: GeometryPickerProps) {
+  const t = useTranslations("features.form");
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -488,7 +490,7 @@ export function GeometryPicker({
         map.current = null;
       }
     };
-  }, []);
+  }, [enableClickAdd, geometryType, getCurrentCoords, onCoordAdd, onPointChange, isLoaded]);
 
   // ジオメトリの表示を更新
   useEffect(() => {
@@ -629,18 +631,18 @@ export function GeometryPicker({
       );
       map.current.fitBounds(bounds, { padding: 50, maxZoom: 15 });
     }
-  }, [geometryType, isLoaded]);
+  }, [geometryType, isLoaded, getCurrentCoords]);
 
   // ヘルプテキスト
   const getHelpText = () => {
     if (!enableClickAdd) return null;
     switch (geometryType) {
       case "Point":
-        return "地図をクリックしてポイントを設定、またはマーカーをドラッグして移動";
+        return t("geometry_editor_help_point");
       case "LineString":
-        return "地図をクリックして頂点を追加（2点以上必要）";
+        return t("geometry_editor_help_linestring");
       case "Polygon":
-        return "地図をクリックして頂点を追加（3点以上必要）";
+        return t("geometry_editor_help_polygon");
       default:
         return null;
     }

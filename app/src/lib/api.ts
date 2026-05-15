@@ -3,7 +3,7 @@
  */
 
 import { authClient } from "./auth/client";
-import { extractApiError } from "./api-errors";
+import { extractApiError, translateApiError } from "./api-errors";
 
 // 環境変数からAPIのベースURLを取得
 // 未設定の場合は空文字 → 相対パス /api/* で叩き、Next.js の dev rewrites
@@ -664,7 +664,7 @@ class ApiClient {
         // JSON パースに失敗した場合は fallback メッセージで Error を投げる
       }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throw new Error(translateApiError(extracted));
       throw new Error(fallback);
     }
 
@@ -707,7 +707,7 @@ class ApiClient {
         // ignore
       }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throw new Error(translateApiError(extracted));
       throw new Error(fallback);
     }
 
@@ -936,7 +936,7 @@ class ApiClient {
         body = await response.json();
       } catch { /* keep default */ }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throw new Error(translateApiError(extracted));
       throw new Error(fallback);
     }
     return response.json();
@@ -964,7 +964,7 @@ class ApiClient {
         body = await response.json();
       } catch { /* keep default */ }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throw new Error(translateApiError(extracted));
       throw new Error(fallback);
     }
     return response.json();

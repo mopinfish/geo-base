@@ -30,7 +30,7 @@ import {
   ArrowLeft,
   Loader2,
   FileJson,
-  Image,
+  Image as ImageIcon,
   AlertCircle,
   CheckCircle2,
   ExternalLink,
@@ -284,7 +284,7 @@ export default function NewDatasourcePage() {
                       </SelectItem>
                       <SelectItem value="cog">
                         <div className="flex items-center gap-2">
-                          <Image className="h-4 w-4" />
+                          <ImageIcon className="h-4 w-4" />
                           COG (Cloud Optimized GeoTIFF)
                         </div>
                       </SelectItem>

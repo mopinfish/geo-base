@@ -2,7 +2,8 @@
   "app": {
     "title": "geo-base Admin",
     "brand": "geo-base",
-    "version": "geo-base Admin v0.2.0"
+    "version": "geo-base Admin v0.2.0",
+    "description": "geo-base tile server admin console"
   },
   "nav": {
     "dashboard": "Dashboard",

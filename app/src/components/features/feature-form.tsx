@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,7 @@ export function FeatureForm({
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<FeatureFormValues>({
     resolver,
@@ -394,6 +394,7 @@ export function FeatureForm({
   const coordsArray = getCoordinatesArray();
   const minPointsRequired = geometryType === "Point" ? 1 : geometryType === "LineString" ? 2 : 3;
   const isGeometryValid = coordsArray.length >= minPointsRequired;
+  const tilesetId = useWatch({ control, name: "tileset_id" });
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
@@ -407,7 +408,7 @@ export function FeatureForm({
           <div className="space-y-2">
             <Label htmlFor="tileset_id">{t("tileset_label")}</Label>
             <Select
-              value={watch("tileset_id")}
+              value={tilesetId}
               onValueChange={(value) => setValue("tileset_id", value)}
               disabled={isEditMode}
             >

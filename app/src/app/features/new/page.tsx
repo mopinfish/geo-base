@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -21,7 +21,7 @@ export default function NewFeaturePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchTilesets = async () => {
+  const fetchTilesets = useCallback(async () => {
     if (!isReady) return;
     
     setIsLoading(true);
@@ -39,11 +39,11 @@ export default function NewFeaturePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, isReady, t]);
 
   useEffect(() => {
     fetchTilesets();
-  }, [isReady]);
+  }, [fetchTilesets]);
 
   const handleSubmit = async (data: FeatureCreate | FeatureUpdate) => {
     setIsSubmitting(true);

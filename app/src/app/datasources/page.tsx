@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import Link from "next/link";
 import { AdminLayout } from "@/components/layout";
@@ -41,7 +41,7 @@ import {
   Trash2,
   ExternalLink,
   FileJson,
-  Image,
+  Image as ImageIcon,
   Eye,
   Loader2,
   CheckCircle2,
@@ -76,7 +76,7 @@ export default function DatasourcesPage() {
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-  const fetchDatasources = async () => {
+  const fetchDatasources = useCallback(async () => {
     if (!isReady || !api) return;
 
     setLoading(true);
@@ -103,11 +103,11 @@ export default function DatasourcesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [api, isReady, filterType, includePrivate, t]);
 
   useEffect(() => {
     fetchDatasources();
-  }, [api, isReady, filterType, includePrivate]);
+  }, [fetchDatasources]);
 
   const handleDelete = async () => {
     if (!deletingId || !api) return;
@@ -155,7 +155,7 @@ export default function DatasourcesPage() {
       case "pmtiles":
         return <FileJson className="h-4 w-4" />;
       case "cog":
-        return <Image className="h-4 w-4" />;
+        return <ImageIcon className="h-4 w-4" />;
       default:
         return <Database className="h-4 w-4" />;
     }
@@ -311,7 +311,7 @@ export default function DatasourcesPage() {
                     onClick={() => setFilterType("cog")}
                     data-testid="datasource-filter-type-cog"
                   >
-                    <Image className="mr-1 h-3 w-3" />
+                    <ImageIcon className="mr-1 h-3 w-3" />
                     COG
                   </Button>
                 </div>
@@ -568,7 +568,7 @@ export default function DatasourcesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">COG</CardTitle>
-              <Image className="h-4 w-4 text-muted-foreground" />
+              <ImageIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">

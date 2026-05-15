@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -50,7 +50,7 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
     };
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!isReady) return;
     
     setIsLoading(true);
@@ -87,11 +87,11 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, isReady, id, t]);
 
   useEffect(() => {
     fetchData();
-  }, [id, isReady]);
+  }, [fetchData]);
 
   const handleSubmit = async (data: FeatureCreate | FeatureUpdate) => {
     setIsSubmitting(true);

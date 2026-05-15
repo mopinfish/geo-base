@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { AdminLayout } from "@/components/layout";
@@ -117,7 +117,7 @@ export default function FeaturesPage() {
     };
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!isReady) return;
     
     setIsLoading(true);
@@ -186,11 +186,11 @@ export default function FeaturesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, isReady, selectedTileset, limit, t]);
 
   useEffect(() => {
     fetchData();
-  }, [selectedTileset, limit, isReady]);
+  }, [fetchData]);
 
   // 成功メッセージの自動消去
   useEffect(() => {
@@ -522,7 +522,7 @@ export default function FeaturesPage() {
               <div className="relative">
                 <select
                   data-testid="feature-filter-tileset"
-                  aria-label="タイルセットで絞り込み"
+                  aria-label={t("filter_tileset_aria")}
                   value={selectedTileset}
                   onChange={(e) => setSelectedTileset(e.target.value)}
                   className="h-9 w-[200px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -539,7 +539,7 @@ export default function FeaturesPage() {
               <div className="relative">
                 <select
                   data-testid="feature-limit-select"
-                  aria-label="表示件数"
+                  aria-label={t("limit_aria")}
                   value={String(limit)}
                   onChange={(e) => setLimit(Number(e.target.value))}
                   className="h-9 w-[120px] appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-8 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
@@ -677,7 +677,7 @@ export default function FeaturesPage() {
                       <input
                         data-testid="feature-select-all"
                         type="checkbox"
-                        aria-label="すべてのフィーチャーを選択"
+                        aria-label={t("select_all_aria")}
                         checked={selectedIds.size === filteredFeatures.length && filteredFeatures.length > 0}
                         onChange={toggleAllSelection}
                         className="h-4 w-4 rounded border-gray-300"
@@ -703,7 +703,7 @@ export default function FeaturesPage() {
                         <input
                           data-testid="feature-row-checkbox"
                           type="checkbox"
-                          aria-label="このフィーチャーを選択"
+                          aria-label={t("select_row_aria")}
                           checked={selectedIds.has(feature.id)}
                           onChange={() => toggleSelection(feature.id)}
                           className="h-4 w-4 rounded border-gray-300"
@@ -752,7 +752,7 @@ export default function FeaturesPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="フィーチャー詳細を表示"
+                            aria-label={t("detail_aria")}
                             onClick={() => router.push(`/features/${feature.id}`)}
                           >
                             <Eye className="h-4 w-4" />
@@ -760,7 +760,7 @@ export default function FeaturesPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="フィーチャーを編集"
+                            aria-label={t("edit_aria")}
                             onClick={() => router.push(`/features/${feature.id}/edit`)}
                           >
                             <Pencil className="h-4 w-4" />

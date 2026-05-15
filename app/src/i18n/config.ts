@@ -28,6 +28,7 @@ export const FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE: Locale = "ja";
  * Catalog namespace 一覧。`src/locales/<locale>/<ns>.json` が実体。
  *
  * - `common`: 横断的 (app title / nav / button labels 等)
+ * - `dashboard`: 管理画面トップの表示文言。
  * - `api-errors`: API code → user-facing message のマップ。Phase 2b の
  *   `app/src/lib/api-errors.ts:JA_MESSAGES` を JSON 化したもの。
  * - `auth`: 認証系画面 (login / password-reset / invitation) の UI 文言
@@ -46,6 +47,7 @@ export const FALLBACK_LOCALE_FOR_ACCEPT_LANGUAGE: Locale = "ja";
  */
 export const NAMESPACES = [
   "common",
+  "dashboard",
   "api-errors",
   "auth",
   "tilesets",

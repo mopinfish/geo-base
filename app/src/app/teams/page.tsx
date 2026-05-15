@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Plus, Users, Settings, Trash2, MoreHorizontal } from "lucide-react";
@@ -47,13 +47,7 @@ export default function TeamsPage() {
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (isReady) {
-      loadTeams();
-    }
-  }, [isReady]);
-
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -65,7 +59,13 @@ export default function TeamsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, t]);
+
+  useEffect(() => {
+    if (isReady) {
+      loadTeams();
+    }
+  }, [isReady, loadTeams]);
 
   const handleCreateTeam = async () => {
     if (!createForm.name.trim()) return;

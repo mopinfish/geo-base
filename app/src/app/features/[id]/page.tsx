@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
@@ -66,7 +66,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
     };
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!isReady) return;
     
     setIsLoading(true);
@@ -106,11 +106,11 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, isReady, id, t]);
 
   useEffect(() => {
     fetchData();
-  }, [id, isReady]);
+  }, [fetchData]);
 
   const handleDelete = async () => {
     await api.deleteFeature(id);

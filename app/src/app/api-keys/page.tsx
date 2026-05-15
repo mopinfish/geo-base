@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Key,
   Plus,
@@ -104,13 +104,7 @@ export default function ApiKeysPage() {
   const [keyToDelete, setKeyToDelete] = useState<ApiKey | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (isReady) {
-      loadData();
-    }
-  }, [isReady]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -126,7 +120,13 @@ export default function ApiKeysPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, t]);
+
+  useEffect(() => {
+    if (isReady) {
+      loadData();
+    }
+  }, [isReady, loadData]);
 
   const handleCreateKey = async () => {
     if (!createForm.name.trim()) return;

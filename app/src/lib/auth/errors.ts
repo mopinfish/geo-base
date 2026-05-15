@@ -36,7 +36,7 @@ function normalizeDetail(raw: unknown, fallback: string): string {
 
 /**
  * i18n Phase 2b (#106): API レスポンスが envelope `{error: {code, message}}`
- * 形式の場合、`code` をキーに `api-errors.ts` の日本語 map で訳出してから
+ * 形式の場合、`code` をキーに `api-errors.ts` の locale catalog で訳出してから
  * AuthApiError に詰める。ない場合は従来の `{detail: ...}` パスにフォールバック。
  *
  * これにより login / signup / password reset / accept invitation 等の
