@@ -572,7 +572,7 @@ export function TilesetMapPreview({
         });
       });
 
-      const createPopupHandler = (layerId: string) => (e: MapLayerMouseEvent) => {
+      const handlePopupClick = (e: MapLayerMouseEvent) => {
         if (!e.features || e.features.length === 0) return;
 
         const feature = e.features[0];
@@ -641,8 +641,8 @@ export function TilesetMapPreview({
         const pointLayerId = `tileset-point-${layerId}`;
         const polygonLayerId = `tileset-polygon-${layerId}`;
 
-        mapInstance.on("click", pointLayerId, createPopupHandler(pointLayerId));
-        mapInstance.on("click", polygonLayerId, createPopupHandler(polygonLayerId));
+        mapInstance.on("click", pointLayerId, handlePopupClick);
+        mapInstance.on("click", polygonLayerId, handlePopupClick);
 
         mapInstance.on("mouseenter", pointLayerId, setCursor("pointer"));
         mapInstance.on("mouseleave", pointLayerId, setCursor(""));
