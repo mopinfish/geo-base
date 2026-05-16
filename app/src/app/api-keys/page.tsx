@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Key,
   Plus,
@@ -57,6 +57,7 @@ export default function ApiKeysPage() {
   const t = useTranslations("api-keys");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorLoad = t("error_load");
 
   const scopeLabels: Record<ApiKeyScope, string> = {
     read: t("scope_read_label"),
@@ -104,13 +105,7 @@ export default function ApiKeysPage() {
   const [keyToDelete, setKeyToDelete] = useState<ApiKey | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (isReady) {
-      loadData();
-    }
-  }, [isReady]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -122,11 +117,17 @@ export default function ApiKeysPage() {
       setTeams(teamsResponse.teams);
     } catch (err) {
       console.error("Failed to load data:", err);
-      setError(err instanceof Error ? err.message : t("error_load"));
+      setError(err instanceof Error ? err.message : errorLoad);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, errorLoad]);
+
+  useEffect(() => {
+    if (isReady) {
+      loadData();
+    }
+  }, [isReady, loadData]);
 
   const handleCreateKey = async () => {
     if (!createForm.name.trim()) return;

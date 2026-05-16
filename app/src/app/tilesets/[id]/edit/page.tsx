@@ -22,6 +22,7 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
   const router = useRouter();
   const { api, isReady } = useApi();
   const t = useTranslations("tilesets.edit");
+  const errorFetch = t("error_fetch");
 
   const [tileset, setTileset] = useState<Tileset | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,11 +39,11 @@ export default function EditTilesetPage({ params }: EditTilesetPageProps) {
       const data = await api.getTileset(id);
       setTileset(data);
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : t("error_fetch"));
+      setFetchError(err instanceof Error ? err.message : errorFetch);
     } finally {
       setIsLoading(false);
     }
-  }, [api, id, isReady, t]);
+  }, [api, id, isReady, errorFetch]);
 
   useEffect(() => {
     if (isReady) {

@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/context";
 
-export const metadata: Metadata = {
-  title: "geo-base Admin",
-  description: "geo-base タイルサーバー管理画面",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("common");
+  return {
+    title: t("app.title"),
+    description: t("app.description"),
+  };
+}
 
 export default async function RootLayout({
   children,

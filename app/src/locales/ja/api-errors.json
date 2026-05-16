@@ -68,5 +68,5 @@
 
   "internal_db_error": "データベースエラーが発生しました",
   "internal_storage_error": "ストレージエラーが発生しました",
-  "internal_unexpected": "想定外のエラーが発生しました"
+  "internal_unexpected": "予期しないエラーが発生しました"
 }

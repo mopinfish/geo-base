@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { 
@@ -51,7 +50,6 @@ const BULK_CHUNK_SIZE = 500;
 
 export default function GeoJSONImportPage() {
   const t = useTranslations("features.import");
-  const router = useRouter();
   const { api, isReady } = useApi();
   
   // 状態管理
@@ -69,6 +67,7 @@ export default function GeoJSONImportPage() {
   });
   const [boundsResult, setBoundsResult] = useState<BoundsResult | null>(null);
   const [importTime, setImportTime] = useState<number | null>(null);
+  const hasAutoSelectedTileset = useRef(false);
 
   // タイルセット一覧の取得（vectorタイプのみ）
   useEffect(() => {
@@ -84,8 +83,9 @@ export default function GeoJSONImportPage() {
         setTilesets(vectorTilesets);
         
         // 最初のタイルセットを選択
-        if (vectorTilesets.length > 0 && !selectedTilesetId) {
-          setSelectedTilesetId(vectorTilesets[0].id);
+        if (vectorTilesets.length > 0 && !hasAutoSelectedTileset.current) {
+          hasAutoSelectedTileset.current = true;
+          setSelectedTilesetId((prev) => prev || vectorTilesets[0].id);
         }
       } catch (err) {
         console.error("Failed to fetch tilesets:", err);
@@ -292,7 +292,9 @@ export default function GeoJSONImportPage() {
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Map className="h-4 w-4" />
                       <span>
-                        Bounds更新: [{boundsResult.bounds.map(b => b.toFixed(4)).join(", ")}]
+                        {t("bounds_updated", {
+                          bounds: boundsResult.bounds.map((b) => b.toFixed(4)).join(", "),
+                        })}
                       </span>
                     </div>
                   )}
@@ -415,7 +417,7 @@ export default function GeoJSONImportPage() {
                     id="layer-name"
                     value={layerName}
                     onChange={(e) => setLayerName(e.target.value)}
-                    placeholder="例: buildings, roads, points"
+                    placeholder={t("layer_placeholder")}
                     disabled={status === "importing" || status === "calculating"}
                   />
                   <p className="text-xs text-muted-foreground">

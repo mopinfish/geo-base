@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import maplibregl from "maplibre-gl";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -14,12 +15,6 @@ export interface TilesetMapPreviewProps {
   tileJSON?: TileJSON | null;
   /** 地図の高さ */
   height?: string;
-  /** ベクターレイヤーの塗りつぶし色 */
-  fillColor?: string;
-  /** ベクターレイヤーの線色 */
-  lineColor?: string;
-  /** ベクターレイヤーのポイント色 */
-  pointColor?: string;
   /** ベースマップを非表示にするか */
   hideBaseMap?: boolean;
   /** 初期表示時にboundsに自動フィットするか（デフォルト: true） */
@@ -44,14 +39,14 @@ const LAYER_COLORS = [
 
 // ラスター用カラーマッププリセット
 const COLORMAP_PRESETS = [
-  { value: "", label: "デフォルト（RGB）" },
-  { value: "viridis", label: "Viridis（科学的）" },
-  { value: "terrain", label: "地形 (Terrain)" },
-  { value: "ndvi", label: "植生指数 (NDVI)" },
-  { value: "temperature", label: "温度" },
-  { value: "precipitation", label: "降水量" },
-  { value: "bathymetry", label: "水深" },
-  { value: "grayscale", label: "グレースケール" },
+  { value: "", labelKey: "colormap_default" },
+  { value: "viridis", labelKey: "colormap_viridis" },
+  { value: "terrain", labelKey: "colormap_terrain" },
+  { value: "ndvi", labelKey: "colormap_ndvi" },
+  { value: "temperature", labelKey: "colormap_temperature" },
+  { value: "precipitation", labelKey: "colormap_precipitation" },
+  { value: "bathymetry", labelKey: "colormap_bathymetry" },
+  { value: "grayscale", labelKey: "colormap_grayscale" },
 ];
 
 /**
@@ -166,17 +161,17 @@ export function TilesetMapPreview({
   tileset,
   tileJSON,
   height = "400px",
-  fillColor = "#3b82f6",
-  lineColor = "#2563eb",
-  pointColor = "#22c55e",
   hideBaseMap = false,
   autoFitBounds = true,
   refreshKey,
 }: TilesetMapPreviewProps) {
+  const t = useTranslations("tilesets.detail");
   const mapContainer = useRef<HTMLDivElement>(null);
   const fullscreenMapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const fullscreenMap = useRef<maplibregl.Map | null>(null);
+  // MapLibre handlers run outside React; strings are translated when handlers create new UI.
+  const tRef = useRef(t);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasFittedBounds, setHasFittedBounds] = useState(false);
@@ -187,6 +182,10 @@ export function TilesetMapPreview({
   const [rasterOpacity, setRasterOpacity] = useState(0.9);
   const [colormap, setColormap] = useState("");
   const [showRasterControls, setShowRasterControls] = useState(false);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   // 有効なboundsを取得
   const getValidBounds = useCallback((): number[] | null => {
@@ -572,7 +571,7 @@ export function TilesetMapPreview({
         });
       });
 
-      const createPopupHandler = (layerId: string) => (e: MapLayerMouseEvent) => {
+      const handlePopupClick = (e: MapLayerMouseEvent) => {
         if (!e.features || e.features.length === 0) return;
 
         const feature = e.features[0];
@@ -620,7 +619,7 @@ export function TilesetMapPreview({
           content += "</table>";
           
           if (keys.length > 5) {
-            content += `<div class='text-xs text-gray-400 mt-1'>...他 ${keys.length - 5} 件</div>`;
+            content += `<div class='text-xs text-gray-400 mt-1'>${tRef.current("popup_more_items", { count: keys.length - 5 })}</div>`;
           }
         }
         
@@ -641,8 +640,8 @@ export function TilesetMapPreview({
         const pointLayerId = `tileset-point-${layerId}`;
         const polygonLayerId = `tileset-polygon-${layerId}`;
 
-        mapInstance.on("click", pointLayerId, createPopupHandler(pointLayerId));
-        mapInstance.on("click", polygonLayerId, createPopupHandler(polygonLayerId));
+        mapInstance.on("click", pointLayerId, handlePopupClick);
+        mapInstance.on("click", polygonLayerId, handlePopupClick);
 
         mapInstance.on("mouseenter", pointLayerId, setCursor("pointer"));
         mapInstance.on("mouseleave", pointLayerId, setCursor(""));
@@ -650,7 +649,7 @@ export function TilesetMapPreview({
         mapInstance.on("mouseleave", polygonLayerId, setCursor(""));
       });
     }
-  }, [tileset, tileJSON, getVectorLayers, fillColor, lineColor, pointColor, rasterOpacity]);
+  }, [tileset, tileJSON, getVectorLayers, rasterOpacity]);
 
   /**
    * 地図のベーススタイルを生成
@@ -705,7 +704,7 @@ export function TilesetMapPreview({
 
     const tileUrl = getTileUrl(refreshKey);
     if (!tileUrl) {
-      setError("タイルURLが設定されていません");
+      setError(tRef.current("tile_url_missing"));
       return;
     }
 
@@ -733,12 +732,12 @@ export function TilesetMapPreview({
 
       map.current.on("error", (e) => {
         console.error("Map error:", e);
-        setError("地図の読み込みに失敗しました");
+        setError(tRef.current("map_load_failed"));
       });
     } catch (err) {
       console.error("Map initialization error:", err);
       setError(
-        err instanceof Error ? err.message : "地図の初期化に失敗しました"
+        err instanceof Error ? err.message : tRef.current("map_init_failed")
       );
     }
 
@@ -873,7 +872,7 @@ export function TilesetMapPreview({
       >
         <div className="text-center text-muted-foreground">
           <p className="text-sm">{error}</p>
-          <p className="mt-1 text-xs">タイルの読み込みに失敗しました</p>
+          <p className="mt-1 text-xs">{t("tile_load_failed")}</p>
         </div>
       </div>
     );
@@ -902,10 +901,10 @@ export function TilesetMapPreview({
               className={`bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-md border flex items-center gap-1.5 hover:bg-gray-50 transition-colors ${
                 showRasterControls ? "bg-blue-50 border-blue-300 text-blue-700" : "border-gray-200 text-gray-700"
               }`}
-              title="ラスター表示設定"
+              title={t("raster_controls_title")}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>表示設定</span>
+              <span>{t("controls_label")}</span>
             </button>
             
             {showRasterControls && (
@@ -914,7 +913,7 @@ export function TilesetMapPreview({
                 <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
                   <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5" />
-                    ラスター表示設定
+                    {t("raster_controls_title")}
                   </h4>
                 </div>
                 
@@ -922,7 +921,7 @@ export function TilesetMapPreview({
                   {/* 不透明度スライダー */}
                   <div>
                     <label className="flex items-center justify-between text-xs text-gray-700 mb-2">
-                      <span className="font-medium">不透明度</span>
+                      <span className="font-medium">{t("opacity_label")}</span>
                       <span className="text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">
                         {Math.round(rasterOpacity * 100)}%
                       </span>
@@ -936,8 +935,8 @@ export function TilesetMapPreview({
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
                     />
                     <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                      <span>透明</span>
-                      <span>不透明</span>
+                      <span>{t("opacity_transparent")}</span>
+                      <span>{t("opacity_opaque")}</span>
                     </div>
                   </div>
                   
@@ -945,7 +944,7 @@ export function TilesetMapPreview({
                   <div>
                     <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-2">
                       <Palette className="w-3.5 h-3.5" />
-                      カラーマップ
+                      {t("colormap_label")}
                     </label>
                     <select
                       value={colormap}
@@ -954,12 +953,12 @@ export function TilesetMapPreview({
                     >
                       {COLORMAP_PRESETS.map((cm) => (
                         <option key={cm.value} value={cm.value}>
-                          {cm.label}
+                          {t(cm.labelKey)}
                         </option>
                       ))}
                     </select>
                     <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
-                      ※ RGBカラー画像にはカラーマップは適用されません。単バンドのDEM等に有効です。
+                      {t("raster_note")}
                     </p>
                   </div>
                 </div>
@@ -972,21 +971,21 @@ export function TilesetMapPreview({
         {isLoaded && tileset.type === "vector" && vectorLayers.length > 0 && (
           <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-md border border-gray-200 max-w-[220px]">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="font-semibold text-gray-700">レイヤー:</span>
+              <span className="font-semibold text-gray-700">{t("layer_label")}</span>
               <div className="flex gap-1">
                 <button
                   onClick={() => setAllLayersVisibility(true)}
                   className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                  title="すべて表示"
+                  title={t("show_all_title")}
                 >
-                  全表示
+                  {t("show_all")}
                 </button>
                 <button
                   onClick={() => setAllLayersVisibility(false)}
                   className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                  title="すべて非表示"
+                  title={t("hide_all_title")}
                 >
-                  全非表示
+                  {t("hide_all")}
                 </button>
               </div>
             </div>
@@ -999,7 +998,7 @@ export function TilesetMapPreview({
                   className={`flex items-center gap-1.5 w-full py-0.5 px-1 rounded hover:bg-gray-100 transition-colors ${
                     isVisible ? "" : "opacity-50"
                   }`}
-                  title={isVisible ? `${layer.id}を非表示` : `${layer.id}を表示`}
+                  title={isVisible ? t("hide_layer_title", { id: layer.id }) : t("show_layer_title", { id: layer.id })}
                 >
                   {isVisible ? (
                     <Eye className="w-3 h-3 text-gray-500 flex-shrink-0" />
@@ -1027,10 +1026,10 @@ export function TilesetMapPreview({
             <button
               onClick={toggleFullscreen}
               className="rounded-md px-3 py-1.5 text-xs font-medium shadow-md bg-white/95 backdrop-blur-sm hover:bg-gray-50 cursor-pointer flex items-center gap-1.5 border border-gray-200 text-gray-700"
-              title="全画面表示"
+              title={t("fullscreen_title")}
             >
               <Maximize2 className="h-3.5 w-3.5" />
-              全画面
+              {t("fullscreen")}
             </button>
             <button
               onClick={fitToBounds}
@@ -1040,9 +1039,9 @@ export function TilesetMapPreview({
                   ? "bg-white/95 backdrop-blur-sm hover:bg-gray-50 cursor-pointer text-gray-700" 
                   : "bg-gray-100/90 text-gray-400 cursor-not-allowed"
               }`}
-              title={hasBounds ? "データ範囲にフィット" : "boundsが設定されていません"}
+              title={hasBounds ? t("fit_bounds_title") : t("fit_bounds_missing_title")}
             >
-              範囲にフィット
+              {t("fit_bounds")}
             </button>
           </div>
         )}
@@ -1055,7 +1054,7 @@ export function TilesetMapPreview({
           >
             <div className="text-center text-muted-foreground">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
-              <p className="mt-2 text-sm">地図を読み込み中...</p>
+              <p className="mt-2 text-sm">{t("loading_map")}</p>
             </div>
           </div>
         )}
@@ -1072,7 +1071,7 @@ export function TilesetMapPreview({
           <button
             onClick={toggleFullscreen}
             className="absolute top-4 right-4 z-10 rounded-full bg-white/95 backdrop-blur-sm p-2.5 shadow-lg hover:bg-gray-50 transition-colors border border-gray-200"
-            title="閉じる (ESC)"
+            title={t("close_title")}
           >
             <X className="h-5 w-5 text-gray-700" />
           </button>
@@ -1090,13 +1089,13 @@ export function TilesetMapPreview({
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
                 <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5" />
-                  ラスター表示設定
+                  {t("raster_controls_title")}
                 </h4>
               </div>
               <div className="p-3 space-y-4">
                 <div>
                   <label className="flex items-center justify-between text-xs text-gray-700 mb-2">
-                    <span className="font-medium">不透明度</span>
+                    <span className="font-medium">{t("opacity_label")}</span>
                     <span className="text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">
                       {Math.round(rasterOpacity * 100)}%
                     </span>
@@ -1113,7 +1112,7 @@ export function TilesetMapPreview({
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-2">
                     <Palette className="w-3.5 h-3.5" />
-                    カラーマップ
+                    {t("colormap_label")}
                   </label>
                   <select
                     value={colormap}
@@ -1122,7 +1121,7 @@ export function TilesetMapPreview({
                   >
                     {COLORMAP_PRESETS.map((cm) => (
                       <option key={cm.value} value={cm.value}>
-                        {cm.label}
+                        {t(cm.labelKey)}
                       </option>
                     ))}
                   </select>
@@ -1135,21 +1134,21 @@ export function TilesetMapPreview({
           {tileset.type === "vector" && vectorLayers.length > 0 && (
             <div className="absolute bottom-20 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-md px-3 py-2 text-xs shadow-lg border border-gray-200 max-w-[220px]">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="font-semibold text-gray-700">レイヤー:</span>
+                <span className="font-semibold text-gray-700">{t("layer_label")}</span>
                 <div className="flex gap-1">
                   <button
                     onClick={() => setAllLayersVisibility(true)}
                     className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                    title="すべて表示"
+                    title={t("show_all_title")}
                   >
-                    全表示
+                    {t("show_all")}
                   </button>
                   <button
                     onClick={() => setAllLayersVisibility(false)}
                     className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                    title="すべて非表示"
+                    title={t("hide_all_title")}
                   >
-                    全非表示
+                    {t("hide_all")}
                   </button>
                 </div>
               </div>
@@ -1162,7 +1161,7 @@ export function TilesetMapPreview({
                     className={`flex items-center gap-1.5 w-full py-0.5 px-1 rounded hover:bg-gray-100 transition-colors ${
                       isVisible ? "" : "opacity-50"
                     }`}
-                    title={isVisible ? `${layer.id}を非表示` : `${layer.id}を表示`}
+                    title={isVisible ? t("hide_layer_title", { id: layer.id }) : t("show_layer_title", { id: layer.id })}
                   >
                     {isVisible ? (
                       <Eye className="w-3 h-3 text-gray-500 flex-shrink-0" />
@@ -1200,9 +1199,9 @@ export function TilesetMapPreview({
                 ? "bg-white/95 backdrop-blur-sm hover:bg-gray-50 cursor-pointer text-gray-700" 
                 : "bg-gray-100/90 text-gray-400 cursor-not-allowed"
             }`}
-            title={hasBounds ? "データ範囲にフィット" : "boundsが設定されていません"}
+            title={hasBounds ? t("fit_bounds_title") : t("fit_bounds_missing_title")}
           >
-            範囲にフィット
+            {t("fit_bounds")}
           </button>
         </div>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Plus, Users, Settings, Trash2, MoreHorizontal } from "lucide-react";
@@ -30,6 +30,7 @@ import { Team, TeamCreate } from "@/lib/api";
 
 export default function TeamsPage() {
   const t = useTranslations("teams.list");
+  const errorLoad = t("error_load");
   const router = useRouter();
   const { api, isReady } = useApi();
 
@@ -47,13 +48,7 @@ export default function TeamsPage() {
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (isReady) {
-      loadTeams();
-    }
-  }, [isReady]);
-
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -61,11 +56,17 @@ export default function TeamsPage() {
       setTeams(response.teams);
     } catch (err) {
       console.error("Failed to load teams:", err);
-      setError(err instanceof Error ? err.message : t("error_load"));
+      setError(err instanceof Error ? err.message : errorLoad);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, errorLoad]);
+
+  useEffect(() => {
+    if (isReady) {
+      loadTeams();
+    }
+  }, [isReady, loadTeams]);
 
   const handleCreateTeam = async () => {
     if (!createForm.name.trim()) return;

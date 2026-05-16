@@ -1,3 +1,5 @@
+import type { Locale } from "@/i18n/config";
+
 export class AuthApiError extends Error {
   constructor(public status: number, public detail: string) {
     super(detail);
@@ -36,7 +38,7 @@ function normalizeDetail(raw: unknown, fallback: string): string {
 
 /**
  * i18n Phase 2b (#106): API レスポンスが envelope `{error: {code, message}}`
- * 形式の場合、`code` をキーに `api-errors.ts` の日本語 map で訳出してから
+ * 形式の場合、`code` をキーに `api-errors.ts` の locale catalog で訳出してから
  * AuthApiError に詰める。ない場合は従来の `{detail: ...}` パスにフォールバック。
  *
  * これにより login / signup / password reset / accept invitation 等の
@@ -51,7 +53,7 @@ async function readErrorBody(response: Response): Promise<unknown> {
   }
 }
 
-export async function parseAuthError(response: Response): Promise<AuthApiError> {
+export async function parseAuthError(response: Response, locale?: Locale): Promise<AuthApiError> {
   // dynamic import で循環依存を避ける (api-errors.ts 側はこのファイルに
   // 依存しない予定なので実害はないが、bundle 単位の独立性を保つ意味で)。
   const { extractApiError, translateApiError } = await import(
@@ -65,7 +67,7 @@ export async function parseAuthError(response: Response): Promise<AuthApiError> 
   if (extracted) {
     // envelope or legacy detail string — どちらも translateApiError で
     // 日本語に変換される (legacy は `err.message` がそのまま使われる)
-    detail = translateApiError(extracted);
+    detail = translateApiError(extracted, locale);
   } else {
     detail = normalizeDetail(
       (body as { detail?: unknown } | null)?.detail,

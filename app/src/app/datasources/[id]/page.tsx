@@ -1,17 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@/components/layout";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,11 +25,10 @@ import {
   ArrowLeft,
   Loader2,
   FileJson,
-  Image,
+  Image as ImageIcon,
   Database,
   Trash2,
   ExternalLink,
-  RefreshCw,
   Play,
   CheckCircle2,
   XCircle,
@@ -51,6 +44,7 @@ export default function DatasourceDetailPage() {
   const t = useTranslations("datasources.detail");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorFetch = t("error_fetch");
   const router = useRouter();
   const params = useParams();
   const datasourceId = params.id as string;
@@ -69,7 +63,7 @@ export default function DatasourceDetailPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // データソース取得
-  const fetchDatasource = async () => {
+  const fetchDatasource = useCallback(async () => {
     if (!isReady || !api) return;
 
     setLoading(true);
@@ -78,15 +72,15 @@ export default function DatasourceDetailPage() {
       const data = await api.getDatasource(datasourceId);
       setDatasource(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
     } finally {
       setLoading(false);
     }
-  };
+  }, [api, isReady, datasourceId, errorFetch]);
 
   useEffect(() => {
     fetchDatasource();
-  }, [api, isReady, datasourceId]);
+  }, [fetchDatasource]);
 
   // 接続テスト
   const handleTestConnection = async () => {
@@ -128,7 +122,7 @@ export default function DatasourceDetailPage() {
       case "pmtiles":
         return <FileJson className="h-5 w-5" />;
       case "cog":
-        return <Image className="h-5 w-5" />;
+        return <ImageIcon className="h-5 w-5" />;
       default:
         return <Database className="h-5 w-5" />;
     }

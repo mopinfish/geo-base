@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
@@ -36,6 +36,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
   const t = useTranslations("features.detail");
   const locale = useLocale();
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  const errorFetch = t("error_fetch");
   const { api, isReady } = useApi();
   const [feature, setFeature] = useState<Feature | null>(null);
   const [tileset, setTileset] = useState<Tileset | null>(null);
@@ -66,7 +67,7 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
     };
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!isReady) return;
     
     setIsLoading(true);
@@ -102,15 +103,15 @@ export default function FeatureDetailPage({ params }: FeatureDetailPageProps) {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, isReady, id, errorFetch]);
 
   useEffect(() => {
     fetchData();
-  }, [id, isReady]);
+  }, [fetchData]);
 
   const handleDelete = async () => {
     await api.deleteFeature(id);
