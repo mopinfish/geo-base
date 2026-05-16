@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileJson, AlertCircle, Check } from "lucide-react";
+import { Upload, FileJson, Check } from "lucide-react";
 
 // GeoJSON型定義
 export interface GeoJSONFeature {
@@ -123,7 +123,7 @@ export function GeoJSONDropzone({ onFileLoaded, onError, disabled }: GeoJSONDrop
       } else {
         setLoadedFile(null);
       }
-    } catch (err) {
+    } catch {
       onError(t("error_read_failed"));
       setLoadedFile(null);
     } finally {

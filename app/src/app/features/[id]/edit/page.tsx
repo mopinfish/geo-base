@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -20,6 +20,7 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
   const { id } = use(params);
   const router = useRouter();
   const t = useTranslations("features.edit");
+  const errorFetch = t("error_fetch");
   const { api, isReady } = useApi();
   const [feature, setFeature] = useState<Feature | null>(null);
   const [tilesets, setTilesets] = useState<Tileset[]>([]);
@@ -50,7 +51,7 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
     };
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!isReady) return;
     
     setIsLoading(true);
@@ -83,15 +84,15 @@ export default function EditFeaturePage({ params }: EditFeaturePageProps) {
         setTilesets([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [api, isReady, id, errorFetch]);
 
   useEffect(() => {
     fetchData();
-  }, [id, isReady]);
+  }, [fetchData]);
 
   const handleSubmit = async (data: FeatureCreate | FeatureUpdate) => {
     setIsSubmitting(true);

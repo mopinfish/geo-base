@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -18,7 +18,7 @@ import {
 import { useTranslations } from "next-intl";
 import { AdminLayout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +81,7 @@ export default function TeamDetailPage() {
   const router = useRouter();
   const teamId = params.id as string;
   const { api, isReady } = useApi();
+  const errorFetch = t("error_fetch");
 
   const roleLabels: Record<TeamRole, string> = {
     owner: t("role_owner"),
@@ -125,13 +126,7 @@ export default function TeamDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (isReady && teamId) {
-      loadTeamData();
-    }
-  }, [isReady, teamId]);
-
-  const loadTeamData = async () => {
+  const loadTeamData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -141,7 +136,7 @@ export default function TeamDetailPage() {
       teamData = await api.getTeam(teamId);
     } catch (err) {
       console.error("Failed to load team:", err);
-      setError(err instanceof Error ? err.message : t("error_fetch"));
+      setError(err instanceof Error ? err.message : errorFetch);
       setIsLoading(false);
       return;
     }
@@ -188,7 +183,13 @@ export default function TeamDetailPage() {
     }
 
     setIsLoading(false);
-  };
+  }, [api, teamId, errorFetch]);
+
+  useEffect(() => {
+    if (isReady && teamId) {
+      loadTeamData();
+    }
+  }, [isReady, teamId, loadTeamData]);
 
   const handleUpdateTeam = async () => {
     if (!team) return;

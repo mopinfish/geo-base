@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, RotateCcw, MousePointer } from "lucide-react";
+import { Trash2, RotateCcw, MousePointer } from "lucide-react";
 
 export interface GeometryEditorProps {
   /** ジオメトリタイプ */
@@ -36,9 +37,11 @@ export function GeometryEditor({
   center = [139.7671, 35.6812],
   zoom = 12,
 }: GeometryEditorProps) {
+  const t = useTranslations("features.form");
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const initialViewRef = useRef({ center, zoom });
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditing, setIsEditing] = useState(true);
 
@@ -246,8 +249,8 @@ export function GeometryEditor({
           },
         ],
       },
-      center: center,
-      zoom: zoom,
+      center: initialViewRef.current.center,
+      zoom: initialViewRef.current.zoom,
     });
 
     map.current.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -258,7 +261,8 @@ export function GeometryEditor({
     });
 
     return () => {
-      clearMarkers();
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
       if (map.current) {
         map.current.remove();
         map.current = null;
@@ -350,12 +354,14 @@ export function GeometryEditor({
             onClick={() => setIsEditing(!isEditing)}
           >
             <MousePointer className="mr-1 h-4 w-4" />
-            {isEditing ? "編集中" : "編集"}
+            {isEditing ? t("geometry_editor_mode_editing") : t("geometry_editor_mode_edit")}
           </Button>
           <span className="text-sm text-muted-foreground">
             {geometryType === "Point" 
-              ? "地図をクリックして座標を設定" 
-              : "地図をクリックして頂点を追加"}
+              ? t("geometry_editor_help_point")
+              : geometryType === "LineString"
+                ? t("geometry_editor_help_linestring")
+                : t("geometry_editor_help_polygon")}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -367,7 +373,7 @@ export function GeometryEditor({
             disabled={coords.length === 0}
           >
             <Trash2 className="mr-1 h-4 w-4" />
-            {geometryType === "Point" ? "削除" : "最後を削除"}
+            {geometryType === "Point" ? t("geometry_editor_delete_point") : t("geometry_editor_delete_last")}
           </Button>
           <Button
             type="button"
@@ -377,7 +383,7 @@ export function GeometryEditor({
             disabled={coords.length === 0}
           >
             <RotateCcw className="mr-1 h-4 w-4" />
-            クリア
+            {t("geometry_editor_clear")}
           </Button>
         </div>
       </div>
@@ -393,15 +399,21 @@ export function GeometryEditor({
       <div className="text-xs text-muted-foreground">
         {geometryType === "Point" ? (
           coords.length > 0 ? (
-            <span>座標: [{coords[0][0].toFixed(6)}, {coords[0][1].toFixed(6)}]</span>
+            <span>
+              {t("geometry_editor_coordinates_label")} [{coords[0][0].toFixed(6)}, {coords[0][1].toFixed(6)}]
+            </span>
           ) : (
-            <span>座標未設定</span>
+            <span>{t("geometry_editor_coordinates_unset")}</span>
           )
         ) : (
           <span>
-            {coords.length}点{" "}
-            {geometryType === "LineString" && coords.length < 2 && "(2点以上必要)"}
-            {geometryType === "Polygon" && coords.length < 3 && "(3点以上必要)"}
+            {t("geometry_status_count", { count: coords.length })}{" "}
+            {geometryType === "LineString" &&
+              coords.length < 2 &&
+              t("geometry_status_min_points", { min_points: 2 })}
+            {geometryType === "Polygon" &&
+              coords.length < 3 &&
+              t("geometry_status_min_points", { min_points: 3 })}
           </span>
         )}
       </div>

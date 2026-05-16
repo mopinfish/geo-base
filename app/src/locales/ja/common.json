@@ -2,7 +2,8 @@
   "app": {
     "title": "geo-base 管理画面",
     "brand": "geo-base",
-    "version": "geo-base Admin v0.2.0"
+    "version": "geo-base Admin v0.2.0",
+    "description": "geo-base タイルサーバー管理画面"
   },
   "nav": {
     "dashboard": "ダッシュボード",

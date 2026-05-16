@@ -3,13 +3,28 @@
  */
 
 import { authClient } from "./auth/client";
-import { extractApiError } from "./api-errors";
+import { ApiClientError, extractApiError, translateApiError } from "./api-errors";
+import type { Locale } from "@/i18n/config";
 
 // 環境変数からAPIのベースURLを取得
 // 未設定の場合は空文字 → 相対パス /api/* で叩き、Next.js の dev rewrites
 // または本番 (Vercel rewrites or 同一オリジンデプロイ) でプロキシされる前提。
 // 絶対 URL を使いたい場合は NEXT_PUBLIC_API_URL を明示的に設定すること。
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+function throwTranslatedApiError(error: Error, locale: Locale | null): never {
+  const message = translateApiError(error, locale ?? undefined);
+  if (error instanceof ApiClientError) {
+    const translated = new ApiClientError({
+      code: error.code,
+      message,
+      details: error.details,
+    });
+    translated.stack = error.stack;
+    throw translated;
+  }
+  throw new Error(message);
+}
 
 /**
  * 認証トークン自動付与 + 401 リトライに対応した fetch ラッパー
@@ -623,6 +638,7 @@ export interface RateLimitStatus {
 class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
+  private locale: Locale | null = null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
@@ -630,6 +646,10 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token;
+  }
+
+  setLocale(locale: Locale | null) {
+    this.locale = locale;
   }
 
   private getHeaders(): HeadersInit {
@@ -664,7 +684,7 @@ class ApiClient {
         // JSON パースに失敗した場合は fallback メッセージで Error を投げる
       }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throwTranslatedApiError(extracted, this.locale);
       throw new Error(fallback);
     }
 
@@ -707,7 +727,7 @@ class ApiClient {
         // ignore
       }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throwTranslatedApiError(extracted, this.locale);
       throw new Error(fallback);
     }
 
@@ -936,7 +956,7 @@ class ApiClient {
         body = await response.json();
       } catch { /* keep default */ }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throwTranslatedApiError(extracted, this.locale);
       throw new Error(fallback);
     }
     return response.json();
@@ -964,7 +984,7 @@ class ApiClient {
         body = await response.json();
       } catch { /* keep default */ }
       const extracted = extractApiError(body);
-      if (extracted) throw extracted;
+      if (extracted) throwTranslatedApiError(extracted, this.locale);
       throw new Error(fallback);
     }
     return response.json();
