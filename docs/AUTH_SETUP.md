@@ -7,7 +7,7 @@ The provider abstraction (`api/lib/auth/provider.py`) is kept so the project can
 but **only `local` is supported today**.
 
 > The old `AUTH_PROVIDER=supabase` setup was retired after the Fly Postgres migration and the
-> removal of the Supabase Auth provider implementation. See [`docs/AUTH_MIGRATION.md`](./AUTH_MIGRATION.md)
+> removal of the Supabase Auth provider implementation. See [`docs/AUTH_MIGRATION.md`](./AUTH_MIGRATION.md) (Japanese / internal)
 > for the migration history.
 
 This guide focuses on the **local and production setup steps**. For the higher-level design,
@@ -15,7 +15,7 @@ see [`docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`](./superpowers
 
 Related docs:
 
-- Manual pre-release E2E checks: [`docs/AUTH_E2E_CHECKLIST.md`](./AUTH_E2E_CHECKLIST.md)
+- Manual pre-release E2E checks: [`docs/AUTH_E2E_CHECKLIST.md`](./AUTH_E2E_CHECKLIST.md) (Japanese / internal)
 - Authorization review: [`docs/ACCESS_CONTROL_REVIEW.md`](./ACCESS_CONTROL_REVIEW.md)
 - Production database setup: [`docs/POSTGRES_SETUP.md`](./POSTGRES_SETUP.md)
 
