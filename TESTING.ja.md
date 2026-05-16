@@ -192,7 +192,7 @@ TILE_SERVER_URL=http://localhost:8000 uv run python tests/live_test.py
         "server.py"
       ],
       "env": {
-        "TILE_SERVER_URL": "http://localhost:3000"
+        "TILE_SERVER_URL": "http://localhost:8000"
       }
     }
   }
