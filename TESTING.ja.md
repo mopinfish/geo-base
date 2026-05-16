@@ -1,5 +1,7 @@
 # geo-base 動作確認手順
 
+> English: [TESTING.md](./TESTING.md) ・ 日本語: this page
+
 このドキュメントでは、geo-baseプロジェクトのローカル環境およびリモート本番環境での動作確認手順を説明します。
 
 ---
