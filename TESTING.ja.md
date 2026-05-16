@@ -157,14 +157,14 @@ TILE_SERVER_URL=http://localhost:8000 uv run python tests/live_test.py
 ============================================================
 🧪 geo-base MCP Server Live Tests
 ============================================================
-📡 Tile Server: http://localhost:3000
+📡 Tile Server: http://localhost:8000
 🔐 API Token: not configured
 🌍 Environment: development
 
 ============================================================
 🔧 Health Check
 ============================================================
-🌐 Testing: http://localhost:3000/api/health
+🌐 Testing: http://localhost:8000/api/health
 📡 Status: 200
 ✅ Server is healthy
 

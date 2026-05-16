@@ -1,5 +1,7 @@
 # Redis キャッシュセットアップガイド
 
+> English: [REDIS_SETUP.md](./REDIS_SETUP.md) ・ 日本語: this page
+
 このドキュメントでは、geo-base APIのRedisキャッシュの設定方法を説明します。
 
 ## 概要

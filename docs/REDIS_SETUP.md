@@ -50,7 +50,8 @@ uv run uvicorn lib.main:app --reload --port 8000
 ```fish
 curl http://localhost:8000/api/health
 curl http://localhost:8000/api/health/db
-curl http://localhost:8000/api/health/cache
+curl http://localhost:8000/api/health/cache  # in-memory cache stats
+curl http://localhost:8000/api/health/redis  # Redis connectivity
 ```
 
 ## Fly.io / Production
