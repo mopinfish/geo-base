@@ -11,7 +11,7 @@
 
 | Component | Platform | URL | Deployment guide |
 |---|---|---|---|
-| API (FastAPI) | Fly.io | `geo-base-api.fly.dev` | [`api/FLY_DEPLOY.md`](./api/FLY_DEPLOY.md) |
+| API (FastAPI) | Fly.io | `geo-base-api.fly.dev` | [`api/FLY_DEPLOY.md`](./api/FLY_DEPLOY.md) (Japanese) |
 | MCP Server | Fly.io | `geo-base-mcp.fly.dev` | `cd mcp && fly deploy` |
 | Admin UI (Next.js) | Vercel | `geo-base-admin.vercel.app` | GitHub push triggers auto-deploy |
 | PostgreSQL + PostGIS | Fly.io (`geo-base-pg`) | internal: `geo-base-pg.internal` | [`docs/POSTGRES_SETUP.md`](./docs/POSTGRES_SETUP.md) |
@@ -38,12 +38,12 @@ flyctl ssh console -a geo-base-api -C 'python -m lib.auth.cli create-admin --ema
 
 If you run into DB connectivity or API startup issues, check the relevant component guides:
 
-- API: [`api/FLY_DEPLOY.md`](./api/FLY_DEPLOY.md)
+- API: [`api/FLY_DEPLOY.md`](./api/FLY_DEPLOY.md) (Japanese)
 - DB: [`docs/POSTGRES_SETUP.md`](./docs/POSTGRES_SETUP.md)
 - Auth: [`docs/AUTH_SETUP.md`](./docs/AUTH_SETUP.md)
 
 ## Related Docs
 
-- Architecture decision log: [`docs/INFRA_MIGRATION_INVESTIGATION.md`](./docs/INFRA_MIGRATION_INVESTIGATION.md)
+- Architecture decision log: [`docs/INFRA_MIGRATION_INVESTIGATION.md`](./docs/INFRA_MIGRATION_INVESTIGATION.md) (Japanese / internal)
 - Authorization review: [`docs/ACCESS_CONTROL_REVIEW.md`](./docs/ACCESS_CONTROL_REVIEW.md)
 - Local development: [`LOCAL_DEVELOPMENT.md`](./LOCAL_DEVELOPMENT.md)

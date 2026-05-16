@@ -18,7 +18,7 @@
 ## 前提条件
 
 - Node.js 18+
-- Python 3.12+
+- Python 3.11+
 - uv（Python パッケージマネージャー）
 - PostgreSQL + PostGIS（`docker compose up -d postgis` で起動可。`docker/` 配下）
 

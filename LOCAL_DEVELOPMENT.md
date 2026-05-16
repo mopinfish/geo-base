@@ -18,7 +18,7 @@ This guide explains how to run each geo-base component locally.
 ## Prerequisites
 
 - Node.js 18+
-- Python 3.12+
+- Python 3.11+
 - `uv` (Python package manager)
 - PostgreSQL + PostGIS (`docker compose up -d postgis`, under `docker/`)
 

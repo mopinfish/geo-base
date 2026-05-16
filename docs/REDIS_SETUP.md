@@ -15,6 +15,8 @@ If Redis is unavailable, the service falls back to in-memory cache behavior.
 | TileJSON | `tilejson:{type}:{id}` | 300s |
 | Tileset info | `tileset:{id}` | 60s |
 
+> Key patterns above omit the `REDIS_KEY_PREFIX` (default: `geo-base:`). Actual Redis keys are e.g. `geo-base:tile:vector:{id}:{z}:{x}:{y}`.
+
 ## Local Development
 
 1. Start PostgreSQL and Redis:

@@ -11,7 +11,7 @@ but **only `local` is supported today**.
 > for the migration history.
 
 This guide focuses on the **local and production setup steps**. For the higher-level design,
-see [`docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`](./superpowers/specs/2026-05-08-pluggable-auth-design.md).
+see [`docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`](./superpowers/specs/2026-05-08-pluggable-auth-design.md) (Japanese / internal).
 
 Related docs:
 
