@@ -69,6 +69,15 @@ describe("translateApiError", () => {
     expect(translateApiError(err, "en")).toBe("Tileset not found.");
   });
 
+  it("locale 未指定かつ document がない場合は既定 locale にフォールバックする", () => {
+    expect(globalThis.document).toBeUndefined();
+    const err = new ApiClientError({
+      code: "tileset_not_found",
+      message: "Tileset not found",
+    });
+    expect(translateApiError(err)).toBe("タイルセットが見つかりません");
+  });
+
   it("複数 domain の code がそれぞれ訳出される (smoke)", () => {
     const cases: Array<[string, string]> = [
       ["auth_invalid_credentials", "メールアドレスまたはパスワードが正しくありません"],
@@ -89,6 +98,15 @@ describe("translateApiError", () => {
       message: "Future error message",
     });
     expect(translateApiError(err)).toBe("Future error message");
+  });
+
+  it("locale 未指定でも未知 code は元 message を返す", () => {
+    expect(globalThis.document).toBeUndefined();
+    const err = new ApiClientError({
+      code: "unknown_server_code",
+      message: "Unknown server message",
+    });
+    expect(translateApiError(err)).toBe("Unknown server message");
   });
 
   it("ApiClientError 以外の Error は message をそのまま返す", () => {

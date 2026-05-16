@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useLocale } from "next-intl";
 import type { Locale } from "@/i18n/config";
 import { api } from "@/lib/api";
+import { normalizeLocale } from "@/lib/api-errors";
 import { authClient } from "@/lib/auth/client";
 
 /**
@@ -15,7 +16,7 @@ import { authClient } from "@/lib/auth/client";
  * @returns { api, isReady } - APIクライアントと準備完了状態
  */
 export function useApi() {
-  const locale = useLocale() as Locale;
+  const locale = normalizeLocale(useLocale());
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {

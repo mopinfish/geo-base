@@ -43,7 +43,7 @@ const API_ERROR_MESSAGES: Record<Locale, Record<string, string>> = {
   ja: jaMessages,
 };
 
-function normalizeLocale(value: string | null | undefined): Locale {
+export function normalizeLocale(value: string | null | undefined): Locale {
   const primary = value?.split("-")[0]?.toLowerCase();
   return primary === "en" || primary === "ja"
     ? primary

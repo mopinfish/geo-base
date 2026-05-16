@@ -15,11 +15,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 function throwTranslatedApiError(error: Error, locale: Locale | null): never {
   const message = translateApiError(error, locale ?? undefined);
   if (error instanceof ApiClientError) {
-    throw new ApiClientError({
+    const translated = new ApiClientError({
       code: error.code,
       message,
       details: error.details,
     });
+    translated.stack = error.stack;
+    throw translated;
   }
   throw new Error(message);
 }
