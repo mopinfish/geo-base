@@ -637,7 +637,12 @@ export function GeometryPicker({
   useEffect(() => {
     if (!map.current || !isLoaded) return;
 
-    const coords = getCurrentCoords();
+    const coords =
+      geometryType === "Point"
+        ? pointCoords ? [pointCoords] : []
+        : geometryType === "LineString"
+          ? lineCoords
+          : polygonCoords;
     if (coords.length === 0) return;
 
     if (coords.length === 1) {
@@ -652,7 +657,7 @@ export function GeometryPicker({
       );
       map.current.fitBounds(bounds, { padding: 50, maxZoom: 15 });
     }
-  }, [geometryType, isLoaded, getCurrentCoords]);
+  }, [geometryType, pointCoords, lineCoords, polygonCoords, isLoaded]);
 
   // ヘルプテキスト
   const getHelpText = () => {

@@ -20,6 +20,9 @@ export function useApi() {
 
   useEffect(() => {
     api.setLocale(locale);
+  }, [locale]);
+
+  useEffect(() => {
     // 初期トークン設定
     const token = authClient.getAccessToken();
     api.setToken(token);
@@ -39,7 +42,7 @@ export function useApi() {
     });
 
     return unsubscribe;
-  }, [locale]);
+  }, []);
 
   return { api, isReady };
 }
@@ -49,7 +52,9 @@ export function useApi() {
  * Server Actionsや非コンポーネントで使用
  */
 export async function setupApiToken(locale?: Locale): Promise<void> {
-  api.setLocale(locale ?? null);
+  if (locale) {
+    api.setLocale(locale);
+  }
   const token = authClient.getAccessToken();
   if (token) {
     api.setToken(token);
