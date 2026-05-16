@@ -1,4 +1,4 @@
-# Redis Cache Setup Guide
+# Redis キャッシュセットアップガイド
 
 このドキュメントでは、geo-base APIのRedisキャッシュの設定方法を説明します。
 
@@ -98,7 +98,7 @@ cd api
 uv sync
 
 # サーバー起動（デフォルトポート8000）
-uv run uvicorn main:app --reload
+uv run uvicorn lib.main:app --reload
 ```
 
 ### 4. 動作確認

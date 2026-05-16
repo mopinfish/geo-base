@@ -13,7 +13,7 @@ This guide explains how to run each geo-base component locally.
 |---|---|---|---|
 | Admin UI | 3000 | `/app` | Next.js admin console |
 | API | 8000 | `/api` | FastAPI tile server |
-| MCP Server | 8001 | `/mcp` | Claude Desktop integration (SSE mode) |
+| MCP Server | stdio | `/mcp` | Claude Desktop integration (default: stdio; SSE: `MCP_TRANSPORT=sse MCP_PORT=8001`) |
 
 ## Prerequisites
 

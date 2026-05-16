@@ -110,7 +110,7 @@ openssl rand -base64 64
 
 #### MCPサーバー（mcp/.env）
 ```env
-TILE_SERVER_URL=http://localhost:3000
+TILE_SERVER_URL=http://localhost:8000
 API_TOKEN=your-jwt-token  # CRUD操作用（オプション）
 MCP_TRANSPORT=stdio
 DEBUG=true
@@ -147,7 +147,7 @@ curl "http://localhost:8000/api/features?bbox=139.5,35.5,140.0,36.0&limit=5"
 cd /path/to/geo-base/mcp
 
 # ローカルサーバーに対してテスト
-TILE_SERVER_URL=http://localhost:3000 uv run python tests/live_test.py
+TILE_SERVER_URL=http://localhost:8000 uv run python tests/live_test.py
 ```
 
 **期待される出力:**
@@ -398,7 +398,7 @@ fly logs
 ```fish
 # MCPサーバーをデバッグモードで起動
 cd /path/to/geo-base/mcp
-DEBUG=true TILE_SERVER_URL=http://localhost:3000 uv run python server.py
+DEBUG=true TILE_SERVER_URL=http://localhost:8000 uv run python server.py
 ```
 
 ---
@@ -430,7 +430,7 @@ fly secrets set TILE_SERVER_URL=https://geo-base-api.fly.dev
 ## 7. チェックリスト
 
 ### ローカル環境
-- [ ] APIサーバーが起動している (`curl http://localhost:3000/api/health`)
+- [ ] APIサーバーが起動している (`curl http://localhost:8000/api/health`)
 - [ ] ユニットテストが全てパス (`uv run pytest -v`)
 - [ ] ライブテストが成功 (`uv run python tests/live_test.py`)
 - [ ] Claude Desktop で動作確認

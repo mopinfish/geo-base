@@ -42,7 +42,7 @@ TILESET_INFO_CACHE_TTL=60
 ```fish
 cd api
 uv sync
-uv run uvicorn main:app --reload
+uv run uvicorn lib.main:app --reload --port 8000
 ```
 
 4. Verify:

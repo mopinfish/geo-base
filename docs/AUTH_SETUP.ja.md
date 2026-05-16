@@ -1,5 +1,7 @@
 # 認証セットアップガイド
 
+> English: [AUTH_SETUP.md](./AUTH_SETUP.md) ・ 日本語: this page
+
 geo-base API は自前の **local provider** で認証する（`AUTH_PROVIDER=local`）。
 プラガブル化の枠組み (`api/lib/auth/provider.py`) 自体は将来別 IdP を追加できるように
 残してあるが、**現状サポートされるのは `local` のみ**。

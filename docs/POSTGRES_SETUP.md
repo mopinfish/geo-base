@@ -26,7 +26,7 @@ flyctl volumes create pg_data --region nrt --size 10 --app geo-base-pg --yes
 flyctl secrets set POSTGRES_PASSWORD=(openssl rand -base64 32 | tr -d '/+=' | head -c 32) -a geo-base-pg
 ```
 
-Keep the password in a secret manager. Fly will not reveal it again.
+Keep the password in a secret manager. Fly will not reveal it via the dashboard or `flyctl secrets list` (though it remains accessible to operators with SSH access via `flyctl ssh console`).
 
 ### 3. Deploy
 

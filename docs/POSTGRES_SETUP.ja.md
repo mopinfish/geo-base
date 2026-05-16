@@ -1,5 +1,7 @@
 # PostgreSQL (Fly.io 自前ホスティング) セットアップ・運用ガイド
 
+> English: [POSTGRES_SETUP.md](./POSTGRES_SETUP.md) ・ 日本語: this page
+
 geo-base 本番 DB は **Fly Machine 上の `postgis/postgis:16-3.4` 単一ノード**で運用する。
 本ドキュメントは初期構築・接続方法・スキーマ変更・バックアップ運用・障害復旧をひと通りカバーする。
 

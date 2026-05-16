@@ -1,5 +1,7 @@
 # geo-base Deployment Guide
 
+> English: this page ・ 日本語: [DEPLOY.ja.md](./DEPLOY.ja.md)
+
 > [!NOTE]
 > This document is a **high-level summary of the deployment flow**. For per-component details, see the linked guides below.
 >

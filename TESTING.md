@@ -49,7 +49,7 @@ curl "http://localhost:8000/api/features?bbox=139.5,35.5,140.0,36.0&limit=5"
 
 ```fish
 cd mcp
-TILE_SERVER_URL=http://localhost:3000 uv run python tests/live_test.py
+TILE_SERVER_URL=http://localhost:8000 uv run python tests/live_test.py
 ```
 
 ### Claude Desktop

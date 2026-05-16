@@ -13,7 +13,7 @@
 |---|---|---|---|
 | Admin UI | 3000 | `/app` | Next.js 管理画面 |
 | API | 8000 | `/api` | FastAPI タイルサーバー |
-| MCP Server | 8001 | `/mcp` | Claude Desktop 連携（SSE モード） |
+| MCP Server | stdio | `/mcp` | Claude Desktop 連携（デフォルト: stdio; SSE: `MCP_TRANSPORT=sse MCP_PORT=8001`） |
 
 ## 前提条件
 
