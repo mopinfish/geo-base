@@ -68,6 +68,17 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+  /* Issue #91: Primary color scale (hue 240, デジタル庁準拠 neutral-cool) */
+  --color-primary-50: hsl(240 20% 98%);
+  --color-primary-100: hsl(240 15% 96%);
+  --color-primary-200: hsl(240 10% 91%);
+  --color-primary-300: hsl(240 8% 83%);
+  --color-primary-400: hsl(240 6% 70%);
+  --color-primary-500: hsl(240 5.9% 55%);
+  --color-primary-600: hsl(240 5.9% 40%);
+  --color-primary-700: hsl(240 5.9% 28%);
+  --color-primary-800: hsl(240 5.9% 18%);
+  --color-primary-900: hsl(240 5.9% 10%);
 }
 
 @media (prefers-color-scheme: dark) {
