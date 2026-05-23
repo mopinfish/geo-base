@@ -60,14 +60,17 @@ cd mcp
 cp .env.example .env
 
 # .envを編集してTILE_SERVER_URLを設定
-# ローカル開発: http://localhost:3000
+# ローカル開発: http://localhost:8000（API は :8000、:3000 ではない）
 # 本番環境: https://geo-base-api.fly.dev
 
 # 依存関係をインストール
 uv sync
 
-# サーバーを起動（テスト用）
-uv run python server.py
+# サーバーを起動（stdio モード、ローカル API を参照）
+TILE_SERVER_URL=http://localhost:8000 uv run python server.py
+
+# SSE モード
+MCP_TRANSPORT=sse uv run python server.py
 ```
 
 ## 設定

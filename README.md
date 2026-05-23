@@ -52,6 +52,18 @@ geo-base/
 - Access control review: [docs/ACCESS_CONTROL_REVIEW.md](./docs/ACCESS_CONTROL_REVIEW.md)
 - Verification guide: [TESTING.md](./TESTING.md)
 
+## Local ports
+
+| Service | Port | Start command |
+|---|---|---|
+| Admin UI (Next.js) | **3000** | `cd app && npm run dev` |
+| API (FastAPI) | **8000** | `cd api && uv run uvicorn lib.main:app --reload --port 8000` |
+| MCP Server | **8001** | `cd mcp && TILE_SERVER_URL=http://localhost:8000 uv run python server.py` |
+| PostGIS | 5432 | `cd docker && docker compose up -d` |
+| Redis | 6379 | (same compose file) |
+
+> **Note:** Some older docs show API on port 3000. The correct convention is **API=8000, Admin UI=3000**.
+
 ## Local development setup
 
 ### Prerequisites
