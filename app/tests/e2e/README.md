@@ -1,6 +1,6 @@
 # E2E テスト（Playwright）
 
-Issue #110 / [E2E 戦略 spec](../../../docs/superpowers/specs/2026-05-10-e2e-testing-design.md) / [Phase 1 plan](../../../docs/superpowers/plans/2026-05-10-e2e-phase1.md)
+Issue #110 / [E2E 戦略 spec](../../../docs/specs/2026-05-10-e2e-testing-design.md) / [Phase 1 plan](../../../docs/plans/2026-05-10-e2e-phase1.md)
 
 ## ローカル実行手順
 

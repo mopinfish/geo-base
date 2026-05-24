@@ -319,11 +319,11 @@ CREATE TABLE team_invitations (
 - 全インタラクティブコンポーネント: フォーカスリング `ring-*` → `outline-*` 統一（WCAG 1.4.11）
 
 > Step 3.3-A の詳細は以下を参照:
-> - セットアップ: `docs/AUTH_SETUP.md`
-> - 移行手順: `docs/AUTH_MIGRATION.md`
-> - 手動 E2E チェック: `docs/AUTH_E2E_CHECKLIST.md`
-> - 認可仕様レビュー（2026-05-09 監査）: `docs/ACCESS_CONTROL_REVIEW.md`
-> - 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
+> - セットアップ: `docs/manuals/AUTH_SETUP.md`
+> - 移行手順: `docs/manuals/AUTH_MIGRATION.md`
+> - 手動 E2E チェック: `docs/refs/AUTH_E2E_CHECKLIST.md`
+> - 認可仕様レビュー（2026-05-09 監査）: `docs/reports/ACCESS_CONTROL_REVIEW.md`
+> - 設計書: `docs/specs/2026-05-08-pluggable-auth-design.md`
 
 #### Step 3.3-A 完了サマリ（2026-05-08）
 
@@ -343,8 +343,8 @@ CREATE TABLE team_invitations (
 - `apiFetch` で 401 → refresh → retry 自動化
 
 **ドキュメント (Phase 7):**
-- `docs/AUTH_SETUP.md`（local モード セットアップ）
-- `docs/AUTH_MIGRATION.md`（supabase → local 移行手順）
+- `docs/manuals/AUTH_SETUP.md`（local モード セットアップ）
+- `docs/manuals/AUTH_MIGRATION.md`（supabase → local 移行手順）
 
 **テスト:**
 - 479 passed, 2 skipped（auth 関連 130+ 直接テスト）
@@ -463,7 +463,7 @@ fly deploy
 
 | ファイル | 説明 |
 |---------|------|
-| `/mnt/project/ROADMAP_S3.md` | Season 3 完全ロードマップ |
+| `docs/plans/ROADMAP_S3.md` | Season 3 完全ロードマップ |
 | `/mnt/project/HANDOVER_S3_STEP3.2-D.md` | Step 3.2-D 詳細引き継ぎ |
 | `/mnt/project/HANDOVER_MAIN_REFACTORING.md` | main.pyリファクタリング完了ドキュメント |
 | `/mnt/project/geo-base.txt` | 最新ソースコードスナップショット |
