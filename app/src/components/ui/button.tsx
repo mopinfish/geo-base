@@ -53,10 +53,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={isLoading || disabled}
         aria-busy={isLoading ? true : undefined}
       >
-        {isLoading && (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        {asChild ? children : (
+          <>
+            {isLoading && (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            )}
+            {children}
+          </>
         )}
-        {children}
       </Comp>
     )
   }
