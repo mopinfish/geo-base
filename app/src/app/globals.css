@@ -15,12 +15,19 @@
   --muted-foreground: 240 3.8% 46.1%;
   --accent: 240 4.8% 95.9%;
   --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
+  --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
   --border: 240 5.9% 90%;
   --input: 240 5.9% 90%;
   --ring: 240 5.9% 10%;
   --radius: 0.5rem;
+  /* Issue #94: Focus ring tokens */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  /* Issue #93: Elevation shadow tokens (デジタル庁準拠) */
+  --shadow-1: 0 1px 2px 0 hsl(var(--foreground) / 0.05);
+  --shadow-2: 0 2px 4px 0 hsl(var(--foreground) / 0.10);
+  --shadow-3: 0 4px 8px 0 hsl(var(--foreground) / 0.15);
 }
 
 .dark {
@@ -68,6 +75,39 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+  /* Issue #91: Primary color scale (hue 240, デジタル庁準拠 neutral-cool) */
+  --color-primary-50: hsl(240 20% 98%);
+  --color-primary-100: hsl(240 15% 96%);
+  --color-primary-200: hsl(240 10% 91%);
+  --color-primary-300: hsl(240 8% 83%);
+  --color-primary-400: hsl(240 6% 70%);
+  --color-primary-500: hsl(240 5.9% 55%);
+  --color-primary-600: hsl(240 5.9% 40%);
+  --color-primary-700: hsl(240 5.9% 28%);
+  --color-primary-800: hsl(240 5.9% 18%);
+  --color-primary-900: hsl(240 5.9% 10%);
+  /* Issue #92: Font family */
+  --font-sans: var(--font-noto-sans-jp), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Issue #92: Font size scale (デジタル庁準拠) */
+  --font-size-display-lg: 3rem;
+  --font-size-display-md: 2.25rem;
+  --font-size-display-sm: 1.875rem;
+  --font-size-heading-lg: 1.5rem;
+  --font-size-heading-md: 1.25rem;
+  --font-size-heading-sm: 1.125rem;
+  --font-size-heading-xs: 1rem;
+  /* Issue #92: Line height */
+  --line-height-display: 1.2;
+  --line-height-heading: 1.4;
+  /* Issue #92: Letter spacing */
+  --letter-spacing-display: -0.02em;
+  --letter-spacing-heading: -0.01em;
+  /* Issue #93: Shadow tokens */
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
+  /* Issue #93: Full radius for pills/avatars */
+  --radius-full: 9999px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -101,5 +141,31 @@
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Issue #92: 見出し階層（デジタル庁デザインシステム準拠） */
+h1 {
+  font-size: var(--font-size-heading-lg);
+  font-weight: 700;
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--letter-spacing-heading);
+}
+
+h2 {
+  font-size: var(--font-size-heading-md);
+  font-weight: 700;
+  line-height: var(--line-height-heading);
+}
+
+h3 {
+  font-size: var(--font-size-heading-sm);
+  font-weight: 600;
+  line-height: var(--line-height-heading);
+}
+
+h4 {
+  font-size: var(--font-size-heading-xs);
+  font-weight: 600;
+  line-height: var(--line-height-heading);
 }

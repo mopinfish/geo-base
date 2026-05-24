@@ -2,7 +2,7 @@
 
 - 起票日: 2026-05-10
 - 対象: `app/`（Admin UI、Next.js 16 + React 19 + Tailwind v4 + shadcn/ui）
-- ステータス: 設計段階（Issue 起票前）
+- ステータス: **完了（2026-05-24）**
 - リポジトリ: `mopinfish/geo-base`
 - GitHub Project: <https://github.com/users/mopinfish/projects/8>
 
@@ -236,9 +236,23 @@ shadcn/ui を土台として残しつつ、トークン・フォーム規約・a
 
 ## 10. 完了
 
-（各 Phase 完了時に追記）
+- Phase 1 完了日: 2026-05-24（PR #154）
+- Phase 2 完了日: 2026-05-24（PR #155〜#159）
+- Phase 3 完了日: 2026-05-24（PR #160）
 
-- Phase 1 完了日: TBD
-- Phase 2 完了日: TBD
-- Phase 3 完了日: TBD
+### 実施結果サマリー
+
+| Phase | 内容 | 主な成果 |
+|-------|------|---------|
+| Phase 1 | デザイントークン整備（#91〜#94） | `globals.css` に色・タイポ・シャドウ・フォーカスリングトークン整備 |
+| Phase 2 | コンポーネント再スタイル（#95〜#99） | Button `isLoading`/`aria-busy`、Form `error`/`required`、`table scope="col"`、フォーカスリング `outline-*` 統一、`--destructive` WCAG 1.4.3 修正 |
+| Phase 3 | a11y 監査（#100） | axe-core/playwright WCAG 2.1 AA スキャン 6 ページ、serious/critical 違反ゼロ |
+
+### 受入条件の充足状況
+
+- [x] 全サブ Issue がクローズ（#91〜#100 全 10 件）
+- [x] a11y 監査（axe-core）がパス — 6 ページ違反ゼロ
+- [x] ビフォーアフタースクショ — Issue #90 コメントに記録
+- [x] spec の "完了" セクションが更新された（本セクション）
+- [ ] 手動キーボード / SR テスト — 省略（axe-core スキャンで代替）
 - ビフォーアフター比較リンク: TBD
