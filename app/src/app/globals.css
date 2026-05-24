@@ -21,6 +21,10 @@
   --input: 240 5.9% 90%;
   --ring: 240 5.9% 10%;
   --radius: 0.5rem;
+  /* Issue #93: Elevation shadow tokens (デジタル庁準拠) */
+  --shadow-1: 0 1px 2px 0 hsl(var(--foreground) / 0.05);
+  --shadow-2: 0 2px 4px 0 hsl(var(--foreground) / 0.10);
+  --shadow-3: 0 4px 8px 0 hsl(var(--foreground) / 0.15);
 }
 
 .dark {
@@ -95,6 +99,12 @@
   /* Issue #92: Letter spacing */
   --letter-spacing-display: -0.02em;
   --letter-spacing-heading: -0.01em;
+  /* Issue #93: Shadow tokens */
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
+  /* Issue #93: Full radius for pills/avatars */
+  --radius-full: 9999px;
 }
 
 @media (prefers-color-scheme: dark) {
