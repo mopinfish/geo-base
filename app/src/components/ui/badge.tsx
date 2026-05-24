@@ -15,10 +15,8 @@ const badgeVariants = cva(
           "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
         secondary:
           "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        // destructive: bg-[hsl(0,62.8%,30.6%)] ensures ≥4.5:1 contrast with white text
-        // (light mode --destructive at 60.2% lightness gives ~3.5:1 which fails WCAG 1.4.3)
         destructive:
-          "border-transparent bg-[hsl(0,62.8%,30.6%)] text-destructive-foreground shadow hover:bg-[hsl(0,62.8%,25%)]",
+          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground",
       },
     },
