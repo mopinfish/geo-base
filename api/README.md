@@ -105,16 +105,32 @@ fly deploy
 
 ## 開発
 
-```bash
+```fish
 # 依存関係インストール
 uv sync
+uv sync --extra dev                             # pytest/black/ruff も追加
 
-# 開発サーバー起動
+# 開発サーバー起動（:8000）
 uv run uvicorn lib.main:app --reload --port 8000
 
 # APIドキュメント
 open http://localhost:8000/docs
+
+# テスト（専用テスト DB が必須 — Issue #47）
+set -x TEST_DATABASE_URL postgresql://postgres:postgres@localhost:5432/geo_base_test
+uv run pytest tests/ -v
+uv run pytest tests/test_validators.py -v       # 単一ファイル
+uv run pytest tests/test_retry.py::TestWithDbRetryDecorator -v  # 単一クラス
+uv run pytest tests/ --cov=lib --cov-report=term-missing
+
+# リント・フォーマット
+uv run ruff check .
+uv run black .
 ```
+
+`No module named 'lib'` でインポートに失敗する場合は `PYTHONPATH=.` を設定（または `uv run` 経由で実行すれば自動解決）。
+
+テスト DB のセットアップ（初回のみ）は `docs/AUTH_E2E_CHECKLIST.md` の「テスト DB（geo_base_test）」セクション参照。
 
 ## API エンドポイント
 
