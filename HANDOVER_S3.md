@@ -1,6 +1,6 @@
 # geo-base Season 3 引き継ぎドキュメント
 
-**更新日**: 2025-12-17  
+**更新日**: 2026-05-24  
 **プロジェクト**: geo-base - 地理空間タイルサーバーシステム  
 **リポジトリ**: https://github.com/mopinfish/geo-base  
 **現在のブランチ**: `develop`
@@ -34,6 +34,9 @@
 | **Phase 2** | **Step 3.2-C** | **Redisキャッシュ導入** | ✅ 完了 |
 | **Phase 2** | **Step 3.2-D** | **バッチ処理最適化 + 管理画面UI** | ✅ 完了 |
 | **Phase 3** | **Step 3.3-A** | **チーム / ロール + プラガブル認証** | ✅ 完了（Backend + Admin UI） |
+| **Epic #90** | **Phase 1** | **Admin UI デザインシステム移行: デザイントークン整備（#91〜#94）** | ✅ 完了（PR #154） |
+| **Epic #90** | **Phase 2** | **Admin UI デザインシステム移行: コンポーネント再スタイル（#95〜#99）** | ✅ 完了（PR #155〜#159） |
+| **Epic #90** | **Phase 3** | **Admin UI デザインシステム移行: a11y 監査 WCAG 2.1 AA（#100）** | ✅ 完了（PR #160、違反ゼロ） |
 
 ---
 
@@ -287,6 +290,21 @@ CREATE TABLE team_invitations (
 | Step 3.3-C | Shapefile/GeoPackageインポート | 📋 計画中 |
 | Step 3.3-D | タイルセット管理強化 | 📋 計画中 |
 
+### Epic #90: Admin UI デジタル庁デザインシステム準拠（完了）
+
+| フェーズ | 内容 | PR | ステータス |
+|---------|------|-----|-----------|
+| Phase 1: デザイントークン | カラーパレット・タイポグラフィ・シャドウ・フォーカスリングトークン整備（#91〜#94） | #154 | ✅ 完了 |
+| Phase 2: コンポーネント再スタイル | Button/Input/Form/Select/Dialog/Table 他 shadcn/ui 全コンポーネント（#95〜#99） | #155〜#159 | ✅ 完了 |
+| Phase 3: a11y 監査 | axe-core/playwright WCAG 2.1 AA スキャン 6 ページ、serious/critical 違反ゼロ（#100） | #160 | ✅ 完了 |
+
+主な変更点:
+- `globals.css`: `--destructive` トークン WCAG 1.4.3 修正（`84.2%` → `62.8%`）
+- `button.tsx`: `isLoading` prop + `aria-busy`、Radix Slot クラッシュ修正
+- `input.tsx` / `label.tsx` / `textarea.tsx`: `error`/`required` prop、`form.tsx` 新規追加
+- `table.tsx`: `scope="col"` (WCAG 1.3.1)
+- 全インタラクティブコンポーネント: フォーカスリング `ring-*` → `outline-*` 統一（WCAG 1.4.11）
+
 > Step 3.3-A の詳細は以下を参照:
 > - セットアップ: `docs/AUTH_SETUP.md`
 > - 移行手順: `docs/AUTH_MIGRATION.md`
@@ -531,4 +549,5 @@ api/
 
 **作成者**: Claude (Anthropic)  
 **Phase 2 完了日**: 2025-12-17  
-**次回作業**: Phase 3 Step 3.3-A（チームモデル設計）
+**Epic #90 完了日**: 2026-05-24  
+**次回作業候補**: Step 3.3-C（Shapefile/GeoPackage インポート）または Step 3.3-D（タイルセット管理強化）
