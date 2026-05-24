@@ -2,14 +2,17 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Textarea = React.forwardRef<
-  HTMLTextAreaElement,
-  React.ComponentProps<"textarea">
->(({ className, ...props }, ref) => {
+interface TextareaProps extends React.ComponentProps<"textarea"> {
+  error?: boolean
+}
+
+const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(({ className, error, ...props }, ref) => {
   return (
     <textarea
+      aria-invalid={error ? true : undefined}
       className={cn(
         "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-base placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        error && "border-destructive",
         className
       )}
       ref={ref}
