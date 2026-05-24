@@ -149,5 +149,5 @@ DB スキーマを完全にクリーンアップしたい場合は手動で `DRO
 ## 関連ドキュメント
 
 - セットアップガイド: `docs/AUTH_SETUP.md`
-- 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
-- 実装計画: `docs/superpowers/plans/2026-05-08-pluggable-auth.md`
+- 設計書: `docs/specs/2026-05-08-pluggable-auth-design.md`
+- 実装計画: `docs/plans/2026-05-08-pluggable-auth.md`

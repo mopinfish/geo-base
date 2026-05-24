@@ -42,13 +42,13 @@ geo-base/
 
 ## ドキュメント
 
-- デプロイガイド: [DEPLOY.ja.md](./DEPLOY.ja.md)
-- ローカル開発: [LOCAL_DEVELOPMENT.ja.md](./LOCAL_DEVELOPMENT.ja.md)
+- デプロイガイド: [DEPLOY.ja.md](./docs/manuals/DEPLOY.ja.md)
+- ローカル開発: [LOCAL_DEVELOPMENT.ja.md](./docs/manuals/LOCAL_DEVELOPMENT.ja.md)
 - 認証セットアップ: [docs/AUTH_SETUP.ja.md](./docs/AUTH_SETUP.ja.md)
 - PostgreSQL セットアップ: [docs/POSTGRES_SETUP.ja.md](./docs/POSTGRES_SETUP.ja.md)
 - Redis セットアップ: [docs/REDIS_SETUP.ja.md](./docs/REDIS_SETUP.ja.md)
 - アクセス制御レビュー: [docs/ACCESS_CONTROL_REVIEW.ja.md](./docs/ACCESS_CONTROL_REVIEW.ja.md)
-- 動作確認手順: [TESTING.ja.md](./TESTING.ja.md)
+- 動作確認手順: [TESTING.ja.md](./docs/manuals/TESTING.ja.md)
 
 ## ローカル開発環境セットアップ
 

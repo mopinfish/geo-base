@@ -2,7 +2,7 @@
 
 Thanks for taking the time to contribute. This document describes how to propose changes, the conventions we follow, and how translations are handled.
 
-If you read Japanese and prefer it for context, the project's internal handover and roadmap files (`HANDOVER_*.md`, `ROADMAP_*.md`, `CLAUDE.md`) remain in Japanese and provide more historical detail.
+If you read Japanese and prefer it for context, the project's internal handover and roadmap files (`docs/handovers/HANDOVER_*.md`, `docs/plans/ROADMAP_*.md`, `CLAUDE.md`) remain in Japanese and provide more historical detail.
 
 ## Code of conduct
 
@@ -91,7 +91,7 @@ Prefer small, frequent commits over single squashed bombs. When CI hooks fail, f
 
 ## Translations
 
-geo-base is built primarily in Japanese but is moving toward English-first public surfaces (README, API errors, MCP descriptions, public docs) and a bilingual Admin UI. The strategy is documented in [`docs/superpowers/specs/2026-05-10-i18n-strategy-design.md`](./docs/superpowers/specs/2026-05-10-i18n-strategy-design.md).
+geo-base is built primarily in Japanese but is moving toward English-first public surfaces (README, API errors, MCP descriptions, public docs) and a bilingual Admin UI. The strategy is documented in [`docs/specs/2026-05-10-i18n-strategy-design.md`](./docs/specs/2026-05-10-i18n-strategy-design.md).
 
 ### What is in scope
 
@@ -100,7 +100,7 @@ geo-base is built primarily in Japanese but is moving toward English-first publi
 
 ### What is out of scope
 
-- Internal handover and roadmap documents (`HANDOVER_*.md`, `ROADMAP_*.md`, `CLAUDE.md`, `docs/AUTH_E2E_CHECKLIST.md`, `docs/INFRA_MIGRATION_INVESTIGATION.md`, etc.) remain in Japanese.
+- Internal handover and roadmap documents (`docs/handovers/HANDOVER_*.md`, `docs/plans/ROADMAP_*.md`, `CLAUDE.md`, `docs/refs/AUTH_E2E_CHECKLIST.md`, `docs/reports/INFRA_MIGRATION_INVESTIGATION.md`, etc.) remain in Japanese.
 - DB content (tileset names, descriptions written by users) is not translated.
 - Log and trace output is not internationalized.
 

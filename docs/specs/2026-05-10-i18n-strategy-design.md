@@ -63,7 +63,7 @@
 | `docs/INFRA_MIGRATION_INVESTIGATION.md` | 日本語のまま | 社内向け（履歴文書） |
 | `docs/AUTH_MIGRATION.md` | 日本語のまま | 社内向け（履歴文書） |
 | `CLAUDE.md` | 日本語のまま | 社内開発者向け |
-| `docs/superpowers/specs/*.md` | 日本語のまま | 社内設計記録 |
+| `docs/specs/*.md` | 日本語のまま | 社内設計記録 |
 
 ## 5. Admin UI のアーキテクチャ
 

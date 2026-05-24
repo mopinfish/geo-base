@@ -281,14 +281,27 @@ CREATE TABLE team_invitations (
 
 ## 6. 今後のロードマップ
 
-### Phase 3: チーム管理・エクスポート強化（2-3週間）
+### Phase 3: データ管理強化
 
-| ステップ | 内容 | ステータス |
-|---------|------|-----------|
-| Step 3.3-A | チーム / ロール + プラガブル認証 | ✅ 完了（Backend + Admin UI） |
-| Step 3.3-B | APIキー管理 | ✅ 完了（Step 3.3-A に統合） |
-| Step 3.3-C | Shapefile/GeoPackageインポート | 📋 計画中 |
-| Step 3.3-D | タイルセット管理強化 | 📋 計画中 |
+| ステップ | 内容 | Issue | ステータス |
+|---------|------|-------|-----------|
+| Step 3.3-A | チーム / ロール + プラガブル認証 | — | ✅ 完了（Backend + Admin UI） |
+| Step 3.3-B | APIキー管理 | — | ✅ 完了（Step 3.3-A に統合） |
+| Step 3.3-C | Shapefile/GeoPackage インポート | #162 | 📋 起票済み |
+| Step 3.3-D | タイルセット管理強化（クローン・マージ・差分） | #163 | 📋 起票済み |
+
+### Phase 4: エンタープライズ機能
+
+| ステップ | 内容 | Issue | ステータス |
+|---------|------|-------|-----------|
+| Step 3.4-B | RBAC — タイルセット単位アクセス制御 | #164 | 📋 起票済み |
+| Step 3.4-D | 使用量モニタリング | #165 | 📋 起票済み |
+
+### 横断課題
+
+| 内容 | Issue | ステータス |
+|------|-------|-----------|
+| E2E テスト自動マイグレーション対応 | #166 | 📋 起票済み |
 
 ### Epic #90: Admin UI デジタル庁デザインシステム準拠（完了）
 
@@ -306,11 +319,11 @@ CREATE TABLE team_invitations (
 - 全インタラクティブコンポーネント: フォーカスリング `ring-*` → `outline-*` 統一（WCAG 1.4.11）
 
 > Step 3.3-A の詳細は以下を参照:
-> - セットアップ: `docs/AUTH_SETUP.md`
-> - 移行手順: `docs/AUTH_MIGRATION.md`
-> - 手動 E2E チェック: `docs/AUTH_E2E_CHECKLIST.md`
-> - 認可仕様レビュー（2026-05-09 監査）: `docs/ACCESS_CONTROL_REVIEW.md`
-> - 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
+> - セットアップ: `docs/manuals/AUTH_SETUP.md`
+> - 移行手順: `docs/manuals/AUTH_MIGRATION.md`
+> - 手動 E2E チェック: `docs/refs/AUTH_E2E_CHECKLIST.md`
+> - 認可仕様レビュー（2026-05-09 監査）: `docs/reports/ACCESS_CONTROL_REVIEW.md`
+> - 設計書: `docs/specs/2026-05-08-pluggable-auth-design.md`
 
 #### Step 3.3-A 完了サマリ（2026-05-08）
 
@@ -330,8 +343,8 @@ CREATE TABLE team_invitations (
 - `apiFetch` で 401 → refresh → retry 自動化
 
 **ドキュメント (Phase 7):**
-- `docs/AUTH_SETUP.md`（local モード セットアップ）
-- `docs/AUTH_MIGRATION.md`（supabase → local 移行手順）
+- `docs/manuals/AUTH_SETUP.md`（local モード セットアップ）
+- `docs/manuals/AUTH_MIGRATION.md`（supabase → local 移行手順）
 
 **テスト:**
 - 479 passed, 2 skipped（auth 関連 130+ 直接テスト）
@@ -450,7 +463,7 @@ fly deploy
 
 | ファイル | 説明 |
 |---------|------|
-| `/mnt/project/ROADMAP_S3.md` | Season 3 完全ロードマップ |
+| `docs/plans/ROADMAP_S3.md` | Season 3 完全ロードマップ |
 | `/mnt/project/HANDOVER_S3_STEP3.2-D.md` | Step 3.2-D 詳細引き継ぎ |
 | `/mnt/project/HANDOVER_MAIN_REFACTORING.md` | main.pyリファクタリング完了ドキュメント |
 | `/mnt/project/geo-base.txt` | 最新ソースコードスナップショット |
@@ -480,16 +493,16 @@ ls -la api/lib/retry.py
 
 # 3. テスト実行確認
 cd api
-PYTHONPATH=. uv run pytest tests/ -v
-# 期待: 153 passed
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:15432/geo_base_test uv run pytest tests/ -q
+# 期待: 653 passed, 2 skipped
 
 # 4. 動作確認
 curl https://geo-base-api.fly.dev/api/health
 
-# 5. Phase 3 Step 3.3-A の作業を開始
-# - チームテーブル設計
-# - Supabaseマイグレーション作成
-# - APIエンドポイント実装
+# 5. 次の Issue を選択して作業開始
+# - Issue #162: Shapefile/GeoPackage インポート（推奨: ユーザー価値が高い）
+# - Issue #163: タイルセット管理強化
+# - Issue #166: E2E テスト自動マイグレーション（開発摩擦を早期解消）
 ```
 
 ---
@@ -550,4 +563,4 @@ api/
 **作成者**: Claude (Anthropic)  
 **Phase 2 完了日**: 2025-12-17  
 **Epic #90 完了日**: 2026-05-24  
-**次回作業候補**: Step 3.3-C（Shapefile/GeoPackage インポート）または Step 3.3-D（タイルセット管理強化）
+**次回作業候補**: Issue #162（Shapefile/GeoPackage インポート）・#163（タイルセット管理強化）・#166（E2E テスト自動マイグレーション）— 優先度は Issue コメントで判断

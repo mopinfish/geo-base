@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11 + FastAPI、psycopg2、PyJWT、passlib[bcrypt]、httpx、Next.js 16、TypeScript、PostgreSQL + PostGIS。
 
-**Reference Spec:** `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`（本計画はこのスペックの実装手順）
+**Reference Spec:** `docs/specs/2026-05-08-pluggable-auth-design.md`（本計画はこのスペックの実装手順）
 
 ---
 
@@ -6903,7 +6903,7 @@ git commit -m "docs: add AUTH_MIGRATION.md (supabase → local cutover)"
 - 環境変数 `AUTH_PROVIDER=local|supabase` で切替（Phase 3 / Step 3.3-A で実装）
 - local モード: `users` テーブル + 自前 JWT 発行（`uv run python -m lib.auth.cli create-admin` で初期管理者作成）
 - supabase モード: 従来通り Supabase Auth に委譲
-- 詳細: `docs/AUTH_SETUP.md`、設計: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`
+- 詳細: `docs/AUTH_SETUP.md`、設計: `docs/specs/2026-05-08-pluggable-auth-design.md`
 ```
 
 - [ ] **Step 5: HANDOVER_S3.md 更新**
