@@ -8,7 +8,7 @@ Phase 3 / Step 3.3-A（プラガブル認証）のリリース前に手動で実
 
 - `docs/AUTH_SETUP.md` — local モードのセットアップ詳細
 - `docs/AUTH_MIGRATION.md` — Supabase → local 切替手順（履歴。2026-05-10 移行完了済み）
-- `docs/superpowers/plans/2026-05-08-pluggable-auth.md` — 元の実装計画（Task 8.2 / 8.3、履歴）
+- `docs/plans/2026-05-08-pluggable-auth.md` — 元の実装計画（Task 8.2 / 8.3、履歴）
 
 ---
 

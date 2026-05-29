@@ -38,7 +38,7 @@ Describe the verification steps. Examples:
 - [ ] PR title follows the commit convention (e.g. `feat(app): ...`, `fix(api): ...`)
 - [ ] Lints and tests pass locally
 - [ ] New behavior is covered by tests where reasonable
-- [ ] Public-facing strings (API errors, UI copy, docs) follow the project's [i18n strategy](https://github.com/mopinfish/geo-base/blob/main/docs/superpowers/specs/2026-05-10-i18n-strategy-design.md) (English for public surfaces; UI strings via catalogs once Phase 3 lands)
+- [ ] Public-facing strings (API errors, UI copy, docs) follow the project's [i18n strategy](https://github.com/mopinfish/geo-base/blob/main/docs/specs/2026-05-10-i18n-strategy-design.md) (English for public surfaces; UI strings via catalogs once Phase 3 lands)
 - [ ] If introducing migrations, added a new numbered file under `docker/postgis-init/` rather than editing an existing one
 - [ ] For Admin UI changes: no hardcoded user-facing strings outside the catalog (once `next-intl` is in place)
 

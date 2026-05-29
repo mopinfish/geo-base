@@ -11,7 +11,7 @@ geo-base API は自前の **local provider** で認証する（`AUTH_PROVIDER=lo
 > プロバイダ実装も削除 (PR #74 / Issue #72) したため、2026-05-10 以降は廃止。
 > Supabase からの移行記録は `docs/AUTH_MIGRATION.md` を参照（履歴文書）。
 
-設計の背景・全体像は `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md` を参照。
+設計の背景・全体像は `docs/specs/2026-05-08-pluggable-auth-design.md` を参照。
 本ドキュメントは **ローカル / 本番の構築手順** に絞ったハンズオンです。
 
 関連: リリース前の手動 E2E チェックは `docs/AUTH_E2E_CHECKLIST.md`、認可仕様の網羅レビューは `docs/ACCESS_CONTROL_REVIEW.ja.md`、本番 DB 構築は `docs/POSTGRES_SETUP.ja.md`。
@@ -398,6 +398,6 @@ CORS_ORIGINS=http://localhost:3000,https://geo-base-admin.vercel.app
 ## 関連ドキュメント
 
 - Supabase からの移行履歴: `docs/AUTH_MIGRATION.md`（完了済み）
-- 設計書: `docs/superpowers/specs/2026-05-08-pluggable-auth-design.md`（履歴）
-- 実装計画: `docs/superpowers/plans/2026-05-08-pluggable-auth.md`（履歴）
+- 設計書: `docs/specs/2026-05-08-pluggable-auth-design.md`（履歴）
+- 実装計画: `docs/plans/2026-05-08-pluggable-auth.md`（履歴）
 - ローカル開発全般: `LOCAL_DEVELOPMENT.ja.md`

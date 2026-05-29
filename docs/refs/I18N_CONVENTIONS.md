@@ -5,8 +5,8 @@
 > - **対象範囲**: `app/src/` 配下の TypeScript / React コード
 > - **目的**: EN / JA 切替時に視覚バグや情報漏洩を起こさないための実装ベストプラクティス
 > - **関連**:
->   - 戦略全体: [`docs/superpowers/specs/2026-05-10-i18n-strategy-design.md`](./superpowers/specs/2026-05-10-i18n-strategy-design.md)
->   - PR 分割計画: [`docs/superpowers/plans/2026-05-11-i18n-phase3.md`](./superpowers/plans/2026-05-11-i18n-phase3.md)
+>   - 戦略全体: [`docs/specs/2026-05-10-i18n-strategy-design.md`](./superpowers/specs/2026-05-10-i18n-strategy-design.md)
+>   - PR 分割計画: [`docs/plans/2026-05-11-i18n-phase3.md`](./superpowers/plans/2026-05-11-i18n-phase3.md)
 >   - Epic: #109、Phase 3 Issue: #107
 
 ## 1. Namespace と catalog 構成
