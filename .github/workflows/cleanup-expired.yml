@@ -34,7 +34,7 @@ jobs:
   cleanup:
     name: Run cleanup-expired
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       FLY_APP: geo-base-api
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -68,9 +68,22 @@ jobs:
       - name: Execute cleanup-expired on ephemeral machine
         run: |
           set -euo pipefail
-          flyctl machine run \
-            --app "$FLY_APP" \
-            --rm \
-            "$IMAGE" \
-            -- \
-            python -m lib.auth.cli cleanup-expired
+          for attempt in 1 2 3; do
+            echo "=== Attempt $attempt/3 ==="
+            if flyctl machine run \
+              --app "$FLY_APP" \
+              --rm \
+              --wait-timeout 120s \
+              "$IMAGE" \
+              -- \
+              python -m lib.auth.cli cleanup-expired; then
+              echo "Cleanup completed successfully."
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Attempt $attempt failed. Retrying in 20s..."
+              sleep 20
+            fi
+          done
+          echo "All 3 attempts failed."
+          exit 1
