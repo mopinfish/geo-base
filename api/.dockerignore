@@ -1,0 +1,93 @@
+# =============================================================================
+# Docker Build Exclusions for geo-base API
+# =============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Documentation
+docs/_build/
+
+# Environment files (sensitive data should use fly secrets)
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Deployment files (not needed in container)
+fly.toml
+Dockerfile
+.dockerignore
+vercel.json
+runtime.txt
+
+# MBTiles data files (should be stored externally)
+data/
+*.mbtiles
+
+# Logs
+*.log
+logs/
+
+# Local development files
+*.local
+docker-compose*.yml
+
+# Test files (exclude from production)
+tests/
+test_*.py
+*_test.py
+conftest.py
+
+# Documentation
+*.md
+!README.md
+
+# Other
+Makefile
+*.bak
+tmp/
+temp/

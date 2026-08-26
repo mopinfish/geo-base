@@ -1,0 +1,51 @@
+name: Unit tests and lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v8
+      - run: uv sync --extra dev --frozen
+      - run: uv run ruff check .
+      - run: uv run black --check .
+
+  mcp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v8
+      - run: uv sync --extra dev --frozen
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test

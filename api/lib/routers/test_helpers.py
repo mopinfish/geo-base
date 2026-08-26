@@ -1,0 +1,205 @@
+"""E2E テスト専用ヘルパー（環境変数 E2E_MODE=1 のときだけ登録される）。
+
+Issue #110: Playwright から DB を冪等にリセットするための逃げ道。
+本番には絶対に出してはいけない。
+
+三重ガード:
+1. lib.main で `E2E_MODE` が truthy でない限り include_router しない。
+2. このモジュール内のハンドラでも `os.getenv("E2E_MODE") == "1"` を実行する。
+3. ハンドラは `DATABASE_URL` の DB 名が `geo_base_e2e` で始まらないなら 400 で abort。
+"""
+
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Literal
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from lib.database import get_db_connection
+from lib.errors import ErrorCode, api_error
+
+router = APIRouter(prefix="/api/test", tags=["test-helpers"])
+
+
+# DB 名チェックの prefix。ワーカー並列対応 (Phase 2) で `geo_base_e2e_w0` 等の
+# サフィックスが付くケースを許容するため `startswith` で判定する。
+_E2E_DB_PREFIX = "geo_base_e2e"
+
+
+# Playwright からは下記テーブルを毎テストファイルの beforeAll で空にする想定。
+# users と refresh_tokens は globalSetup で作った admin を保持するので touch しない。
+# 注意: 「datasources」は API 上の概念で、実体は pmtiles_sources / raster_sources / tile_files
+# の 3 テーブルに分かれている (api/lib/routers/datasources.py を参照)。
+_RESETTABLE_TABLES = [
+    # 依存順 (foreign key を考慮): 子から親へ
+    "team_invitations",
+    "team_members",
+    "team_tilesets",
+    "teams",
+    "api_key_usage_logs",
+    "api_key_rate_limits",
+    "api_keys",
+    "features",
+    "pmtiles_sources",
+    "raster_sources",
+    "tile_files",
+    "tilesets",
+    "password_reset_tokens",
+    "auth_login_attempts",
+]
+
+
+def _assert_e2e_mode_or_die() -> None:
+    """ハンドラ突入時の二重防御。本番に出ても fail-closed にする。
+
+    本来 main.py で E2E_MODE=1 のときだけ router を include するため到達不能
+    だが、router を import し忘れたケース等の最後の安全網。FastAPI 標準の
+    404 と区別がつかない (`{detail: "Not Found"}`) plain HTTPException を
+    使うことで、production に endpoint が露出している事実そのものを隠す。
+    envelope code は意図的に使わない (`INTERNAL_UNEXPECTED` 等で 'translated
+    error message in production' を出さないため)。
+    """
+    if os.getenv("E2E_MODE") != "1":
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+def _assert_e2e_database_or_die() -> None:
+    """DATABASE_URL の DB 名が geo_base_e2e で始まらない場合は abort する。
+
+    `geo_base` (dev) / `geo_base_test` (pytest) を誤って truncate するのを防ぐ。
+    """
+    db_url = os.getenv("DATABASE_URL", "")
+    parsed = urlparse(db_url)
+    db_name = (parsed.path or "").lstrip("/")
+    if not db_name.startswith(_E2E_DB_PREFIX):
+        raise api_error(
+            400,
+            ErrorCode.VALIDATION_INVALID_VALUE,
+            (
+                f"Refusing to reset: DATABASE_URL must point to a "
+                f"{_E2E_DB_PREFIX}* database (got '{db_name}')"
+            ),
+            details={"db_name": db_name, "expected_prefix": _E2E_DB_PREFIX},
+        )
+
+
+@router.post("/reset")
+def reset_database():
+    """主要テーブルを TRUNCATE する。users / refresh_tokens は保持する。"""
+    _assert_e2e_mode_or_die()
+    _assert_e2e_database_or_die()
+
+    truncated = []
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            for table in _RESETTABLE_TABLES:
+                cur.execute(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE")
+                truncated.append(table)
+        conn.commit()
+    return {"truncated": truncated}
+
+
+@router.get("/tokens")
+def get_recent_token(
+    type: Literal["team_invitation", "password_reset"],
+    email: str | None = None,
+):
+    """E2E から最新の token を引き取るための専用エンドポイント。
+
+    サポート:
+    - `type=team_invitation`: `team_invitations.token` (plain) を email で検索
+    - `type=password_reset`: console email backend が email 送信時に
+      捕捉したリセット token を返す (E2E_MODE 下のみ動作)。
+      password_reset_tokens テーブルには token_hash しか保存されないため
+      DB 経由では取り出せない。送信メール本文を経由してメモリに保持する。
+    """
+    _assert_e2e_mode_or_die()
+    _assert_e2e_database_or_die()
+    if not email:
+        raise api_error(400, ErrorCode.VALIDATION_FIELD_REQUIRED, "email is required")
+
+    if type == "password_reset":
+        # console backend のメモリ dict から取得する。
+        from lib.auth.email_backends.console_backend import (
+            get_recent_password_reset_token,
+        )
+
+        token = get_recent_password_reset_token(email)
+        if not token:
+            raise api_error(
+                404,
+                ErrorCode.INTERNAL_UNEXPECTED,
+                f"No password_reset token for {email}",
+                details={"email": email, "type": "password_reset"},
+            )
+        return {"token": token}
+
+    # team_invitation: 既存ロジック (SQL で取得)
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # `status = 'pending'` + `token IS NOT NULL` で「実際に有効な
+            # token 行」だけに限定する。expired/cancelled で token を NULL に
+            # クリアした行が accepted_at IS NULL のままヒットしないように。
+            cur.execute(
+                """
+                SELECT token FROM team_invitations
+                WHERE email = %s
+                  AND status = 'pending'
+                  AND token IS NOT NULL
+                  AND accepted_at IS NULL
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (email,),
+            )
+            row = cur.fetchone()
+    if not row or not row[0]:
+        raise api_error(
+            404,
+            ErrorCode.INTERNAL_UNEXPECTED,
+            f"No {type} token for {email}",
+            details={"email": email, "type": type},
+        )
+    return {"token": row[0]}
+
+
+class ExpireApiKeyRequest(BaseModel):
+    """Expire an existing API key by setting `expires_at` to a past timestamp."""
+
+    key_id: str = Field(..., description="ID of the api_keys row to expire")
+    minutes_ago: int = Field(
+        default=60,
+        ge=1,
+        description="How many minutes in the past to set expires_at",
+    )
+
+
+@router.post("/api-keys/expire")
+def expire_api_key(payload: ExpireApiKeyRequest):
+    """E2E 専用: 既存 API キーの expires_at を過去日時に書き換える。
+
+    `ApiKeyCreate` の `expires_in_days` は 1..365 の範囲しか許容しないため、
+    AK-07 (期限切れ key の UI 表示) を確認するには直接 DB 列を書き換える必要がある。
+
+    既存ガード（E2E_MODE=1 + DB 名チェック）は他のエンドポイント同様に適用される。
+    """
+    _assert_e2e_mode_or_die()
+    _assert_e2e_database_or_die()
+
+    expires_at = datetime.now(timezone.utc) - timedelta(minutes=payload.minutes_ago)
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE api_keys SET expires_at = %s, updated_at = NOW() WHERE id = %s",
+                (expires_at, payload.key_id),
+            )
+            if cur.rowcount == 0:
+                raise api_error(
+                    404,
+                    ErrorCode.API_KEY_NOT_FOUND,
+                    f"api_key not found: {payload.key_id}",
+                    details={"key_id": payload.key_id},
+                )
+        conn.commit()
+    return {"key_id": payload.key_id, "expires_at": expires_at.isoformat()}

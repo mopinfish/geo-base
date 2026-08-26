@@ -1,0 +1,925 @@
+"""
+Features CRUD endpoints.
+
+Provides endpoints for creating, reading, updating, and deleting
+geographic features within tilesets.
+
+Key features:
+- Single and bulk feature creation
+- Automatic bounds/center calculation after bulk import
+- Geometry validation before import
+- Access control via tileset ownership
+"""
+
+import json
+import logging
+from typing import List, Optional, Tuple
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+
+from lib.auth import (
+    AuthContext,
+    check_tileset_access_v2,
+    check_tileset_write_access_v2,
+    get_auth_context_optional,
+    require_auth_context,
+)
+from lib.cache import invalidate_tileset_cache
+from lib.database import get_connection
+from lib.errors import ErrorCode, api_error
+from lib.models.feature import (
+    BulkFeatureCreate,
+    BulkFeatureResponse,
+    FeatureCreate,
+    FeatureUpdate,
+)
+from lib.tiles import parse_feature_property_filter
+from lib.validators import (
+    validate_geometry,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/features", tags=["features"])
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def _update_tileset_bounds(
+    tileset_id: str, conn
+) -> Tuple[bool, Optional[List[float]], Optional[List[float]]]:
+    """
+    Calculate and update tileset bounds from its features.
+
+    Args:
+        tileset_id: The tileset ID to update
+        conn: Database connection
+
+    Returns:
+        Tuple of (success, bounds, center)
+        - success: Whether bounds were successfully updated
+        - bounds: [west, south, east, north] or None
+        - center: [longitude, latitude] or None
+    """
+    try:
+        with conn.cursor() as cur:
+            # Calculate bounding box from all features in this tileset
+            cur.execute(
+                """
+                SELECT
+                    ST_XMin(ST_Extent(geom)) as xmin,
+                    ST_YMin(ST_Extent(geom)) as ymin,
+                    ST_XMax(ST_Extent(geom)) as xmax,
+                    ST_YMax(ST_Extent(geom)) as ymax,
+                    ST_X(ST_Centroid(ST_Extent(geom))) as center_x,
+                    ST_Y(ST_Centroid(ST_Extent(geom))) as center_y,
+                    COUNT(*) as feature_count
+                FROM features
+                WHERE tileset_id = %s
+                """,
+                (tileset_id,),
+            )
+            result = cur.fetchone()
+
+            if not result or result[0] is None:
+                logger.info(f"No features found for tileset {tileset_id}, skipping bounds update")
+                return False, None, None
+
+            xmin, ymin, xmax, ymax, center_x, center_y, feature_count = result
+
+            # Update tileset with calculated bounds and center
+            cur.execute(
+                """
+                UPDATE tilesets
+                SET bounds = ST_MakeEnvelope(%s, %s, %s, %s, 4326),
+                    center = ST_SetSRID(ST_MakePoint(%s, %s), 4326),
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (xmin, ymin, xmax, ymax, center_x, center_y, tileset_id),
+            )
+
+            logger.info(
+                f"Updated bounds for tileset {tileset_id}: "
+                f"bounds=[{xmin}, {ymin}, {xmax}, {ymax}], "
+                f"center=[{center_x}, {center_y}], "
+                f"features={feature_count}"
+            )
+
+            return True, [xmin, ymin, xmax, ymax], [center_x, center_y]
+
+    except Exception as e:
+        logger.error(f"Error updating tileset bounds: {str(e)}")
+        return False, None, None
+
+
+def _validate_features_for_import(
+    features: List[dict], validate_geometry_flag: bool = True, max_errors: int = 100
+) -> Tuple[List[dict], List[str], List[str]]:
+    """
+    Validate features before import.
+
+    Args:
+        features: List of GeoJSON feature objects
+        validate_geometry_flag: Whether to perform geometry validation
+        max_errors: Maximum number of errors to collect
+
+    Returns:
+        Tuple of (valid_features, errors, warnings)
+    """
+    valid_features = []
+    errors = []
+    warnings = []
+
+    for idx, feature in enumerate(features):
+        try:
+            # Basic structure validation
+            if not isinstance(feature, dict):
+                errors.append(f"Feature #{idx + 1}: Must be an object")
+                continue
+
+            geometry = feature.get("geometry")
+            if not geometry:
+                errors.append(f"Feature #{idx + 1}: Missing geometry")
+                continue
+
+            # Validate geometry if flag is set
+            if validate_geometry_flag:
+                result = validate_geometry(geometry, f"Feature #{idx + 1}", check_coordinates=True)
+                if not result.valid:
+                    errors.append(result.error or f"Feature #{idx + 1}: Invalid geometry")
+                    if len(errors) >= max_errors:
+                        errors.append(f"... stopped after {max_errors} errors")
+                        break
+                    continue
+
+                # Collect warnings
+                for warning in result.warnings:
+                    warnings.append(f"Feature #{idx + 1}: {warning}")
+
+            # Ensure properties is a dict
+            properties = feature.get("properties", {})
+            if properties is None:
+                properties = {}
+
+            valid_features.append(
+                {
+                    "geometry": json.dumps(geometry),
+                    "properties": json.dumps(properties),
+                }
+            )
+
+        except Exception as e:
+            errors.append(f"Feature #{idx + 1}: {str(e)}")
+            if len(errors) >= max_errors:
+                errors.append(f"... stopped after {max_errors} errors")
+                break
+
+    return valid_features, errors, warnings
+
+
+# ============================================================================
+# Create Feature
+# ============================================================================
+
+
+@router.post("", status_code=201)
+def create_feature(
+    feature: FeatureCreate,
+    ctx: AuthContext = Depends(require_auth_context),
+    conn=Depends(get_connection),
+):
+    """
+    Create a new feature in a tileset.
+
+    JWT または `write` scope を持つ API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で
+    判定される（個人所有 / team 共有の permission_level 'write' 以上）。
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, user_id FROM tilesets WHERE id = %s",
+                (feature.tileset_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": str(feature.tileset_id)},
+                )
+
+            tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to add features to this tileset",
+                    details={"tileset_id": str(row[0])},
+                )
+
+            # Validate geometry
+            geom_result = validate_geometry(feature.geometry, "geometry", check_coordinates=True)
+            if not geom_result.valid:
+                raise api_error(
+                    400,
+                    ErrorCode.FEATURE_INVALID_GEOMETRY,
+                    f"Invalid geometry: {geom_result.error}",
+                )
+
+            # Convert GeoJSON geometry to JSON string
+            geometry_json = json.dumps(feature.geometry)
+            properties_json = json.dumps(feature.properties) if feature.properties else "{}"
+
+            cur.execute(
+                """
+                INSERT INTO features (tileset_id, layer_name, geom, properties)
+                VALUES (%s, %s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s)
+                RETURNING id, layer_name, ST_AsGeoJSON(geom)::json as geometry, properties,
+                          created_at, updated_at
+                """,
+                (
+                    feature.tileset_id,
+                    feature.layer_name,
+                    geometry_json,
+                    properties_json,
+                ),
+            )
+
+            row = cur.fetchone()
+            conn.commit()
+
+            # Invalidate cache
+            invalidate_tileset_cache(f"vector:{feature.tileset_id}")
+
+            return {
+                "id": str(row[0]),
+                "type": "Feature",
+                "geometry": row[2],
+                "properties": {
+                    **(row[3] if row[3] else {}),
+                    "layer_name": row[1],
+                    "created_at": row[4].isoformat() if row[4] else None,
+                    "updated_at": row[5].isoformat() if row[5] else None,
+                },
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating feature: {str(e)}",
+        )
+
+
+# ============================================================================
+# Bulk Create Features
+# ============================================================================
+
+
+@router.post("/bulk", status_code=201, response_model=BulkFeatureResponse)
+def create_features_bulk(
+    data: BulkFeatureCreate,
+    ctx: AuthContext = Depends(require_auth_context),
+    conn=Depends(get_connection),
+):
+    """
+    Create multiple features in a tileset at once.
+
+    This endpoint is optimized for bulk imports and uses batch INSERT
+    for significantly better performance compared to individual inserts.
+
+    Features:
+    - Maximum 10,000 features per request
+    - Optional geometry validation before import
+    - Automatic bounds/center calculation after successful import
+
+    JWT または `write` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
+    """
+    from psycopg2.extras import execute_values
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, user_id, type FROM tilesets WHERE id = %s",
+                (data.tileset_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                raise api_error(
+                    404,
+                    ErrorCode.TILESET_NOT_FOUND,
+                    "Tileset not found",
+                    details={"tileset_id": str(data.tileset_id)},
+                )
+
+            tileset_for_access = {"id": str(row[0]), "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "create"):
+                raise api_error(
+                    403,
+                    ErrorCode.TILESET_FORBIDDEN,
+                    "Not authorized to add features to this tileset",
+                    details={"tileset_id": str(row[0])},
+                )
+
+            tileset_type = row[2]
+
+            # Warn if adding features to non-vector tileset
+            if tileset_type != "vector":
+                logger.warning(
+                    f"Adding features to non-vector tileset {data.tileset_id} (type: {tileset_type})"
+                )
+
+            # Validate and prepare features
+            valid_features, validation_errors, validation_warnings = _validate_features_for_import(
+                data.features,
+                validate_geometry_flag=data.validate_geometry,
+            )
+
+            if not valid_features:
+                return BulkFeatureResponse(
+                    success_count=0,
+                    failed_count=len(data.features),
+                    feature_ids=[],
+                    errors=validation_errors[:100],
+                    warnings=validation_warnings[:50],
+                    bounds_updated=False,
+                )
+
+            # Prepare for bulk insert
+            success_count = 0
+            failed_count = len(validation_errors)  # Already failed validation
+            feature_ids = []
+            errors = validation_errors.copy()
+
+            # Batch insert using execute_values for performance
+            insert_query = """
+                INSERT INTO features (tileset_id, layer_name, geom, properties)
+                VALUES %s
+                RETURNING id
+            """
+
+            # Prepare values template
+            values_template = f"('{data.tileset_id}', '{data.layer_name}', ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s)"
+
+            # Convert to list of tuples for execute_values
+            values_list = [(f["geometry"], f["properties"]) for f in valid_features]
+
+            try:
+                # Use execute_values for efficient bulk insert
+                result = execute_values(
+                    cur,
+                    insert_query,
+                    values_list,
+                    template=values_template,
+                    fetch=True,
+                )
+
+                # Collect created feature IDs
+                for row in result:
+                    feature_ids.append(str(row[0]))
+                    success_count += 1
+
+                # Update bounds if requested and we have successful inserts
+                bounds_updated = False
+                bounds = None
+                center = None
+
+                if data.update_bounds and success_count > 0:
+                    bounds_updated, bounds, center = _update_tileset_bounds(data.tileset_id, conn)
+
+                conn.commit()
+
+                # Invalidate cache
+                invalidate_tileset_cache(f"vector:{data.tileset_id}")
+
+                logger.info(
+                    f"Bulk import completed: {success_count} succeeded, {failed_count} failed, "
+                    f"bounds_updated={bounds_updated}"
+                )
+
+                return BulkFeatureResponse(
+                    success_count=success_count,
+                    failed_count=failed_count,
+                    feature_ids=feature_ids,
+                    errors=errors[:100],
+                    warnings=validation_warnings[:50],
+                    bounds_updated=bounds_updated,
+                    bounds=bounds,
+                    center=center,
+                )
+
+            except Exception as e:
+                conn.rollback()
+                logger.warning(f"Batch insert failed, falling back to individual inserts: {str(e)}")
+
+                # If batch insert fails, try one by one to identify problematic features
+                for idx, values in enumerate(values_list):
+                    try:
+                        cur.execute(
+                            """
+                            INSERT INTO features (tileset_id, layer_name, geom, properties)
+                            VALUES (%s, %s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s)
+                            RETURNING id
+                            """,
+                            (data.tileset_id, data.layer_name, values[0], values[1]),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            feature_ids.append(str(row[0]))
+                            success_count += 1
+                        conn.commit()
+                    except Exception as inner_e:
+                        conn.rollback()
+                        failed_count += 1
+                        errors.append(f"Feature #{idx + 1}: {str(inner_e)}")
+
+                # Update bounds after fallback inserts
+                bounds_updated = False
+                bounds = None
+                center = None
+
+                if data.update_bounds and success_count > 0:
+                    bounds_updated, bounds, center = _update_tileset_bounds(data.tileset_id, conn)
+                    conn.commit()
+
+                # Invalidate cache
+                if success_count > 0:
+                    invalidate_tileset_cache(f"vector:{data.tileset_id}")
+
+                return BulkFeatureResponse(
+                    success_count=success_count,
+                    failed_count=failed_count,
+                    feature_ids=feature_ids,
+                    errors=errors[:100],
+                    warnings=validation_warnings[:50],
+                    bounds_updated=bounds_updated,
+                    bounds=bounds,
+                    center=center,
+                )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error in bulk feature creation: {str(e)}")
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error creating features: {str(e)}",
+        )
+
+
+# ============================================================================
+# List Features
+# ============================================================================
+
+
+@router.get("")
+def list_features(
+    tileset_id: str = Query(None, description="Filter by tileset ID"),
+    layer: str = Query(None, description="Filter by layer name"),
+    bbox: str = Query(None, description="Bounding box filter (minx,miny,maxx,maxy)"),
+    filter: Optional[str] = Query(None, description="Property equality filter (key=value)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of features"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    conn=Depends(get_connection),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
+):
+    """
+    List features with optional filters.
+
+    Returns GeoJSON FeatureCollection.
+
+    アクセス判定は v2（issue #51）— 個人 / 公開 / team_tilesets 共有を
+    一貫して評価する。
+    """
+    try:
+        with conn.cursor() as cur:
+            # Build query
+            conditions = []
+            params = []
+
+            if tileset_id:
+                # Check access to tileset
+                cur.execute(
+                    "SELECT id, is_public, user_id FROM tilesets WHERE id = %s",
+                    (tileset_id,),
+                )
+                row = cur.fetchone()
+
+                if row:
+                    tileset_for_access = {
+                        "id": row[0],
+                        "is_public": row[1],
+                        "user_id": row[2],
+                    }
+
+                    if not check_tileset_access_v2(conn, tileset_for_access, auth):
+                        if auth is None:
+                            # NOTE: Phase 2b では envelope 化を見送り。
+                            # api_error() は headers= を受けないため、
+                            # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
+                            raise HTTPException(
+                                status_code=401,
+                                detail="Authentication required to access this tileset",
+                                headers={"WWW-Authenticate": "Bearer"},
+                            )
+                        raise api_error(
+                            403,
+                            ErrorCode.TILESET_FORBIDDEN,
+                            "You do not have permission to access this tileset",
+                            details={"tileset_id": tileset_id},
+                        )
+
+                conditions.append("f.tileset_id = %s")
+                params.append(tileset_id)
+            else:
+                # Only return features from public tilesets if no tileset_id specified
+                conditions.append("t.is_public = true")
+
+            if layer:
+                conditions.append("f.layer_name = %s")
+                params.append(layer)
+
+            if bbox:
+                try:
+                    minx, miny, maxx, maxy = [float(x) for x in bbox.split(",")]
+                    conditions.append(
+                        "ST_Intersects(f.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))"
+                    )
+                    params.extend([minx, miny, maxx, maxy])
+                except ValueError:
+                    raise api_error(
+                        400,
+                        ErrorCode.VALIDATION_INVALID_VALUE,
+                        "Invalid bbox format",
+                        details={"bbox": bbox},
+                    )
+
+            if filter is not None:
+                try:
+                    filter_sql, filter_values = parse_feature_property_filter(filter)
+                except ValueError:
+                    raise api_error(
+                        400,
+                        ErrorCode.VALIDATION_INVALID_VALUE,
+                        "Invalid filter expression",
+                        details={"filter": filter},
+                    )
+                conditions.append(filter_sql)
+                params.extend(filter_values)
+
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+            # Get total count
+            cur.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE {where_clause}
+                """,
+                params,
+            )
+            total_count = cur.fetchone()[0]
+
+            # Get features
+            cur.execute(
+                f"""
+                SELECT f.id, f.layer_name, ST_AsGeoJSON(f.geom)::json as geometry,
+                       f.properties, f.tileset_id, f.created_at, f.updated_at
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE {where_clause}
+                ORDER BY f.created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                params + [limit, offset],
+            )
+            rows = cur.fetchall()
+
+            features = []
+            for row in rows:
+                features.append(
+                    {
+                        "id": str(row[0]),
+                        "type": "Feature",
+                        "geometry": row[2],
+                        "properties": {
+                            **(row[3] if row[3] else {}),
+                            "layer_name": row[1],
+                            "tileset_id": str(row[4]),
+                            "created_at": row[5].isoformat() if row[5] else None,
+                            "updated_at": row[6].isoformat() if row[6] else None,
+                        },
+                    }
+                )
+
+            return {
+                "type": "FeatureCollection",
+                "features": features,
+                "total_count": total_count,
+                "limit": limit,
+                "offset": offset,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error listing features: {str(e)}",
+        )
+
+
+# ============================================================================
+# Get Feature
+# ============================================================================
+
+
+@router.get("/{feature_id}")
+def get_feature(
+    feature_id: str,
+    conn=Depends(get_connection),
+    auth: Optional[AuthContext] = Depends(get_auth_context_optional),
+):
+    """Get a specific feature by ID.
+
+    アクセス判定は v2（issue #51）— team_tilesets 経由のチーム共有読み取りも
+    許可される。
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.id, f.layer_name, ST_AsGeoJSON(f.geom)::json as geometry,
+                       f.properties, f.tileset_id, f.created_at, f.updated_at,
+                       t.is_public, t.user_id
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE f.id = %s
+                """,
+                (feature_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                raise api_error(
+                    404,
+                    ErrorCode.FEATURE_NOT_FOUND,
+                    "Feature not found",
+                    details={"feature_id": feature_id},
+                )
+
+            tileset_for_access = {
+                "id": row[4],
+                "is_public": row[7],
+                "user_id": row[8],
+            }
+
+            if not check_tileset_access_v2(conn, tileset_for_access, auth):
+                if auth is None:
+                    # NOTE: Phase 2b では envelope 化を見送り。
+                    # api_error() は headers= を受けないため、
+                    # WWW-Authenticate を維持するために HTTPException を直書きしている (#106)。
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Authentication required to access this feature",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                raise api_error(
+                    403,
+                    ErrorCode.FEATURE_FORBIDDEN,
+                    "You do not have permission to access this feature",
+                    details={"feature_id": feature_id},
+                )
+
+            return {
+                "id": str(row[0]),
+                "type": "Feature",
+                "geometry": row[2],
+                "properties": {
+                    **(row[3] if row[3] else {}),
+                    "layer_name": row[1],
+                    "tileset_id": str(row[4]),
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
+                },
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error fetching feature: {str(e)}",
+        )
+
+
+# ============================================================================
+# Update Feature
+# ============================================================================
+
+
+@router.patch("/{feature_id}")
+def update_feature(
+    feature_id: str,
+    feature: FeatureUpdate,
+    ctx: AuthContext = Depends(require_auth_context),
+    conn=Depends(get_connection),
+):
+    """
+    Update an existing feature.
+
+    JWT または `write` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの書き込み権限は `check_tileset_write_access_v2` で判定。
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.id, t.user_id, f.tileset_id
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE f.id = %s
+                """,
+                (feature_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                raise api_error(
+                    404,
+                    ErrorCode.FEATURE_NOT_FOUND,
+                    "Feature not found",
+                    details={"feature_id": feature_id},
+                )
+
+            tileset_id = str(row[2])
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "update"):
+                raise api_error(
+                    403,
+                    ErrorCode.FEATURE_FORBIDDEN,
+                    "Not authorized to update this feature",
+                    details={"feature_id": feature_id, "tileset_id": tileset_id},
+                )
+
+            # Build update query dynamically
+            updates = []
+            params = []
+
+            if feature.layer_name is not None:
+                updates.append("layer_name = %s")
+                params.append(feature.layer_name)
+
+            if feature.geometry is not None:
+                # Validate geometry
+                geom_result = validate_geometry(
+                    feature.geometry, "geometry", check_coordinates=True
+                )
+                if not geom_result.valid:
+                    raise api_error(
+                        400,
+                        ErrorCode.FEATURE_INVALID_GEOMETRY,
+                        f"Invalid geometry: {geom_result.error}",
+                    )
+
+                updates.append("geom = ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)")
+                params.append(json.dumps(feature.geometry))
+
+            if feature.properties is not None:
+                updates.append("properties = %s")
+                params.append(json.dumps(feature.properties))
+
+            if not updates:
+                raise api_error(
+                    400,
+                    ErrorCode.VALIDATION_FIELD_REQUIRED,
+                    "No fields to update",
+                )
+
+            updates.append("updated_at = NOW()")
+            params.append(feature_id)
+
+            cur.execute(
+                f"""
+                UPDATE features
+                SET {', '.join(updates)}
+                WHERE id = %s
+                RETURNING id, layer_name, ST_AsGeoJSON(geom)::json as geometry, properties,
+                          tileset_id, created_at, updated_at
+                """,
+                params,
+            )
+
+            row = cur.fetchone()
+            conn.commit()
+
+            # Invalidate cache
+            invalidate_tileset_cache(f"vector:{tileset_id}")
+
+            return {
+                "id": str(row[0]),
+                "type": "Feature",
+                "geometry": row[2],
+                "properties": {
+                    **(row[3] if row[3] else {}),
+                    "layer_name": row[1],
+                    "tileset_id": str(row[4]),
+                    "created_at": row[5].isoformat() if row[5] else None,
+                    "updated_at": row[6].isoformat() if row[6] else None,
+                },
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error updating feature: {str(e)}",
+        )
+
+
+# ============================================================================
+# Delete Feature
+# ============================================================================
+
+
+@router.delete("/{feature_id}", status_code=204)
+def delete_feature(
+    feature_id: str,
+    ctx: AuthContext = Depends(require_auth_context),
+    conn=Depends(get_connection),
+):
+    """
+    Delete a feature.
+
+    JWT または `delete` scope の API キーで認証が必要（issue #50）。
+    親タイルセットへの delete 権限は `check_tileset_write_access_v2` で判定
+    （個人所有 / team 共有の permission_level='admin'）。
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f.id, t.user_id, f.tileset_id
+                FROM features f
+                JOIN tilesets t ON f.tileset_id = t.id
+                WHERE f.id = %s
+                """,
+                (feature_id,),
+            )
+            row = cur.fetchone()
+
+            if not row:
+                raise api_error(
+                    404,
+                    ErrorCode.FEATURE_NOT_FOUND,
+                    "Feature not found",
+                    details={"feature_id": feature_id},
+                )
+
+            tileset_id = str(row[2])
+            tileset_for_access = {"id": tileset_id, "user_id": row[1]}
+            if not check_tileset_write_access_v2(conn, tileset_for_access, ctx, "delete"):
+                raise api_error(
+                    403,
+                    ErrorCode.FEATURE_FORBIDDEN,
+                    "Not authorized to delete this feature",
+                    details={"feature_id": feature_id, "tileset_id": tileset_id},
+                )
+
+            # Delete feature
+            cur.execute("DELETE FROM features WHERE id = %s", (feature_id,))
+            conn.commit()
+
+            # Invalidate cache
+            invalidate_tileset_cache(f"vector:{tileset_id}")
+
+            return Response(status_code=204)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise api_error(
+            500,
+            ErrorCode.INTERNAL_DB_ERROR,
+            f"Error deleting feature: {str(e)}",
+        )

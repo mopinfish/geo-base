@@ -1,0 +1,29 @@
+{
+  "nav": {
+    "profile": "Profile",
+    "password": "Password"
+  },
+  "header_title": "Settings",
+  "header_subtitle": "Account and application settings",
+  "profile": {
+    "card_title": "Profile",
+    "card_description": "Update your name and email address",
+    "name_label": "Name",
+    "name_placeholder": "Your name",
+    "email_label": "Email address",
+    "success_message": "Updated successfully",
+    "error_default": "Failed to update",
+    "error_user_not_found": "User not found. Please log in again.",
+    "updating": "Updating...",
+    "update_button": "Update"
+  },
+  "password": {
+    "card_title": "Change password",
+    "card_description": "Enter your current password and a new password",
+    "current_label": "Current password",
+    "next_label": "New password (8 characters or more)",
+    "error_default": "Failed to update",
+    "changing": "Changing...",
+    "change_button": "Change"
+  }
+}

@@ -1,0 +1,38 @@
+# Core dependencies for Vercel deployment
+fastapi==0.115.6
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+
+# Database
+psycopg2-binary==2.9.10
+
+# Tile processing - Vector
+pymbtiles==0.5.0
+shapely==2.0.6
+geoalchemy2==0.15.2
+
+# Tile processing - PMTiles (HTTP Range Request based, works on Vercel)
+# aiopmtiles is not on PyPI, install from GitHub
+aiopmtiles @ git+https://github.com/developmentseed/aiopmtiles.git
+
+# Tile processing - Raster (COG)
+# Note: These have native dependencies (GDAL) that may not work on all platforms
+# If Vercel deployment fails, consider using Fly.io with Docker image
+rio-tiler>=7.0.0
+rasterio>=1.4.0
+
+# HTTP client
+httpx==0.28.1
+
+# Authentication - JWT verification (local provider)
+PyJWT>=2.8.0
+cryptography>=41.0.0
+
+# Required by dependencies
+starlette==0.41.3
+typing_extensions>=4.0.0
+annotated-types>=0.4.0
+sqlalchemy>=2.0.0
+numpy>=1.26.0
+packaging>=21.0

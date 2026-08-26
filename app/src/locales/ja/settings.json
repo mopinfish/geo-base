@@ -1,0 +1,29 @@
+{
+  "nav": {
+    "profile": "プロフィール",
+    "password": "パスワード"
+  },
+  "header_title": "設定",
+  "header_subtitle": "アカウントとアプリケーションの設定",
+  "profile": {
+    "card_title": "プロフィール",
+    "card_description": "名前とメールアドレスを更新できます",
+    "name_label": "名前",
+    "name_placeholder": "お名前",
+    "email_label": "メールアドレス",
+    "success_message": "更新しました",
+    "error_default": "更新に失敗しました",
+    "error_user_not_found": "対象ユーザーが見つかりません。再ログインしてください。",
+    "updating": "更新中...",
+    "update_button": "更新"
+  },
+  "password": {
+    "card_title": "パスワード変更",
+    "card_description": "現在のパスワードと新しいパスワードを入力してください",
+    "current_label": "現在のパスワード",
+    "next_label": "新しいパスワード（8 文字以上）",
+    "error_default": "更新に失敗しました",
+    "changing": "変更中...",
+    "change_button": "変更"
+  }
+}

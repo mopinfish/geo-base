@@ -1,0 +1,15 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.767, 35.681] },
+      "properties": { "name": "Tokyo Station" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [135.502, 34.693] },
+      "properties": { "name": "Osaka Station" }
+    }
+  ]
+}
