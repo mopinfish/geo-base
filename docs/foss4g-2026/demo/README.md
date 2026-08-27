@@ -11,3 +11,5 @@ The demo uses `hinanbasho-naka-ku.geojson`, a FeatureCollection containing 87 po
 Exact tool availability depends on the checked-out version and configured authentication. Do not use the demo as a performance or production-readiness benchmark.
 
 Data provenance and license details are in [dataset.md](./dataset.md).
+
+The demo dataset contains 87 point features.
