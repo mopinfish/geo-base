@@ -16,7 +16,7 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.1.0
       - run: uv sync --extra dev --frozen
       - run: uv run ruff check .
       - run: uv run black --check .
@@ -28,7 +28,7 @@ jobs:
         working-directory: mcp
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.1.0
       - run: uv sync --extra dev --frozen
       - run: uv run ruff check .
       - run: uv run pytest -q
